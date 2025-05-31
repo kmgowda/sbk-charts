@@ -13,10 +13,9 @@ import os
 from charts.sheets import SbkMultiSheets
 from charts.multicharts import SbkMultiCharts
 from jproperties import Properties
+from version import __version__
 
 SBK_BANNER_FILE = os.path.join(os.path.curdir, 'charts', 'banner.txt')
-#SBK_GRADLE_PROP_FILE = os.path.join(os.path.curdir, 'gradle.properties')
-
 
 def sbk_charts():
     parser = argparse.ArgumentParser(description='sbk charts',
@@ -25,18 +24,14 @@ def sbk_charts():
     parser.add_argument('-o', '--ofile', help='Output xlsx file', default="out.xlsx")
     args = parser.parse_args()
     configs = Properties()
-    #
-    #with open(SBK_GRADLE_PROP_FILE, 'rb') as config_file:
-    #    configs.load(config_file)
-    #sbk_version = configs.get('sbkVersion').data
     sbk_version = "1.0"
     print(open(SBK_BANNER_FILE, 'r').read())
-    #print("Sbk Charts Version : " + sbk_version)
+    print("Sbk Charts Version : " + __version__)
     print('Input Files : ', args.ifiles)
     print('Output File : ', args.ofile)
     sh = SbkMultiSheets(args.ifiles.split(","), args.ofile)
     sh.create_sheets()
-    ch = SbkMultiCharts(sbk_version, args.ofile)
+    ch = SbkMultiCharts(__version__, args.ofile)
     ch.create_graphs()
 
 
