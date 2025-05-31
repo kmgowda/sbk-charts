@@ -41,10 +41,10 @@ class SbkCharts:
                                       "Percentile_99.75", "Percentile_99.9", "Percentile_99.95", "Percentile_99.99"]]
 
     def is_rnum_sheet(self, name):
-        return re.match("^" + constants.R_PREFIX + "\d+$", name)
+        return re.match(r'^' + constants.R_PREFIX + r'\d+$', name)
 
     def is_tnum_sheet(self, name):
-        return re.match("^" + constants.T_PREFIX + "\d+$", name)
+        return re.match(r'^' + constants.T_PREFIX + r'\d+$', name)
 
     def get_columns_from_worksheet(self, ws):
         ret = OrderedDict()
