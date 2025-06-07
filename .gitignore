@@ -3,3 +3,5 @@ out.xls
 charts/__pycache__
 .DS_Store
 samples/.DS_Store
+__pycache__
+out.xlsx
