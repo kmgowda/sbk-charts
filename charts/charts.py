@@ -10,10 +10,11 @@
 
 # sbk_charts :  Storage Benchmark Kit - Charts
 import re
+import os
 from collections import OrderedDict
 from openpyxl import load_workbook
 from openpyxl.chart import LineChart, BarChart, Reference, Series
-
+from openpyxl.drawing.image import Image
 import charts.constants as constants
 
 
@@ -268,6 +269,24 @@ class SbkCharts:
         # add chart to the sheet
         sheet = self.wb.create_sheet("Records_Sec")
         sheet.add_chart(chart)
+
+    def ensure_sbk_logo(self, img_path='./images/sbk-logo.png', cell='K7', scale=0.5):
+        ws = self.wb['SBK']
+        # Check if image already exists in the sheet
+        img_abs_path = os.path.abspath(img_path)
+        for img in getattr(ws, '_images', []):
+            if hasattr(img, 'path') and os.path.abspath(img.path) == img_abs_path:
+                print(f"Image already exists in SBK sheet: {img_abs_path}")
+                return
+        # Add image if not present
+        if os.path.exists(img_abs_path):
+            img = Image(img_abs_path)
+            img.width *= scale
+            img.height *= scale
+            ws.add_image(img, cell)
+            print(f"Inserted image at {img_abs_path} in SBK sheet")
+        else:
+            print(f"Image not found: {img_abs_path}")
 
     def create_graphs(self):
         r_name = constants.R_PREFIX + "1"
