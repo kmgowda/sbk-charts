@@ -16,7 +16,7 @@ from openpyxl import load_workbook
 from openpyxl.chart import LineChart, BarChart, Reference, Series
 from openpyxl.drawing.image import Image
 import charts.constants as constants
-
+from openpyxl_image_loader import SheetImageLoader
 
 class SbkCharts:
     def __init__(self, version, file):
@@ -272,12 +272,15 @@ class SbkCharts:
 
     def ensure_sbk_logo(self, img_path='./images/sbk-logo.png', cell='K7', scale=0.5):
         ws = self.wb['SBK']
+        # Put your sheet in the loader
+        image_loader = SheetImageLoader(ws)
+
+        if image_loader.image_in(cell):
+            print(f"SBK logo Image already exists in SBK sheet")
+            return
+
         # Check if image already exists in the sheet
         img_abs_path = os.path.abspath(img_path)
-        for img in getattr(ws, '_images', []):
-            if hasattr(img, 'path') and os.path.abspath(img.path) == img_abs_path:
-                print(f"Image already exists in SBK sheet: {img_abs_path}")
-                return
         # Add image if not present
         if os.path.exists(img_abs_path):
             img = Image(img_abs_path)
