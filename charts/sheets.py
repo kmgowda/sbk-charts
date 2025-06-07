@@ -44,7 +44,7 @@ def wb_add_two_sheets(wb, r_name, t_name, df):
             except Exception as ex:
                 pass
 
-
+# The logo insertion fucntion works fine only if the package pillow is installed.
 def add_sbk_logo(wb):
     ws = wb.add_worksheet("SBK")
     img_path = os.path.abspath("./images/sbk-logo.png")
