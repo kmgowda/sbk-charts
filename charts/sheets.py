@@ -7,6 +7,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 ##
+import os
 
 # SBK-sheets :  Storage Benchmark Kit - Sheets
 
@@ -46,7 +47,15 @@ def wb_add_two_sheets(wb, r_name, t_name, df):
 
 def add_sbk_logo(wb):
     ws = wb.add_worksheet("SBK")
-    ws.insert_image('K7', "./images/sbk-logo.png", {'x_scale': 0.5, 'y_scale': 0.5})
+    img_path = os.path.abspath("./images/sbk-logo.png")
+    if os.path.exists(img_path):
+        print(f"SBK logo image found: {img_path}")
+        try:
+            ws.insert_image('K7', img_path, {'x_scale': 0.5, 'y_scale': 0.5})
+        except Exception as ex:
+            print(f"Failed to insert image: {ex}")
+    else:
+        print(f"SBK logo Image not found: {img_path}")
 
 class SbkSheets:
     def __init__(self, i_file, o_file):
