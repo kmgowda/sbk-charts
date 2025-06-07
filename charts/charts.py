@@ -26,19 +26,22 @@ class SbkCharts:
         self.n_latency_charts = 5
         self.latency_groups = [
             ["MinLatency", "Percentile_5"],
-            ["Percentile_5", "Percentile_10", "Percentile_20", "Percentile_25", "Percentile_30",
-             "Percentile_40", "Percentile_50"],
+            ["Percentile_5", "Percentile_10", "Percentile_15", "Percentile_20", "Percentile_25", "Percentile_30",
+             "Percentile_35", "Percentile_40", "Percentile_45", "Percentile_50"],
             ["Percentile_50", "AvgLatency"],
-            ["Percentile_50", "Percentile_60", "Percentile_70", "Percentile_75", "Percentile_80", "Percentile_90"],
+            ["Percentile_50", "Percentile_55", "Percentile_60", "Percentile_65", "Percentile_70", "Percentile_75",
+             "Percentile_80", "Percentile_85", "Percentile_90"],
             ["Percentile_92.5", "Percentile_95", "Percentile_97.5", "Percentile_99",
              "Percentile_99.25", "Percentile_99.5", "Percentile_99.75", "Percentile_99.9",
              "Percentile_99.95", "Percentile_99.99"]]
-        self.slc_percentile_names = [["Percentile_5", "Percentile_10", "Percentile_20", "Percentile_25",
-                                      "Percentile_30", "Percentile_40", "Percentile_50"],
-                                     ["Percentile_50", "Percentile_60", "Percentile_70", "Percentile_75",
-                                      "Percentile_80", "Percentile_90", "Percentile_92.5", "Percentile_95",
-                                      "Percentile_97.5", "Percentile_99", "Percentile_99.25", "Percentile_99.5",
-                                      "Percentile_99.75", "Percentile_99.9", "Percentile_99.95", "Percentile_99.99"]]
+        self.slc_percentile_names = [["Percentile_5", "Percentile_10", "Percentile_15", "Percentile_20",
+                                      "Percentile_25", "Percentile_30", "Percentile_35", "Percentile_40",
+                                      "Percentile_50"],
+                                     ["Percentile_50", "Percentile_55", "Percentile_60", "Percentile_65",
+                                      "Percentile_70", "Percentile_75", "Percentile_80", "Percentile_85",
+                                      "Percentile_90", "Percentile_92.5", "Percentile_95", "Percentile_97.5",
+                                      "Percentile_99", "Percentile_99.25", "Percentile_99.5", "Percentile_99.75",
+                                      "Percentile_99.9", "Percentile_99.95", "Percentile_99.99"]]
 
     def is_rnum_sheet(self, name):
         return re.match(r'^' + constants.R_PREFIX + r'\d+$', name)
