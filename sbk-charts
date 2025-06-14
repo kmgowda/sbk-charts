@@ -8,32 +8,7 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 ##
 
-import argparse
-import os
-from charts.sheets import SbkMultiSheets
-from charts.multicharts import SbkMultiCharts
-from jproperties import Properties
-from version import __version__
-
-SBK_BANNER_FILE = os.path.join(os.path.curdir, 'charts', 'banner.txt')
-
-def sbk_charts():
-    parser = argparse.ArgumentParser(description='sbk charts',
-                                     epilog='Please report issues at https://github.com/kmgowda/SBK')
-    parser.add_argument('-i', '--ifiles', help="Input CSV files, separated by ','", required=True)
-    parser.add_argument('-o', '--ofile', help='Output xlsx file', default="out.xlsx")
-    args = parser.parse_args()
-    configs = Properties()
-    sbk_version = "1.0"
-    print(open(SBK_BANNER_FILE, 'r').read())
-    print("Sbk Charts Version : " + __version__)
-    print('Input Files : ', args.ifiles)
-    print('Output File : ', args.ofile)
-    sh = SbkMultiSheets(args.ifiles.split(","), args.ofile)
-    sh.create_sheets()
-    ch = SbkMultiCharts(__version__, args.ofile)
-    ch.create_graphs()
-
+from charts.sbk_charts import sbk_charts
 
 if __name__ == "__main__":
     sbk_charts()

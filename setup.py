@@ -1,9 +1,9 @@
 from setuptools import setup
-import version
+from charts.version import __version__
 
 setup(
     name='sbk-charts',
-    version=version.__version__,
+    version=__version__,
     packages=['charts'],
     url='https://github.com/kmgowda/sbk-charts',
     license='Apache License Version 2.0',
