@@ -9,5 +9,6 @@ setup(
     license='Apache License Version 2.0',
     author='KMG',
     author_email='keshava.gowda@gmail.com',
-    description='SBK Charts'
+    description='SBK Charts',
+    executables = [{"script": "sbk-charts"}],
 )
