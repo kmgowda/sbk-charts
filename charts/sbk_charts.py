@@ -18,7 +18,7 @@ SBK_BANNER_FILE = os.path.join(os.path.curdir, 'charts', 'banner.txt')
 
 def sbk_charts():
     parser = argparse.ArgumentParser(description='sbk charts',
-                                     epilog='Please report issues at https://github.com/kmgowda/SBK')
+                                     epilog='Please report issues at https://github.com/kmgowda/sbk-charts')
     parser.add_argument('-i', '--ifiles', help="Input CSV files, separated by ','", required=True)
     parser.add_argument('-o', '--ofile', help='Output xlsx file', default="out.xlsx")
     args = parser.parse_args()
