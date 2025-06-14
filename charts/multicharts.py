@@ -9,7 +9,9 @@
 ##
 
 # sbk_charts :  Storage Benchmark Kit - Charts
+
 from collections import OrderedDict
+from datetime import date, datetime
 from openpyxl.chart import Reference
 from openpyxl.styles import Font, Alignment
 from openpyxl.utils import get_column_letter
@@ -60,18 +62,40 @@ class SbkMultiCharts(SbkCharts):
         sheet = self.wb.create_sheet("Summary")
         row = 7
         col = 7
-        sheet.column_dimensions[get_column_letter(col)].width = 25
-        sheet.column_dimensions[get_column_letter(col + 1)].width = 50
+        sheet.column_dimensions[get_column_letter(col)].width = 45
+        sheet.column_dimensions[get_column_letter(col + 1)].width = 75
         cell = sheet.cell(row, col + 1)
         cell.value = "SBK Charts "
         cell.font = Font(size="47", bold=True, color=DARKBLUE)
         cell.alignment = Alignment(horizontal='center')
         row += 1
-        cell = sheet.cell(row, col + 1)
-        cell.value = "SBK Version : " + self.version
-        cell.font = Font(size="27", bold=True, color=DARKYELLOW)
-        cell.alignment = Alignment(horizontal='center')
+        cell = sheet.cell(row, col)
+        cell.value = "SBK Charts Version"
+        cell.font = Font(size="27", bold=True, color=DARKRED)
+        cell.alignment = Alignment(horizontal='left')
+        cell = sheet.cell(row, col+1)
+        cell.value = self.version
+        cell.font = Font(size="27", bold=True, color=BLACK)
+        cell.alignment = Alignment(horizontal='left')
         row += 1
+        cell = sheet.cell(row, col)
+        cell.value = "Date"
+        cell.font = Font(size="18", bold=False, color=DARKRED)
+        cell.alignment = Alignment(horizontal='left')
+        cell = sheet.cell(row, col+1)
+        cell.value =  date.today()
+        cell.font = Font(size="18", bold=False, color=BLACK)
+        cell.alignment = Alignment(horizontal='left')
+        row +=1
+        cell = sheet.cell(row, col)
+        cell.value = "Time"
+        cell.font = Font(size="18", bold=False, color=DARKRED)
+        cell.alignment = Alignment(horizontal='left')
+        cell = sheet.cell(row, col + 1)
+        cell.value = datetime.now().strftime("%H:%M:%S")
+        cell.font = Font(size="18", bold=False, color=BLACK)
+        cell.alignment = Alignment(horizontal='left')
+        row += 3
         drivers = OrderedSet()
         for values in acts.values():
             drivers.update(values)
