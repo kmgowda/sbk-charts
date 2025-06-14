@@ -6,3 +6,4 @@ samples/.DS_Store
 __pycache__
 out.xlsx
 ~$out.xlsx
+./build
