@@ -61,7 +61,7 @@ class SbkCharts:
         columns = self.get_columns_from_worksheet(ws)
         ret = OrderedDict()
         for key in columns.keys():
-            if key.startswith("Percentile_"):
+            if key.startswith("Percentile_") and "Count" not in key:
                 ret[key] = columns[key]
         return ret
 
