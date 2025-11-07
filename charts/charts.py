@@ -95,6 +95,8 @@ class SbkCharts:
         chart.y_axis.title = y_title
         chart.height = height
         chart.width = width
+        chart.x_axis.delete = False
+        chart.y_axis.delete = False
 
     def create_line_chart(self, title, x_title, y_title, height, width):
         chart = LineChart()
