@@ -12,7 +12,7 @@ import argparse
 import os
 from .sheets import SbkMultiSheets
 from .multicharts import SbkMultiCharts
-from .version import __sbk_version__
+from .sbk_version import __sbk_version__
 
 SBK_BANNER_FILE = os.path.join(os.path.curdir, 'src/charts', 'banner.txt')
 

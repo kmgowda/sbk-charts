@@ -10,7 +10,7 @@
 
 import os
 from setuptools import setup, find_packages
-from src.charts.version import __sbk_version__
+from src.charts.sbk_version import __sbk_version__
 
 
 with open('requirements.txt') as f:
