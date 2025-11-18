@@ -17,8 +17,8 @@ from openpyxl.styles import Font, Alignment
 from openpyxl.utils import get_column_letter
 from ordered_set import OrderedSet
 
-import charts.constants as constants
-from charts.charts import SbkCharts
+from . import constants
+from .charts import SbkCharts
 
 
 class SbkMultiCharts(SbkCharts):

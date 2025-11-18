@@ -1,5 +1,5 @@
 from setuptools import setup
-from charts.version import __version__
+from src.charts import __version__
 
 with open('requirements.txt') as f:
     required = f.read().splitlines()

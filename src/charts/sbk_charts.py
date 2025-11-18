@@ -10,11 +10,11 @@
 
 import argparse
 import os
-from charts.sheets import SbkMultiSheets
-from charts.multicharts import SbkMultiCharts
-from charts.version import __version__
+from .sheets import SbkMultiSheets
+from .multicharts import SbkMultiCharts
+from .version import __version__
 
-SBK_BANNER_FILE = os.path.join(os.path.curdir, 'charts', 'banner.txt')
+SBK_BANNER_FILE = os.path.join(os.path.curdir, 'src/charts', 'banner.txt')
 
 def sbk_charts():
     parser = argparse.ArgumentParser(description='sbk charts',

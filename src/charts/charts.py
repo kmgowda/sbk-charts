@@ -15,7 +15,7 @@ from collections import OrderedDict
 from openpyxl import load_workbook
 from openpyxl.chart import LineChart, BarChart, Reference, Series
 from openpyxl.drawing.image import Image
-import charts.constants as constants
+from . import constants
 from openpyxl_image_loader import SheetImageLoader
 
 class SbkCharts:

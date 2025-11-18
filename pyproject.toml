@@ -45,8 +45,8 @@ dev = [
 
 [tool.setuptools]
 packages = ["charts"]
+package_dir = {""= "src"}
+package_data = {"charts"= ["banner.txt"]}
 
-[tool.setuptools.entry-points]
-console_scripts = [
-    "sbk-charts = charts.sbk_charts:main",
-]
+[project.scripts]
+sbk-charts = "charts.sbk_charts:sbk_charts"

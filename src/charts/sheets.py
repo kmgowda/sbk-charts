@@ -14,7 +14,7 @@ import os
 from pandas import read_csv
 from xlsxwriter import Workbook
 
-import charts.constants as constants
+from . import constants
 
 
 def wb_add_two_sheets(wb, r_name, t_name, df):

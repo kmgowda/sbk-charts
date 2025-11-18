@@ -1,6 +1,6 @@
 out.xls
 .idea
-charts/__pycache__
+src/charts/__pycache__
 .DS_Store
 samples/.DS_Store
 __pycache__
