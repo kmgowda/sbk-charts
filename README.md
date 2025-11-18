@@ -81,4 +81,20 @@ Reading : FILE, ROCKSDB
 ```
 you can see the sample [fil read in csv](./samples/charts/sbk-file-read.csv) and the [rocksdb red in csv](./samples/charts/sbk-rocksdb-read.csv) as input files and the generated output file is [file and rocksdb read comparesion](./samples/charts/sbk-file-rocksdb-read.xlsx)
 
+## python Virtual Environment setup for sbk-charts
+
+```
+python3 -m venv sbk-charts-venv
+source sbk-charts-venv/bin/activate
+pip install -e .
+``` 
+
+to deactivate from the venv 
+
+```
+deactivate
+```
+
+
+
 
