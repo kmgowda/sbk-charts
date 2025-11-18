@@ -1,5 +1,5 @@
 from setuptools import setup
-from src.charts import __version__
+from src.charts.version import __version__
 
 with open('requirements.txt') as f:
     required = f.read().splitlines()
@@ -13,6 +13,5 @@ setup(
     author='KMG',
     author_email='keshava.gowda@gmail.com',
     description='SBK Charts',
-    install_requires = required,
-    executables = [{"script": "sbk-charts"}],
+    install_requires=required,
 )
