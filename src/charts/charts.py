@@ -43,6 +43,13 @@ class SbkCharts:
                                       "Percentile_90", "Percentile_92.5", "Percentile_95", "Percentile_97.5",
                                       "Percentile_99", "Percentile_99.25", "Percentile_99.5", "Percentile_99.75",
                                       "Percentile_99.9", "Percentile_99.95", "Percentile_99.99"]]
+        self.percentile_count_names = ["Percentile_Count_5", "Percentile_Count_10", "Percentile_Count_15", "Percentile_Count_20",
+                                      "Percentile_Count_25", "Percentile_Count_30", "Percentile_Count_35", "Percentile_Count_40",
+                                      "Percentile_Count_50", "Percentile_Count_55", "Percentile_Count_60", "Percentile_Count_65",
+                                      "Percentile_Count_70", "Percentile_Count_75", "Percentile_Count_80", "Percentile_Count_85",
+                                      "Percentile_Count_90", "Percentile_Count_92.5", "Percentile_Count_95", "Percentile_Count_97.5",
+                                      "Percentile_Count_99", "Percentile_Count_99.25", "Percentile_Count_99.5", "Percentile_Count_99.75",
+                                      "Percentile_Count_99.9", "Percentile_Count_99.95", "Percentile_Count_99.99"]
 
     def is_rnum_sheet(self, name):
         return re.match(r'^' + constants.R_PREFIX + r'\d+$', name)
@@ -62,6 +69,14 @@ class SbkCharts:
         ret = OrderedDict()
         for key in columns.keys():
             if key.startswith("Percentile_") and "Count" not in key:
+                ret[key] = columns[key]
+        return ret
+
+    def get_latency_percentile_count_columns(self, ws):
+        columns = self.get_columns_from_worksheet(ws)
+        ret = OrderedDict()
+        for key in columns.keys():
+            if key.startswith("Percentile_Count") :
                 ret[key] = columns[key]
         return ret
 
@@ -122,6 +137,16 @@ class SbkCharts:
 
     def get_latency_percentile_series(self, ws, ws_name, names_list):
         latencies = self.get_latency_percentile_columns(ws)
+        data_series = OrderedDict()
+        min_col = latencies[names_list[0]]
+        max_col = latencies[names_list[-1]]
+        for r in range(2, ws.max_row + 1):
+            data_series[r] = Series(Reference(ws, min_col=min_col, min_row=r, max_col=max_col, max_row=r),
+                                    title=ws_name + "_" + str(r))
+        return data_series
+
+    def get_latency_percentile_count_series(self, ws, ws_name, names_list):
+        latencies = self.get_latency_percentile_count_columns(ws)
         data_series = OrderedDict()
         min_col = latencies[names_list[0]]
         max_col = latencies[names_list[-1]]
@@ -249,6 +274,22 @@ class SbkCharts:
             # add chart to the sheet
             sheet = self.wb.create_sheet("Total_Percentiles_" + str(i + 1))
             sheet.add_chart(chart)
+
+    def create_total_latency_percentile_count_graphs(self, ws, prefix):
+        title = "Total Percentiles Histogram"
+        latency_cols = self.get_latency_percentile_count_columns(ws)
+        chart = self.create_bar_chart(title, "Percentiles", "Count ", 25, 50)
+        latency_series = self.get_latency_percentile_count_series(ws, prefix, self.percentile_count_names)
+        for x in latency_series:
+            chart.append(latency_series[x])
+        # Add x-axis labels
+        percentiles_counts = Reference(ws, min_col=latency_cols[self.percentile_count_names[0]], min_row=1,
+                                max_col=latency_cols[self.percentile_count_names[-1]], max_row=1)
+        chart.set_categories(percentiles_counts)
+        # add chart to the sheet
+        sheet = self.wb.create_sheet("Total_Percentiles_Histogram" )
+        sheet.add_chart(chart)
+
 
     def create_throughput_mb_graph(self, ws, prefix):
         chart = self.create_line_chart("Throughput Variations in Mega Bytes / Seconds",

@@ -184,6 +184,27 @@ class SbkMultiCharts(SbkCharts):
             sheet = self.wb.create_sheet("Total_Percentiles_" + str(i + 1))
             sheet.add_chart(chart)
 
+    def create_total_multi_latency_percentile_count_graphs(self):
+        title = "Total Percentiles Histogram"
+        chart = self.create_bar_chart(title, "Percentiles", "Count", 25, 50)
+        x_labels = False
+        for name in self.wb.sheetnames:
+            if self.is_tnum_sheet(name):
+                ws = self.wb[name]
+                prefix = name + "_" + self.get_storage_name(ws)
+                latency_series = self.get_latency_percentile_count_series(ws, prefix, self.percentile_count_names)
+                for x in latency_series:
+                    chart.append(latency_series[x])
+                if x_labels is False:
+                    latency_cols = self.get_latency_percentile_count_columns(ws)
+                    percentile_names = Reference(ws, min_col=latency_cols[self.percentile_count_names[0]], min_row=1,
+                                                 max_col=latency_cols[self.percentile_count_names[-1]], max_row=1)
+                    chart.set_categories(percentile_names)
+                    x_labels = True
+        sheet = self.wb.create_sheet("Total_Percentiles_Histogram" )
+        sheet.add_chart(chart)
+
+
     def create_multi_throughput_mb_graph(self, ):
         chart = self.create_line_chart("Throughput Variations in Mega Bytes / Seconds",
                                        "Intervals", "Throughput in MB/Sec", 25, 50)
@@ -407,6 +428,7 @@ class SbkMultiCharts(SbkCharts):
             self.create_multi_write_read_timeout_events_graph()
             self.create_multi_write_read_timeout_events_per_sec_graph()
             self.create_total_multi_latency_percentile_graphs()
+            self.create_total_multi_latency_percentile_count_graphs()
             self.create_total_mb_compare_graph()
             self.create_total_throughput_mb_compare_graph()
             self.create_total_throughput_records_compare_graph()
