@@ -84,14 +84,23 @@ you can see the sample [fil read in csv](./samples/charts/sbk-file-read.csv) and
 ## python Virtual Environment setup for sbk-charts
 
 ```
+#create the env
 python3 -m venv sbk-charts-venv
+
+#set the env
 source sbk-charts-venv/bin/activate
+
+# install required packages
 pip install -e .
+
+# build the sbk-charts
+python3 -m build  
 ``` 
 
 to deactivate from the venv 
 
 ```
+# deactivate the venv
 deactivate
 ```
 
