@@ -10,11 +10,11 @@
 
 import argparse
 import os
-from charts.sheets import SbkMultiSheets
-from charts.multicharts import SbkMultiCharts
-from charts.version import __version__
+from .sheets import SbkMultiSheets
+from .multicharts import SbkMultiCharts
+from .sbk_version import __sbk_version__
 
-SBK_BANNER_FILE = os.path.join(os.path.curdir, 'charts', 'banner.txt')
+SBK_BANNER_FILE = os.path.join(os.path.curdir, 'src/charts', 'banner.txt')
 
 def sbk_charts():
     parser = argparse.ArgumentParser(description='sbk charts',
@@ -23,10 +23,10 @@ def sbk_charts():
     parser.add_argument('-o', '--ofile', help='Output xlsx file', default="out.xlsx")
     args = parser.parse_args()
     print(open(SBK_BANNER_FILE, 'r').read())
-    print("Sbk Charts Version : " + __version__)
+    print("Sbk Charts Version : " + __sbk_version__)
     print('Input Files : ', args.ifiles)
     print('Output File : ', args.ofile)
     sh = SbkMultiSheets(args.ifiles.split(","), args.ofile)
     sh.create_sheets()
-    ch = SbkMultiCharts(__version__, args.ofile)
+    ch = SbkMultiCharts(__sbk_version__, args.ofile)
     ch.create_graphs()

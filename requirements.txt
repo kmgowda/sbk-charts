@@ -3,4 +3,5 @@ pandas~=2.2.3
 XlsxWriter~=3.2.3
 ordered-set~=4.1.0
 jproperties~=2.1.1
-pillow~=9.2.0
+pillow~=12.0.0
+openpyxl-image-loader~=1.0.5
