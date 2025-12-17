@@ -10,3 +10,4 @@ out.xlsx
 build/
 dist
 src/sbk_charts.egg-info
+sbk-charts-venv
