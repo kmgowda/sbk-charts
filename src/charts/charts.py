@@ -15,6 +15,7 @@ from collections import OrderedDict
 from openpyxl import load_workbook
 from openpyxl.chart import LineChart, BarChart, Reference, Series
 from openpyxl.drawing.image import Image
+from openpyxl.drawing.text import CharacterProperties, ParagraphProperties
 from . import constants
 from openpyxl_image_loader import SheetImageLoader
 
@@ -101,13 +102,24 @@ class SbkCharts:
         names = self.get_columns_from_worksheet(ws)
         return str(ws.cell(row=2, column=names['Action']).value)
 
-    def __add_chart_attriuutes(self, chart, title, x_title, y_title, height, width):
-        # set the title of the chart
+    def __add_chart_attributes(self, chart, title, x_title, y_title, height, width):
+        # Set the title of the chart with font size
+        # Set chart title
         chart.title = title
-        # set the title of the x-axis
+        chart.title.tx.rich.p[0].pPr.defRPr = CharacterProperties(sz=3600, b=True)  # 36pt, bold
+        
+        # Set x-axis title
         chart.x_axis.title = x_title
-        # set the title of the y-axis
+        if not hasattr(chart.x_axis.title.tx.rich.p[0], 'pPr'):
+            chart.x_axis.title.tx.rich.p[0].pPr = ParagraphProperties()
+        chart.x_axis.title.tx.rich.p[0].pPr.defRPr = CharacterProperties(sz=1800)  # 18pt
+        
+        # Set y-axis title
         chart.y_axis.title = y_title
+        if not hasattr(chart.y_axis.title.tx.rich.p[0], 'pPr'):
+            chart.y_axis.title.tx.rich.p[0].pPr = ParagraphProperties()
+        chart.y_axis.title.tx.rich.p[0].pPr.defRPr = CharacterProperties(sz=1800)  # 18pt
+
         chart.height = height
         chart.width = width
         chart.x_axis.delete = False
@@ -115,12 +127,12 @@ class SbkCharts:
 
     def create_line_chart(self, title, x_title, y_title, height, width):
         chart = LineChart()
-        self.__add_chart_attriuutes(chart, title, x_title, y_title, height, width)
+        self.__add_chart_attributes(chart, title, x_title, y_title, height, width)
         return chart
 
     def create_bar_chart(self, title, x_title, y_title, height, width):
         chart = BarChart()
-        self.__add_chart_attriuutes(chart, title, x_title, y_title, height, width)
+        self.__add_chart_attributes(chart, title, x_title, y_title, height, width)
         return chart
 
     def create_latency_line_graph(self, title):
