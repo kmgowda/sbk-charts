@@ -8,3 +8,5 @@ out.xlsx
 ~$out.xlsx
 ./build
 build/
+dist
+src/sbk_charts.egg-info
