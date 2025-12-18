@@ -15,5 +15,5 @@ class HuggingFace(SbkGenAI):
         super().__init__()
         pass
 
-    def get_throughput_mb_analysis(self, throughput, prompt_text):
+    def get_throughput_mb_analysis(self, throughputs, prompt_text):
         pass
