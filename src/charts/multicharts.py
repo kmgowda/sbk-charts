@@ -140,16 +140,21 @@ class SbkMultiCharts(SbkCharts):
             ch.width = 70
             ch.height = 70
             sheets[i].add_chart(ch)
+        return sheets
 
     def create_multi_latency_compare_graphs(self):
+        all_sheets = []
         for name in self.wb.sheetnames:
             if self.is_rnum_sheet(name):
                 ws = self.wb[name]
                 prefix = name + "-" + self.get_storage_name(ws)
-                super().create_latency_compare_graphs(ws, prefix)
+                sheets = super().create_latency_compare_graphs(ws, prefix)
+                all_sheets.extend(sheets)
+        return all_sheets
 
     def create_multi_latency_graphs(self):
         charts = OrderedDict()
+        sheets = []
         for name in self.wb.sheetnames:
             if self.is_rnum_sheet(name):
                 ws = self.wb[name]
@@ -162,9 +167,12 @@ class SbkMultiCharts(SbkCharts):
         for x in charts:
             sheet = self.wb.create_sheet(x)
             sheet.add_chart(charts[x])
+            sheets.append(sheet)
+        return sheets
 
     def create_total_multi_latency_percentile_graphs(self):
         title = "Total Percentiles"
+        sheets = []
         for i, names_list in enumerate(self.slc_percentile_names):
             chart = self.create_line_chart(title, "Percentiles", "Latency time in " + self.time_unit, 25, 50)
             x_labels = False
@@ -183,6 +191,8 @@ class SbkMultiCharts(SbkCharts):
                         x_labels = True
             sheet = self.wb.create_sheet("Total_Percentiles_" + str(i + 1))
             sheet.add_chart(chart)
+            sheets.append(sheet)
+        return sheets
 
     def create_total_multi_latency_percentile_count_graphs(self):
         title = "Total Percentiles Histogram"
@@ -218,6 +228,7 @@ class SbkMultiCharts(SbkCharts):
         # add chart to the sheet
         sheet = self.wb.create_sheet("Throughput_MB")
         sheet.add_chart(chart)
+        return sheet
 
     def create_multi_throughput_records_graph(self):
         chart = self.create_line_chart("Throughput Variations in Records / Seconds",
@@ -232,6 +243,7 @@ class SbkMultiCharts(SbkCharts):
         # add chart to the sheet
         sheet = self.wb.create_sheet("Throughput_Records")
         sheet.add_chart(chart)
+        return sheet
 
     def create_multi_write_read_records_graph(self):
         chart = self.create_line_chart("Write and Read Records Variations",
@@ -249,6 +261,7 @@ class SbkMultiCharts(SbkCharts):
         # add chart to the sheet
         sheet = self.wb.create_sheet("Write_Read_Records")
         sheet.add_chart(chart)
+        return sheet
 
     def create_multi_write_read_mb_graph(self):
         chart = self.create_line_chart("Write and Read MBs Variations",
@@ -266,6 +279,7 @@ class SbkMultiCharts(SbkCharts):
         # add chart to the sheet
         sheet = self.wb.create_sheet("Write_Read_MB")
         sheet.add_chart(chart)
+        return sheet
 
     def create_total_mb_compare_graph(self):
         chart = None
@@ -286,6 +300,8 @@ class SbkMultiCharts(SbkCharts):
             # add chart to the sheet
             sheet = self.wb.create_sheet("Total_MB")
             sheet.add_chart(chart)
+            return sheet
+        return None
 
     def create_multi_write_read_timeout_events_graph(self):
         chart = self.create_line_chart("Write and Read Timeout Events Variations",
@@ -299,6 +315,7 @@ class SbkMultiCharts(SbkCharts):
         # add chart to the sheet
         sheet = self.wb.create_sheet("RW_TimeoutEvents")
         sheet.add_chart(chart)
+        return sheet
 
     def create_multi_write_read_timeout_events_per_sec_graph(self):
         chart = self.create_line_chart("Write and Read Timeout Events / Sec Variations",
@@ -312,6 +329,7 @@ class SbkMultiCharts(SbkCharts):
         # add chart to the sheet
         sheet = self.wb.create_sheet("RW_TimeoutEvents_Per_Sec")
         sheet.add_chart(chart)
+        return sheet
 
     def create_total_throughput_mb_compare_graph(self):
         chart = None
@@ -330,6 +348,8 @@ class SbkMultiCharts(SbkCharts):
             # add chart to the sheet
             sheet = self.wb.create_sheet("Total_Throughput_MB")
             sheet.add_chart(chart)
+            return sheet
+        return None
 
     def create_total_throughput_records_compare_graph(self):
         chart = None
@@ -348,6 +368,8 @@ class SbkMultiCharts(SbkCharts):
             # add chart to the sheet
             sheet = self.wb.create_sheet("Total_Throughput_Records")
             sheet.add_chart(chart)
+            return sheet
+        return None
 
     def create_total_avg_latency_compare_graph(self):
         chart = None
@@ -364,6 +386,8 @@ class SbkMultiCharts(SbkCharts):
             # add chart to the sheet
             sheet = self.wb.create_sheet("Total_Avg_Latency")
             sheet.add_chart(chart)
+            return sheet
+        return None
 
     def create_total_min_latency_compare_graph(self):
         chart = None
@@ -380,6 +404,8 @@ class SbkMultiCharts(SbkCharts):
             # add chart to the sheet
             sheet = self.wb.create_sheet("Total_Min_Latency")
             sheet.add_chart(chart)
+            return sheet
+        return None
 
     def create_total_max_latency_compare_graph(self):
         chart = None
@@ -396,6 +422,8 @@ class SbkMultiCharts(SbkCharts):
             # add chart to the sheet
             sheet = self.wb.create_sheet("Total_Max_Latency")
             sheet.add_chart(chart)
+            return sheet
+        return None
 
     def create_total_write_read_timeout_events_compare_graph(self):
         chart = None
@@ -413,12 +441,12 @@ class SbkMultiCharts(SbkCharts):
             # add chart to the sheet
             sheet = self.wb.create_sheet("Total_RW_TimeoutEvents")
             sheet.add_chart(chart)
+            return sheet
+        return None
 
 
     def create_graphs(self):
         if self.check_time_units():
-            self.create_summary_sheet()
-            self.create_multi_throughput_mb_graph()
             self.create_multi_throughput_records_graph()
             self.create_all_latency_compare_graphs()
             self.create_multi_latency_compare_graphs()

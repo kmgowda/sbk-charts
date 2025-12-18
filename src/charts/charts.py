@@ -260,8 +260,10 @@ class SbkCharts:
                     charts[i].append(latency_series[x])
         for i, ch in enumerate(charts):
             sheets[i].add_chart(ch)
+        return sheets
 
     def create_latency_graphs(self, ws, prefix):
+        sheets = []
         latency_series = self.get_latency_series(ws, prefix)
         for x in latency_series:
             chart = self.create_latency_line_graph(x + " Variations")
@@ -270,10 +272,13 @@ class SbkCharts:
             # add chart to the sheet
             sheet = self.wb.create_sheet(x)
             sheet.add_chart(chart)
+            sheets.append(sheet)
+        return sheets
 
     def create_total_latency_percentile_graphs(self, ws, prefix):
         title = "Total Percentiles"
         latency_cols = self.get_latency_percentile_columns(ws)
+        sheets = []
         for i, percentile_names in enumerate(self.slc_percentile_names):
             chart = self.create_line_chart(title, "Percentiles", "Latency time in " + self.time_unit, 25, 50)
             latency_series = self.get_latency_percentile_series(ws, prefix, percentile_names)
@@ -286,6 +291,8 @@ class SbkCharts:
             # add chart to the sheet
             sheet = self.wb.create_sheet("Total_Percentiles_" + str(i + 1))
             sheet.add_chart(chart)
+            sheets.append(sheet)
+        return sheets
 
     def create_total_latency_percentile_count_graphs(self, ws, prefix):
         title = "Total Percentiles Histogram"
@@ -301,6 +308,7 @@ class SbkCharts:
         # add chart to the sheet
         sheet = self.wb.create_sheet("Total_Percentiles_Histogram" )
         sheet.add_chart(chart)
+        return sheet
 
 
     def create_throughput_mb_graph(self, ws, prefix):
@@ -313,6 +321,7 @@ class SbkCharts:
         # add chart to the sheet
         sheet = self.wb.create_sheet("MB_Sec")
         sheet.add_chart(chart)
+        return sheet
 
     def create_throughput_records_graph(self, ws, prefix):
         chart = self.create_line_chart("Throughput Variations in Records / Seconds",
@@ -324,6 +333,7 @@ class SbkCharts:
         # add chart to the sheet
         sheet = self.wb.create_sheet("Records_Sec")
         sheet.add_chart(chart)
+        return sheet
 
     def ensure_sbk_logo(self, img_path='./images/sbk-logo.png', cell='K7', scale=0.5):
         ws = self.wb['SBK']
