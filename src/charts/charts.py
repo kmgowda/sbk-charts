@@ -16,7 +16,7 @@ from openpyxl import load_workbook
 from openpyxl.chart import LineChart, BarChart, Reference, Series
 from openpyxl.drawing.image import Image
 from openpyxl.drawing.text import CharacterProperties, ParagraphProperties
-from . import constants
+from src.sheets import constants
 from openpyxl_image_loader import SheetImageLoader
 
 class SbkCharts:

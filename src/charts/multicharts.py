@@ -17,7 +17,7 @@ from openpyxl.styles import Font, Alignment
 from openpyxl.utils import get_column_letter
 from ordered_set import OrderedSet
 
-from . import constants
+from src.sheets import constants
 from .charts import SbkCharts
 
 

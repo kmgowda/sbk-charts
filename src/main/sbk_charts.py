@@ -9,12 +9,12 @@
 ##
 
 import os
-from .sheets import SbkMultiSheets
-from .multicharts import SbkMultiCharts
-from .sbk_version import __sbk_version__
-from .sbk_parser import SbkParser
+from src.sheets.sheets import SbkMultiSheets
+from src.charts.multicharts import SbkMultiCharts
+from src.main.sbk_version import __sbk_version__
+from src.parser.sbk_parser import SbkParser
 
-SBK_BANNER_FILE = os.path.join(os.path.curdir, 'src/charts', 'banner.txt')
+SBK_BANNER_FILE = os.path.join(os.path.curdir, 'src/main', 'banner.txt')
 
 def sbk_charts():
     parser = SbkParser()
