@@ -9,6 +9,8 @@
 ##
 
 import os
+
+from src.ai.sbk_ai import SbkAI
 from src.sheets.sheets import SbkMultiSheets
 from src.charts.multicharts import SbkMultiCharts
 from src.main.sbk_version import __sbk_version__
@@ -25,5 +27,5 @@ def sbk_charts():
     print('Output File : ', args.ofile)
     sh = SbkMultiSheets(args.ifiles.split(","), args.ofile)
     sh.create_sheets()
-    ch = SbkMultiCharts(__sbk_version__, args.ofile)
+    ch = SbkAI(__sbk_version__, args.ofile)
     ch.create_graphs()
