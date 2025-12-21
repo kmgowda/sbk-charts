@@ -121,6 +121,7 @@ class SbkMultiCharts(SbkCharts):
             cell.font = Font(size="18", bold=False, color=DARKRED)
             text += " : " + cell.value
             print(text)
+        return sheet
 
     def create_all_latency_compare_graphs(self):
         charts, sheets = [], []
