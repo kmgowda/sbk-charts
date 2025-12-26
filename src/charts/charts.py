@@ -154,7 +154,7 @@ class SbkCharts:
         max_col = latencies[names_list[-1]]
         for r in range(2, ws.max_row + 1):
             data_series[r] = Series(Reference(ws, min_col=min_col, min_row=r, max_col=max_col, max_row=r),
-                                    title=ws_name + "_" + str(r))
+                                    title=ws_name + "_" + str(r-1))
         return data_series
 
     def get_latency_percentile_count_series(self, ws, ws_name, names_list):
@@ -164,7 +164,7 @@ class SbkCharts:
         max_col = latencies[names_list[-1]]
         for r in range(2, ws.max_row + 1):
             data_series[r] = Series(Reference(ws, min_col=min_col, min_row=r, max_col=max_col, max_row=r),
-                                    title=ws_name + "_" + str(r))
+                                    title=ws_name + "_" + str(r-1))
         return data_series
 
     def get_column_series(self, ws, ws_name, column_name):
