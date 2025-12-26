@@ -58,8 +58,11 @@ class SbkAI(SbkMultiCharts):
                 ws = self.wb[name]
                 prefix = name + "-" + self.get_storage_name(ws)
                 throughputs[self.get_storage_name(ws)] = self.__series_values_to_list(ws, self.get_throughput_mb_series(ws, prefix))
-        analysis = self.ai.get_throughput_mb_analysis(throughputs)
+        status, analysis = self.ai.get_throughput_mb_analysis(throughputs)
         #print(analysis)
+        if not status:
+            print(analysis)
+            return sheet
         
         # Add analysis text to the summary sheet
         if analysis:

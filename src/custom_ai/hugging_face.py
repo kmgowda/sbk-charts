@@ -26,10 +26,10 @@ class HuggingFace(SbkGenAI):
         """
         api_token = os.getenv("HUGGINGFACE_API_TOKEN")
         if not api_token:
-            return (
+            return [False, (
                 "LLM analysis is not available (missing HUGGINGFACEHUB_API_TOKEN). "
                 "Configure the token to enable Hugging Face-based analysis."
-            )
+            )]
 
         client = InferenceClient(model=HF_MODEL_ID, token=api_token)
 
@@ -40,7 +40,7 @@ class HuggingFace(SbkGenAI):
             top_p=0.9,
         )
         # OpenAI‑style response schema
-        return completion.choices[0].message["content"].strip()
+        return [True, completion.choices[0].message["content"].strip()]
 
     
     def get_throughput_mb_analysis(self, throughputs, prompt_text = None):
@@ -52,7 +52,7 @@ class HuggingFace(SbkGenAI):
         prompt_text: optional custom instruction; if None, a default prompt is used.
         """
         if not throughputs:
-            return "No throughput data provided; cannot perform analysis."
+            return [False, "No throughput data provided; cannot perform analysis."]
 
         # 1) Compute per-system stats
         stats = {}
@@ -68,7 +68,7 @@ class HuggingFace(SbkGenAI):
             }
 
         if not stats:
-            return "No valid throughput values available for analysis."
+            return [False, "No valid throughput values available for analysis."]
 
         # 2) Rank by average throughput (descending)
         ranked = sorted(stats.items(), key=lambda kv: kv[1]["avg"], reverse=True)
