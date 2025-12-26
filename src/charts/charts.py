@@ -12,52 +12,70 @@
 import re
 import os
 from collections import OrderedDict
+from typing import final
+
 from openpyxl import load_workbook
 from openpyxl.chart import LineChart, BarChart, Reference, Series
 from openpyxl.drawing.image import Image
 from openpyxl.drawing.text import CharacterProperties, ParagraphProperties
-from src.sheets import constants
 from openpyxl_image_loader import SheetImageLoader
+
+import src.sheets.constants as sheets_constants
+from src.charts import constants
 
 class SbkCharts:
     def __init__(self, version, file):
         self.version = version
         self.file = file
         self.wb = load_workbook(self.file)
-        self.time_unit = self.get_time_unit(self.wb[constants.R_PREFIX + "1"])
+        self.time_unit = self.get_time_unit(self.wb[sheets_constants.R_PREFIX + "1"])
         self.n_latency_charts = 5
         self.latency_groups = [
-            ["MinLatency", "Percentile_5"],
-            ["Percentile_5", "Percentile_10", "Percentile_15", "Percentile_20", "Percentile_25", "Percentile_30",
-             "Percentile_35", "Percentile_40", "Percentile_45", "Percentile_50"],
-            ["Percentile_50", "AvgLatency"],
-            ["Percentile_50", "Percentile_55", "Percentile_60", "Percentile_65", "Percentile_70", "Percentile_75",
-             "Percentile_80", "Percentile_85", "Percentile_90"],
-            ["Percentile_92.5", "Percentile_95", "Percentile_97.5", "Percentile_99",
-             "Percentile_99.25", "Percentile_99.5", "Percentile_99.75", "Percentile_99.9",
-             "Percentile_99.95", "Percentile_99.99"]]
-        self.slc_percentile_names = [["Percentile_5", "Percentile_10", "Percentile_15", "Percentile_20",
-                                      "Percentile_25", "Percentile_30", "Percentile_35", "Percentile_40",
-                                      "Percentile_50"],
-                                     ["Percentile_50", "Percentile_55", "Percentile_60", "Percentile_65",
-                                      "Percentile_70", "Percentile_75", "Percentile_80", "Percentile_85",
-                                      "Percentile_90", "Percentile_92.5", "Percentile_95", "Percentile_97.5",
-                                      "Percentile_99", "Percentile_99.25", "Percentile_99.5", "Percentile_99.75",
-                                      "Percentile_99.9", "Percentile_99.95", "Percentile_99.99"]]
-        self.percentile_count_names = ["Percentile_Count_5", "Percentile_Count_10", "Percentile_Count_15", "Percentile_Count_20",
-                                      "Percentile_Count_25", "Percentile_Count_30", "Percentile_Count_35", "Percentile_Count_40",
-                                      "Percentile_Count_50", "Percentile_Count_55", "Percentile_Count_60", "Percentile_Count_65",
-                                      "Percentile_Count_70", "Percentile_Count_75", "Percentile_Count_80", "Percentile_Count_85",
-                                      "Percentile_Count_90", "Percentile_Count_92.5", "Percentile_Count_95", "Percentile_Count_97.5",
-                                      "Percentile_Count_99", "Percentile_Count_99.25", "Percentile_Count_99.5", "Percentile_Count_99.75",
-                                      "Percentile_Count_99.9", "Percentile_Count_99.95", "Percentile_Count_99.99"]
+            [constants.MIN_LATENCY, constants.PERCENTILE_5],
+            [constants.PERCENTILE_5, constants.PERCENTILE_10, constants.PERCENTILE_15, constants.PERCENTILE_20, 
+             constants.PERCENTILE_25, constants.PERCENTILE_30, constants.PERCENTILE_35, constants.PERCENTILE_40,
+             constants.PERCENTILE_45, constants.PERCENTILE_50],
+            [constants.PERCENTILE_50, constants.AVG_LATENCY],
+            [constants.PERCENTILE_50, constants.PERCENTILE_55, constants.PERCENTILE_60, constants.PERCENTILE_65,
+             constants.PERCENTILE_70, constants.PERCENTILE_75, constants.PERCENTILE_80, constants.PERCENTILE_85,
+             constants.PERCENTILE_90],
+            [constants.PERCENTILE_92_5, constants.PERCENTILE_95, constants.PERCENTILE_97_5, constants.PERCENTILE_99,
+             constants.PERCENTILE_99_25, constants.PERCENTILE_99_5, constants.PERCENTILE_99_75, constants.PERCENTILE_99_9,
+             constants.PERCENTILE_99_95, constants.PERCENTILE_99_99]]
+        self.slc_percentile_names = [[constants.PERCENTILE_5, constants.PERCENTILE_10, constants.PERCENTILE_15, 
+                                      constants.PERCENTILE_20, constants.PERCENTILE_25, constants.PERCENTILE_30, 
+                                      constants.PERCENTILE_35, constants.PERCENTILE_40, constants.PERCENTILE_50],
+                                     [constants.PERCENTILE_50, constants.PERCENTILE_55, constants.PERCENTILE_60,
+                                      constants.PERCENTILE_65, constants.PERCENTILE_70, constants.PERCENTILE_75,
+                                      constants.PERCENTILE_80, constants.PERCENTILE_85, constants.PERCENTILE_90,
+                                      constants.PERCENTILE_92_5, constants.PERCENTILE_95, constants.PERCENTILE_97_5,
+                                      constants.PERCENTILE_99, constants.PERCENTILE_99_25, constants.PERCENTILE_99_5,
+                                      constants.PERCENTILE_99_75, constants.PERCENTILE_99_9, constants.PERCENTILE_99_95,
+                                      constants.PERCENTILE_99_99]]
+        self.percentile_count_names = [constants.PERCENTILE_COUNT_5, constants.PERCENTILE_COUNT_10, 
+                                      constants.PERCENTILE_COUNT_15, constants.PERCENTILE_COUNT_20,
+                                      constants.PERCENTILE_COUNT_25, constants.PERCENTILE_COUNT_30, 
+                                      constants.PERCENTILE_COUNT_35, constants.PERCENTILE_COUNT_40,
+                                      constants.PERCENTILE_COUNT_50, constants.PERCENTILE_COUNT_55, 
+                                      constants.PERCENTILE_COUNT_60, constants.PERCENTILE_COUNT_65,
+                                      constants.PERCENTILE_COUNT_70, constants.PERCENTILE_COUNT_75, 
+                                      constants.PERCENTILE_COUNT_80, constants.PERCENTILE_COUNT_85,
+                                      constants.PERCENTILE_COUNT_90, constants.PERCENTILE_COUNT_92_5, 
+                                      constants.PERCENTILE_COUNT_95, constants.PERCENTILE_COUNT_97_5,
+                                      constants.PERCENTILE_COUNT_99, constants.PERCENTILE_COUNT_99_25, 
+                                      constants.PERCENTILE_COUNT_99_5, constants.PERCENTILE_COUNT_99_75,
+                                      constants.PERCENTILE_COUNT_99_9, constants.PERCENTILE_COUNT_99_95, 
+                                      constants.PERCENTILE_COUNT_99_99]
 
+    @final
     def is_rnum_sheet(self, name):
-        return re.match(r'^' + constants.R_PREFIX + r'\d+$', name)
+        return re.match(r'^' + sheets_constants.R_PREFIX + r'\d+$', name)
 
+    @final
     def is_tnum_sheet(self, name):
-        return re.match(r'^' + constants.T_PREFIX + r'\d+$', name)
+        return re.match(r'^' + sheets_constants.T_PREFIX + r'\d+$', name)
 
+    @final
     def get_columns_from_worksheet(self, ws):
         ret = OrderedDict()
         for cell in ws[1]:
@@ -69,7 +87,7 @@ class SbkCharts:
         columns = self.get_columns_from_worksheet(ws)
         ret = OrderedDict()
         for key in columns.keys():
-            if key.startswith("Percentile_") and "Count" not in key:
+            if key.startswith("Percentile_") and not key.startswith("Percentile_Count"):
                 ret[key] = columns[key]
         return ret
 
@@ -77,31 +95,35 @@ class SbkCharts:
         columns = self.get_columns_from_worksheet(ws)
         ret = OrderedDict()
         for key in columns.keys():
-            if key.startswith("Percentile_Count") :
+            if key.startswith("Percentile_Count"):
                 ret[key] = columns[key]
         return ret
 
     def get_latency_columns(self, ws):
         columns = self.get_columns_from_worksheet(ws)
         ret = OrderedDict()
-        ret['AvgLatency'] = columns['AvgLatency']
-        ret['MinLatency'] = columns['MinLatency']
-        ret['MaxLatency'] = columns['MaxLatency']
+        ret[constants.AVG_LATENCY] = columns[constants.AVG_LATENCY]
+        ret[constants.MIN_LATENCY] = columns[constants.MIN_LATENCY]
+        ret[constants.MAX_LATENCY] = columns[constants.MAX_LATENCY]
         ret.update(self.get_latency_percentile_columns(ws))
         return ret
 
+    @final
     def get_time_unit(self, ws):
         names = self.get_columns_from_worksheet(ws)
-        return str(ws.cell(row=2, column=names['LatencyTimeUnit']).value).upper()
+        return str(ws.cell(row=2, column=names[constants.LATENCY_TIME_UNIT]).value).upper()
 
+    @final
     def get_storage_name(self, ws):
         names = self.get_columns_from_worksheet(ws)
-        return str(ws.cell(row=2, column=names['Storage']).value).upper()
+        return str(ws.cell(row=2, column=names[constants.STORAGE]).value).upper()
 
+    @final
     def get_action_name(self, ws):
         names = self.get_columns_from_worksheet(ws)
-        return str(ws.cell(row=2, column=names['Action']).value)
+        return str(ws.cell(row=2, column=names[constants.ACTION]).value)
 
+    @final
     def __add_chart_attributes(self, chart, title, x_title, y_title, height, width):
         # Set the title of the chart with font size
         # Set chart title
@@ -125,11 +147,13 @@ class SbkCharts:
         chart.x_axis.delete = False
         chart.y_axis.delete = False
 
+    @final
     def create_line_chart(self, title, x_title, y_title, height, width):
         chart = LineChart()
         self.__add_chart_attributes(chart, title, x_title, y_title, height, width)
         return chart
 
+    @final
     def create_bar_chart(self, title, x_title, y_title, height, width):
         chart = BarChart()
         self.__add_chart_attributes(chart, title, x_title, y_title, height, width)
@@ -167,86 +191,217 @@ class SbkCharts:
                                     title=ws_name + "_" + str(r-1))
         return data_series
 
-    def get_column_series(self, ws, ws_name, column_name):
+    @final
+    def __get_column_values(self, ws, column_name):
+        cols = self.get_columns_from_worksheet(ws)
+        return [cell.value for cell in ws[cols[column_name]]]
+
+    @final
+    def get_throughput_mb_values(self, ws):
+        return self.__get_column_values(ws, constants.MB_PER_SEC)
+
+    @final
+    def get_throughput_write_request_mb_values(self, ws):
+        return self.__get_column_values(ws, constants.WRITE_REQUEST_MB_PER_SEC)
+
+    @final
+    def get_throughput_read_request_mb_values(self, ws):
+        return self.__get_column_values(ws, constants.READ_REQUEST_MB_PER_SEC)
+
+    @final
+    def get_throughput_records_values(self, ws):
+        return self.__get_column_values(ws, constants.RECORDS_PER_SEC)
+
+    @final
+    def get_throughput_write_request_records_values(self, ws):
+        return self.__get_column_values(ws, constants.WRITE_REQUEST_RECORDS_PER_SEC)
+
+    @final
+    def get_throughput_read_request_records_values(self, ws):
+        return self.__get_column_values(ws, constants.READ_REQUEST_RECORDS_PER_SEC)
+
+    @final
+    def get_records_values(self, ws):
+        return self.__get_column_values(ws, constants.RECORDS)
+
+    @final
+    def get_mb_values(self, ws):
+        return self.__get_column_values(ws, constants.MB)
+
+    @final
+    def get_write_request_mb_values(self, ws):
+        return self.__get_column_values(ws, constants.WRITE_REQUEST_MB)
+
+    @final
+    def get_write_request_records_values(self, ws):
+        return self.__get_column_values(ws, constants.WRITE_REQUEST_RECORDS)
+
+    @final
+    def get_write_response_pending_mb_values(self, ws):
+        return self.__get_column_values(ws, constants.WRITE_RESPONSE_PENDING_MB)
+
+    @final
+    def get_write_response_pending_records_values(self, ws):
+        return self.__get_column_values(ws, constants.WRITE_RESPONSE_PENDING_RECORDS)
+
+    @final
+    def get_read_request_records_values(self, ws):
+        return self.__get_column_values(ws, constants.READ_REQUEST_RECORDS)
+
+    @final
+    def get_read_request_mb_values(self, ws):
+        return self.__get_column_values(ws, constants.READ_REQUEST_MB)
+
+    @final
+    def get_read_response_pending_mb_values(self, ws):
+        return self.__get_column_values(ws, constants.READ_RESPONSE_PENDING_MB)
+
+    @final
+    def get_read_response_pending_records_values(self, ws):
+        return self.__get_column_values(ws, constants.READ_RESPONSE_PENDING_RECORDS)
+
+    @final
+    def get_write_read_request_pending_mb_values(self, ws):
+        return self.__get_column_values(ws, constants.WRITE_READ_REQUEST_PENDING_MB)
+
+    @final
+    def get_write_read_request_pending_records_values(self, ws):
+        return self.__get_column_values(ws, constants.WRITE_READ_REQUEST_PENDING_RECORDS)
+
+    @final
+    def get_avg_latency_values(self, ws, ws_name):
+        return self.__get_column_values(ws, constants.AVG_LATENCY)
+
+    @final
+    def get_min_latency_values(self, ws, ws_name):
+        return self.__get_column_values(ws, constants.MIN_LATENCY)
+
+    @final
+    def get_max_latency_values(self, ws, ws_name):
+        return self.__get_column_values(ws, constants.MAX_LATENCY)
+
+    @final
+    def get_write_timeout_events_values(self, ws):
+        return self.__get_column_values(ws, constants.WRITE_TIMEOUT_EVENTS)
+
+    @final
+    def get_write_timeout_events_per_sec_values(self, ws):
+        return self.__get_column_values(ws, constants.WRITE_TIMEOUT_EVENTS_PER_SEC)
+
+    @final
+    def get_read_timeout_events_values(self, ws):
+        return self.__get_column_values(ws, constants.READ_TIMEOUT_EVENTS)
+
+    @final
+    def get_read_timeout_events_per_sec_values(self, ws):
+        return self.__get_column_values(ws, constants.READ_TIMEOUT_EVENTS_PER_SEC)
+
+    @final
+    def __get_column_series(self, ws, ws_name, column_name):
         cols = self.get_columns_from_worksheet(ws)
         return Series(Reference(ws, min_col=cols[column_name], min_row=2,
                                 max_col=cols[column_name], max_row=ws.max_row),
                       title=ws_name + "-" + column_name)
 
+    @final
     def get_throughput_mb_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "MB/Sec")
+        return self.__get_column_series(ws, ws_name, constants.MB_PER_SEC)
 
+    @final
     def get_throughput_write_request_mb_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "WriteRequestMB/Sec")
+        return self.__get_column_series(ws, ws_name, constants.WRITE_REQUEST_MB_PER_SEC)
 
+    @final
     def get_throughput_read_request_mb_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "ReadRequestMB/Sec")
+        return self.__get_column_series(ws, ws_name, constants.READ_REQUEST_MB_PER_SEC)
 
+    @final
     def get_throughput_records_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "Records/Sec")
+        return self.__get_column_series(ws, ws_name, constants.RECORDS_PER_SEC)
 
+    @final
     def get_throughput_write_request_records_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "WriteRequestRecords/Sec")
+        return self.__get_column_series(ws, ws_name, constants.WRITE_REQUEST_RECORDS_PER_SEC)
 
+    @final
     def get_throughput_read_request_records_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "ReadRequestRecords/Sec")
+        return self.__get_column_series(ws, ws_name, constants.READ_REQUEST_RECORDS_PER_SEC)
 
+    @final
     def get_records_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "Records")
+        return self.__get_column_series(ws, ws_name, constants.RECORDS)
 
+    @final
     def get_mb_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "MB")
+        return self.__get_column_series(ws, ws_name, constants.MB)
 
+    @final
     def get_write_request_mb_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "WriteRequestMB")
+        return self.__get_column_series(ws, ws_name, constants.WRITE_REQUEST_MB)
 
+    @final
     def get_write_request_records_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "WriteRequestRecords")
+        return self.__get_column_series(ws, ws_name, constants.WRITE_REQUEST_RECORDS)
 
+    @final
     def get_write_response_pending_mb_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "WriteResponsePendingMB")
+        return self.__get_column_series(ws, ws_name, constants.WRITE_RESPONSE_PENDING_MB)
 
+    @final
     def get_write_response_pending_records_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "WriteResponsePendingRecords")
+        return self.__get_column_series(ws, ws_name, constants.WRITE_RESPONSE_PENDING_RECORDS)
 
+    @final
     def get_read_request_records_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "ReadRequestRecords")
+        return self.__get_column_series(ws, ws_name, constants.READ_REQUEST_RECORDS)
 
+    @final
     def get_read_request_mb_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "ReadRequestMB")
+        return self.__get_column_series(ws, ws_name, constants.READ_REQUEST_MB)
 
+    @final
     def get_read_response_pending_mb_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "ReadResponsePendingMB")
+        return self.__get_column_series(ws, ws_name, constants.READ_RESPONSE_PENDING_MB)
 
+    @final
     def get_read_response_pending_records_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "ReadResponsePendingRecords")
+        return self.__get_column_series(ws, ws_name, constants.READ_RESPONSE_PENDING_RECORDS)
 
+    @final
     def get_write_read_request_pending_mb_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "WriteReadRequestPendingMB")
+        return self.__get_column_series(ws, ws_name, constants.WRITE_READ_REQUEST_PENDING_MB)
 
+    @final
     def get_write_read_request_pending_records_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "WriteReadRequestPendingRecords")
+        return self.__get_column_series(ws, ws_name, constants.WRITE_READ_REQUEST_PENDING_RECORDS)
 
+    @final
     def get_avg_latency_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "AvgLatency")
+        return self.__get_column_series(ws, ws_name, constants.AVG_LATENCY)
 
+    @final
     def get_min_latency_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "MinLatency")
+        return self.__get_column_series(ws, ws_name, constants.MIN_LATENCY)
 
+    @final
     def get_max_latency_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "MaxLatency")
+        return self.__get_column_series(ws, ws_name, constants.MAX_LATENCY)
 
+    @final
     def get_write_timeout_events_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "WriteTimeoutEvents")
+        return self.__get_column_series(ws, ws_name, constants.WRITE_TIMEOUT_EVENTS)
 
+    @final
     def get_write_timeout_events_per_sec_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "WriteTimeoutEventsPerSec")
+        return self.__get_column_series(ws, ws_name, constants.WRITE_TIMEOUT_EVENTS_PER_SEC)
 
+    @final
     def get_read_timeout_events_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "ReadTimeoutEvents")
+        return self.__get_column_series(ws, ws_name, constants.READ_TIMEOUT_EVENTS)
 
+    @final
     def get_read_timeout_events_per_sec_series(self, ws, ws_name):
-        return self.get_column_series(ws, ws_name, "ReadTimeoutEventsPerSec")
+        return self.__get_column_series(ws, ws_name, constants.READ_TIMEOUT_EVENTS_PER_SEC)
 
     def create_latency_compare_graphs(self, ws, prefix):
         charts, sheets = [], []
@@ -357,10 +512,10 @@ class SbkCharts:
             print(f"Image not found: {img_abs_path}")
 
     def create_graphs(self):
-        r_name = constants.R_PREFIX + "1"
+        r_name = sheets_constants.R_PREFIX + "1"
         r_ws = self.wb[r_name]
         r_prefix = r_name + self.get_storage_name(r_ws)
-        t_name = constants.T_PREFIX + "1"
+        t_name = sheets_constants.T_PREFIX + "1"
         t_ws = self.wb[t_name]
         t_prefix = t_name + self.get_storage_name(t_ws)
         self.create_throughput_mb_graph(r_ws, r_prefix)

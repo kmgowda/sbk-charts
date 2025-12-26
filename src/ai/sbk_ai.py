@@ -46,6 +46,16 @@ class SbkAI(SbkMultiCharts):
                 values.append(cell.value)
         return values
 
+    def get_storage_stats(self):
+        summaries = list()
+        for name in self.wb.sheetnames:
+            if self.is_rnum_sheet(name):
+                ws = self.wb[name]
+                storage = self.get_storage_name(ws)
+
+
+        pass
+
     def create_summary_sheet(self):
         sheet = super().create_summary_sheet()
         if sheet is None:
@@ -113,6 +123,7 @@ class SbkAI(SbkMultiCharts):
 
     def create_graphs(self):
         if self.check_time_units():
+            self.get_storage_stats()
             self.create_summary_sheet()
             self.create_multi_throughput_mb_graph()
             self.create_multi_throughput_records_graph()

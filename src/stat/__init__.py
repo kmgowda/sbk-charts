@@ -7,15 +7,3 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 ##
-
-class SbkGenAI:
-    def __init__(self):
-        self.storage_summaries = None
-        pass
-
-    def set_storage_summaries(self, summary):
-        self.storage_summaries = summary
-        pass
-
-    def get_throughput_mb_analysis(self, throughputs):
-        pass

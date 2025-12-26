@@ -8,14 +8,15 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 ##
 
-class SbkGenAI:
-    def __init__(self):
-        self.storage_summaries = None
-        pass
+class StorageStat:
+    def __init__(self, storage=None, timeunit=None, action=None):
+        self.storage = storage
+        self.timeunit = timeunit
+        self.action = action
+        self.regular = dict()
+        self.total = dict()
 
-    def set_storage_summaries(self, summary):
-        self.storage_summaries = summary
-        pass
 
-    def get_throughput_mb_analysis(self, throughputs):
-        pass
+
+
+
