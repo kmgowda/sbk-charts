@@ -7,7 +7,9 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 ##
+from typing import final
 
+from src.charts import constants
 from src.charts.multicharts import SbkMultiCharts
 from src.custom_ai.hugging_face import HuggingFace
 from openpyxl.utils import range_boundaries
@@ -15,6 +17,9 @@ from openpyxl.utils import range_boundaries
 from openpyxl.styles import Font, Border, Side, Alignment   
 import textwrap
 from openpyxl.worksheet.dimensions import ColumnDimension
+
+from src.stat.storage import StorageStat
+
 
 class SbkAI(SbkMultiCharts):
     def __init__(self, version, file):
@@ -46,25 +51,48 @@ class SbkAI(SbkMultiCharts):
                 values.append(cell.value)
         return values
 
+    @final
+    def get_columns_values(self, ws):
+        columns = self.get_columns_from_worksheet(ws)
+        ret = dict()
+        for col_name, col_idx in columns.items():
+            if col_name not in [constants.ID, constants.HEADER, constants.TYPE,
+                                constants.STORAGE, constants.ACTION, constants.LATENCY_TIME_UNIT]:
+                values = []
+                for row in range(2, ws.max_row + 1):
+                    cell_value = ws.cell(row=row, column=col_idx).value
+                    values.append(cell_value)
+                ret[col_name] = values
+        return ret
+
     def get_storage_stats(self):
-        summaries = list()
+        stats = list()
         for name in self.wb.sheetnames:
-            if self.is_rnum_sheet(name):
+            if self.is_r_num_sheet(name):
                 ws = self.wb[name]
                 storage = self.get_storage_name(ws)
+                timeunit = self.get_time_unit(ws)
+                action = self.get_action_name(ws)
+                stat = StorageStat(storage, timeunit, action)
+                # get all the columns of R<Count>
+                stat.regular = self.get_columns_values(ws)
+                # get all the columns of T<Count>
+                t_name = self.get_t_num_sheet_name(name)
+                ws = self.wb[t_name]
+                stat.total = self.get_columns_values(ws)
+                stats.append(stat)
+        return stats
 
-
-        pass
 
     def create_summary_sheet(self):
         sheet = super().create_summary_sheet()
         if sheet is None:
             print("Warning: Could not create summary sheet")
             return None
-            
+
         throughputs = dict()
         for name in self.wb.sheetnames:
-            if self.is_rnum_sheet(name):
+            if self.is_r_num_sheet(name):
                 ws = self.wb[name]
                 prefix = name + "-" + self.get_storage_name(ws)
                 throughputs[self.get_storage_name(ws)] = self.__series_values_to_list(ws, self.get_throughput_mb_series(ws, prefix))
@@ -123,7 +151,6 @@ class SbkAI(SbkMultiCharts):
 
     def create_graphs(self):
         if self.check_time_units():
-            self.get_storage_stats()
             self.create_summary_sheet()
             self.create_multi_throughput_mb_graph()
             self.create_multi_throughput_records_graph()

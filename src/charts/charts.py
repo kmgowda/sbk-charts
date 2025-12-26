@@ -68,12 +68,16 @@ class SbkCharts:
                                       constants.PERCENTILE_COUNT_99_99]
 
     @final
-    def is_rnum_sheet(self, name):
+    def is_r_num_sheet(self, name):
         return re.match(r'^' + sheets_constants.R_PREFIX + r'\d+$', name)
 
     @final
-    def is_tnum_sheet(self, name):
+    def is_t_num_sheet(self, name):
         return re.match(r'^' + sheets_constants.T_PREFIX + r'\d+$', name)
+
+    @final
+    def get_t_num_sheet_name(self, r_num_name):
+        return sheets_constants.T_PREFIX + r_num_name[1:]
 
     @final
     def get_columns_from_worksheet(self, ws):
@@ -194,7 +198,11 @@ class SbkCharts:
     @final
     def __get_column_values(self, ws, column_name):
         cols = self.get_columns_from_worksheet(ws)
-        return [cell.value for cell in ws[cols[column_name]]]
+        values = []
+        for row in range(2, ws.max_row + 1):
+            cell_value = ws.cell(row=row, column=cols[column_name]).value
+            values.append(cell_value)
+        return values
 
     @final
     def get_throughput_mb_values(self, ws):
