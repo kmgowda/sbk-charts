@@ -7,7 +7,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 ##
-
+from abc import abstractmethod
 from typing import final
 
 
@@ -21,12 +21,15 @@ class SbkGenAI:
         self.storage_stats = stats
         pass
 
+    @abstractmethod
     def get_model_description(self):
         pass
 
+    @abstractmethod
     def get_throughput_analysis(self):
         pass
 
+    @abstractmethod
     def get_latency_analysis(self):
         pass
 
