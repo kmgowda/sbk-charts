@@ -83,7 +83,7 @@ class HuggingFace(SbkGenAI):
         # 4) Prompt engineering for a local instruct model
         prompt = (
             "You are a storage performance expert. "
-            "I need a detailed technical analysis of storage system latencies based on the following metrics. "
+            "I need a detailed technical analysis of storage system throughput based on the following metrics. "
             "Analyze the following throughput benchmark results for different storage systems. "
             "Throughput numbers are in MB/s, and higher values are better.\n\n"
             "Tasks:\n"
