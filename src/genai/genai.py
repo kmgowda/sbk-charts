@@ -21,6 +21,9 @@ class SbkGenAI:
         self.storage_stats = stats
         pass
 
+    def get_model_description(self):
+        pass
+
     def get_throughput_analysis(self):
         pass
 

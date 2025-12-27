@@ -80,6 +80,11 @@ class SbkAI(SbkMultiCharts):
             title_cell.value = "AI Performance Analysis"
             title_cell.font = Font(size=16, bold=True, color="FF0000")  # Red, bold, 14pt
 
+            # Add a title description for the analysis section
+            dec_cell = sheet.cell(row=max_row, column=8)
+            dec_cell.value = self.ai.get_model_description()
+            dec_cell.font = Font(size=14, color="00CF00")  # Red, bold, 14pt
+
             # Add the Throughput analysis section
             cell = sheet.cell(row=max_row + 2, column=7)
             cell.value = "Throughput Analysis"
@@ -92,7 +97,7 @@ class SbkAI(SbkMultiCharts):
             # Add the analysis text with word wrap
             cell = sheet.cell(row=max_row + 2, column=8)
             cell.value = throughput_analysis
-            cell.font = Font(size=12)
+            cell.font = Font(size=12, color = "F0000E")
             cell.border = Border(left=Side(style='thin'),
                                    right=Side(style='thin'),
                                    top=Side(style='thin'),
@@ -121,7 +126,7 @@ class SbkAI(SbkMultiCharts):
             # Add the latency analysis text with word wrap
             cell = sheet.cell(row=latency_row, column=8)
             cell.value = latency_analysis
-            cell.font = Font(size=12)
+            cell.font = Font(size=12, color = "B0000B")
             cell.border = Border(left=Side(style='thin'),
                                right=Side(style='thin'),
                                top=Side(style='thin'),

@@ -42,7 +42,11 @@ class HuggingFace(SbkGenAI):
         # OpenAI‑style response schema
         return [True, completion.choices[0].message["content"].strip()]
 
-    
+
+    def get_model_description(self):
+        return "Hugging Face Inference APIs with model ID: " + HF_MODEL_ID
+
+
     def get_throughput_analysis(self):
         """
         Compare throughput values (MB/s) of multiple storage systems and return
