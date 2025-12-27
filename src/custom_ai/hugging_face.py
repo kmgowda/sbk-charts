@@ -27,7 +27,7 @@ class HuggingFace(SbkGenAI):
         api_token = os.getenv("HUGGINGFACE_API_TOKEN")
         if not api_token:
             return [False, (
-                "LLM analysis is not available (missing HUGGINGFACEHUB_API_TOKEN). "
+                "LLM analysis is not available (missing HUGGINGFACE_API_TOKEN environment variable). "
                 "Configure the token to enable Hugging Face-based analysis."
             )]
 
