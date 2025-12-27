@@ -8,19 +8,18 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 ##
 
-import argparse
 import os
-from .sheets import SbkMultiSheets
-from .multicharts import SbkMultiCharts
-from .sbk_version import __sbk_version__
 
-SBK_BANNER_FILE = os.path.join(os.path.curdir, 'src/charts', 'banner.txt')
+from src.ai.sbk_ai import SbkAI
+from src.sheets.sheets import SbkMultiSheets
+from src.charts.multicharts import SbkMultiCharts
+from src.main.sbk_version import __sbk_version__
+from src.parser.sbk_parser import SbkParser
+
+SBK_BANNER_FILE = os.path.join(os.path.curdir, 'src/main', 'banner.txt')
 
 def sbk_charts():
-    parser = argparse.ArgumentParser(description='sbk charts',
-                                     epilog='Please report issues at https://github.com/kmgowda/sbk-charts')
-    parser.add_argument('-i', '--ifiles', help="Input CSV files, separated by ','", required=True)
-    parser.add_argument('-o', '--ofile', help='Output xlsx file', default="out.xlsx")
+    parser = SbkParser()
     args = parser.parse_args()
     print(open(SBK_BANNER_FILE, 'r').read())
     print("Sbk Charts Version : " + __sbk_version__)
@@ -28,5 +27,5 @@ def sbk_charts():
     print('Output File : ', args.ofile)
     sh = SbkMultiSheets(args.ifiles.split(","), args.ofile)
     sh.create_sheets()
-    ch = SbkMultiCharts(__sbk_version__, args.ofile)
+    ch = SbkAI(__sbk_version__, args.ofile)
     ch.create_graphs()

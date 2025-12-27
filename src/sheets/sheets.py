@@ -7,14 +7,15 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 ##
-import os
 
 # SBK-sheets :  Storage Benchmark Kit - Sheets
 
 from pandas import read_csv
 from xlsxwriter import Workbook
+from typing import final
 
-from . import constants
+from src.sheets.logo import add_sbk_logo
+from src.sheets import constants
 
 
 def wb_add_two_sheets(wb, r_name, t_name, df):
@@ -44,19 +45,6 @@ def wb_add_two_sheets(wb, r_name, t_name, df):
             except Exception as ex:
                 pass
 
-# The logo insertion fucntion works fine only if the package pillow is installed.
-def add_sbk_logo(wb):
-    ws = wb.add_worksheet("SBK")
-    img_path = os.path.abspath("./images/sbk-logo.png")
-    if os.path.exists(img_path):
-        print(f"SBK logo image found: {img_path}")
-        try:
-            ws.insert_image('K7', img_path, {'x_scale': 0.5, 'y_scale': 0.5})
-        except Exception as ex:
-            print(f"Failed to insert image: {ex}")
-    else:
-        print(f"SBK logo Image not found: {img_path}")
-
 class SbkSheets:
     def __init__(self, i_file, o_file):
         self.iFile = i_file
@@ -70,8 +58,13 @@ class SbkSheets:
         wb.close()
         print("xlsx file %s created" % self.oFile)
 
-
+@final
 class SbkMultiSheets(SbkSheets):
+
+    # This should be final class ; just create sheets
+    def __init_subclass__(cls, **kwargs):
+        raise TypeError("Cannot subclass FinalClass")
+
     def __init__(self, i_files_list, o_file):
         super().__init__(i_files_list[0], o_file)
         self.iFilesList = i_files_list

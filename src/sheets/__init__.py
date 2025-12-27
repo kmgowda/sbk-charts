@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/local/bin/python3
 # Copyright (c) KMG. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -7,15 +7,3 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 ##
-
-import os
-import sys
-
-# Add the project root to the Python path
-project_root = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, project_root)
-
-from src.main.sbk_charts import sbk_charts
-
-if __name__ == "__main__":
-    sbk_charts()
