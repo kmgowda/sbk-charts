@@ -10,12 +10,12 @@
 
 class SbkGenAI:
     def __init__(self):
-        self.storage_summaries = None
+        self.storage_stats = None
         pass
 
-    def set_storage_summaries(self, summary):
-        self.storage_summaries = summary
+    def set_storage_stats(self, stats):
+        self.storage_stats = stats
         pass
 
-    def get_throughput_mb_analysis(self, throughputs):
+    def get_throughput_mb_analysis(self):
         pass
