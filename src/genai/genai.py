@@ -8,14 +8,23 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 ##
 
+from typing import final
+
+
 class SbkGenAI:
     def __init__(self):
         self.storage_stats = None
         pass
 
+    @final
     def set_storage_stats(self, stats):
         self.storage_stats = stats
         pass
 
-    def get_throughput_mb_analysis(self):
+    def get_throughput_analysis(self):
         pass
+
+    def get_latency_analysis(self):
+        pass
+
+

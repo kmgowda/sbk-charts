@@ -12,12 +12,8 @@ from typing import final
 from src.charts import constants
 from src.charts.multicharts import SbkMultiCharts
 from src.custom_ai.hugging_face import HuggingFace
-from openpyxl.utils import range_boundaries
-# Add a border around the analysis section
 from openpyxl.styles import Font, Border, Side, Alignment   
 import textwrap
-from openpyxl.worksheet.dimensions import ColumnDimension
-
 from src.stat.storage import StorageStat
 
 
@@ -64,56 +60,86 @@ class SbkAI(SbkMultiCharts):
             return None
 
         self.ai.set_storage_stats(self.get_storage_stats())
-        status, analysis = self.ai.get_throughput_mb_analysis()
-        #print(analysis)
-        if not status:
-            print(analysis)
+        throughput_status, throughput_analysis = self.ai.get_throughput_analysis()
+        if not throughput_status:
+            print(throughput_analysis)
             return sheet
-        
-        # Add analysis text to the summary sheet
-        if analysis:
-            try:
-                # Find the next available row after existing content
-                max_row = sheet.max_row + 2  # Add some spacing
-                
-                # Add a title for the analysis section
-                title_cell = sheet.cell(row=max_row, column=7)
-                title_cell.value = "AI Performance Analysis"
-                title_cell.font = Font(size=14, bold=True, color="FF0000")  # Red, bold, 14pt
 
-                # Add the Throughput analysis section
-                cell = sheet.cell(row=max_row + 2, column=7)
-                cell.value = "Throughput Analysis"
-                cell.font = Font(size=12, bold=True, color = "EE00FF")
+        latency_status, latency_analysis = self.ai.get_latency_analysis()
+        if not latency_status:
+            print(latency_analysis)
+            return sheet
+
+        # Add analysis text to the summary sheet
+        try:
+            # Find the next available row after existing content
+            max_row = sheet.max_row + 2  # Add some spacing
                 
-                # Set column width to fit 80 characters
-                # Using a larger multiplier to ensure 120 characters fit comfortably
-                sheet.column_dimensions['H'].width = 120 * 0.90  # Increased from 0.14 to 0.20 for better fit
+            # Add a title for the analysis section
+            title_cell = sheet.cell(row=max_row, column=7)
+            title_cell.value = "AI Performance Analysis"
+            title_cell.font = Font(size=16, bold=True, color="FF0000")  # Red, bold, 14pt
+
+            # Add the Throughput analysis section
+            cell = sheet.cell(row=max_row + 2, column=7)
+            cell.value = "Throughput Analysis"
+            cell.font = Font(size=14, bold=True, color = "EE00FF")
                 
-                # Add the analysis text with word wrap
-                cell = sheet.cell(row=max_row + 2, column=8)
-                cell.value = analysis
-                cell.font = Font(size=12)
-                cell.border = Border(left=Side(style='thin'),
+            # Set column width to fit 80 characters
+            # Using a larger multiplier to ensure 120 characters fit comfortably
+            sheet.column_dimensions['H'].width = 120 * 0.90  # Increased from 0.14 to 0.20 for better fit
+                
+            # Add the analysis text with word wrap
+            cell = sheet.cell(row=max_row + 2, column=8)
+            cell.value = throughput_analysis
+            cell.font = Font(size=12)
+            cell.border = Border(left=Side(style='thin'),
                                    right=Side(style='thin'),
                                    top=Side(style='thin'),
                                    bottom=Side(style='thin'))
 
-                # Enable text wrapping and set row height to auto-adjust
-                cell.alignment = Alignment(wrap_text=True, vertical='top')
+            # Enable text wrapping and set row height to auto-adjust
+            cell.alignment = Alignment(wrap_text=True, vertical='top')
                 
-                # Calculate required row height based on text length and wrap at 80 characters
-                wrapped_lines = []
-                for line in analysis.split('\n'):
-                    wrapped_lines.extend(textwrap.wrap(line, width=120))
+            # Calculate required row height based on text length and wrap at 80 characters
+            wrapped_lines = []
+            for line in throughput_analysis.split('\n'):
+                wrapped_lines.extend(textwrap.wrap(line, width=120))
 
-                # Set row height (20 points per line, minimum 20)
-                row_height = max(20, len(wrapped_lines) * 20)
-                sheet.row_dimensions[max_row + 2].height = row_height
+            # Set row height (20 points per line, minimum 20)
+            row_height = max(25, len(wrapped_lines) * 25)
+            sheet.row_dimensions[max_row + 2].height = row_height
 
-            except Exception as e:
-                print(f"Error adding analysis to summary sheet: {str(e)}")
-        
+            # Add the Latency analysis section
+            latency_row = sheet.max_row + 1
+            
+            # Add the Latency analysis section header
+            cell = sheet.cell(row=latency_row, column=7)
+            cell.value = "Latency Analysis"
+            cell.font = Font(size=14, bold=True, color="00AA00")  # Green, bold, 12pt
+            
+            # Add the latency analysis text with word wrap
+            cell = sheet.cell(row=latency_row, column=8)
+            cell.value = latency_analysis
+            cell.font = Font(size=12)
+            cell.border = Border(left=Side(style='thin'),
+                               right=Side(style='thin'),
+                               top=Side(style='thin'),
+                               bottom=Side(style='thin'))
+            cell.alignment = Alignment(wrap_text=True, vertical='top')
+            
+            # Calculate required row height for latency analysis
+            latency_wrapped_lines = []
+            for line in latency_analysis.split('\n'):
+                latency_wrapped_lines.extend(textwrap.wrap(line, width=120))
+            
+            # Set row height for latency analysis section
+            latency_row_height = max(25, len(latency_wrapped_lines) * 25)
+            sheet.row_dimensions[latency_row].height = latency_row_height
+
+        except Exception as e:
+            print(f"Error adding analysis to summary sheet: {str(e)}")
+
         return sheet
 
 
