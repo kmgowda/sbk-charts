@@ -605,6 +605,8 @@ class SbkMultiCharts(SbkCharts):
         workbook will be saved.
         """
         if self.check_time_units():
+            self.create_summary_sheet()
+            self.create_multi_throughput_mb_graph()
             self.create_multi_throughput_records_graph()
             self.create_all_latency_compare_graphs()
             self.create_multi_latency_compare_graphs()
