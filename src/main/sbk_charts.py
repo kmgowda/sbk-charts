@@ -24,7 +24,6 @@ import os
 
 from src.ai.sbk_ai import SbkAI
 from src.sheets.sheets import SbkMultiSheets
-from src.charts.multicharts import SbkMultiCharts
 from src.main.sbk_version import __sbk_version__
 from src.parser.sbk_parser import SbkParser
 

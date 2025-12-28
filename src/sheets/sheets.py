@@ -133,7 +133,7 @@ class SbkMultiSheets(SbkSheets):
 
     # This should be final class ; just create sheets
     def __init_subclass__(cls, **kwargs):
-        raise TypeError("Cannot subclass FinalClass")
+        raise TypeError("Cannot create subclass for SbkMultiSheets")
 
     def __init__(self, i_files_list, o_file):
         super().__init__(i_files_list[0], o_file)

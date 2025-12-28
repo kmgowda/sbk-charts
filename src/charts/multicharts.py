@@ -299,6 +299,7 @@ class SbkMultiCharts(SbkCharts):
                     x_labels = True
         sheet = self.wb.create_sheet("Total_Percentiles_Histogram" )
         sheet.add_chart(chart)
+        return sheet
 
 
     def create_multi_throughput_mb_graph(self):

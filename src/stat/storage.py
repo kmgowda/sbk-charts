@@ -84,7 +84,7 @@ class StorageStat:
         present in the `total` mapping. This method assumes that
         `self.total[name]` is an iterable of numeric values.
         """
-        return self.get_total_sum_value(name)/len(self.total)
+        return self.get_total_sum_value(name)/len(self.total[name])
 
     @final
     def get_regular_sum_value(self, name):
@@ -109,4 +109,4 @@ class StorageStat:
         present in the `regular` mapping. This method assumes that
         `self.regular[name]` is an iterable of numeric values.
         """
-        return self.get_regular_sum_value(name)/len(self.regular)
+        return self.get_regular_sum_value(name)/len(self.regular[name])
