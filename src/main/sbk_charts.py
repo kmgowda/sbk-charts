@@ -8,6 +8,18 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 ##
 
+"""sbk_charts.main.sbk_charts
+
+Command-line entry point glue for the sbk-charts tool.
+
+This module exposes a single function, `sbk_charts()`, which is responsible
+for parsing command-line arguments, creating the Excel workbook from one or
+more CSV input files, and invoking the chart-generation AI pipeline to add
+charts to the workbook. The function performs I/O and prints progress to
+stdout.
+
+"""
+
 import os
 
 from src.ai.sbk_ai import SbkAI
@@ -19,6 +31,22 @@ from src.parser.sbk_parser import SbkParser
 SBK_BANNER_FILE = os.path.join(os.path.curdir, 'src/main', 'banner.txt')
 
 def sbk_charts():
+    """Top-level orchestration for sbk-charts CLI.
+
+    Behavior
+    - Parse CLI arguments using `SbkParser` (expects `-i/--ifiles` and `-o/--ofile`).
+    - Print banner and version information.
+    - Create R/T worksheets for each input CSV file using `SbkMultiSheets`.
+    - Instantiate the AI/charting pipeline and generate charts into the
+      previously-created workbook.
+
+    Side effects
+    - Writes an .xlsx output file (as specified by the `-o/--ofile` argument).
+    - Prints informational messages to stdout.
+
+    Returns
+    - None
+    """
     parser = SbkParser()
     args = parser.parse_args()
     print(open(SBK_BANNER_FILE, 'r').read())
