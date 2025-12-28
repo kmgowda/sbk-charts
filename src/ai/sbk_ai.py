@@ -17,6 +17,10 @@ import textwrap
 from src.stat.storage import StorageStat
 
 
+warning_msg = ("The AI may hallucinate !."
+               " The Summary generated  by generative AI models may not be sufficient and accurate."
+               " Its recommended to  analyze the graphs along with generated summary.")
+
 class SbkAI(SbkMultiCharts):
     def __init__(self, version, file):
         super().__init__(version, file)
@@ -72,32 +76,47 @@ class SbkAI(SbkMultiCharts):
 
         # Add analysis text to the summary sheet
         try:
+            # Set column width to fit 80 characters
+            # Using a larger multiplier to ensure 120 characters fit comfortably
+            sheet.column_dimensions['H'].width = 120 * 0.90  # Increased from 0.14 to 0.20 for better fit
+
             # Find the next available row after existing content
-            max_row = sheet.max_row + 2  # Add some spacing
-                
+            max_row = sheet.max_row + 3  # Add some spacing
+            # Add AI Warning
+            warn_cell = sheet.cell(row=max_row, column=8)
+            warn_cell.value = warning_msg
+            warn_cell.font = Font(size=16, bold=True, color="FFFF0000")
+            warn_cell.alignment = Alignment(wrap_text=True, vertical='top')
+
+            # Calculate required row height for warning message
+            warning_wrapped_lines = []
+            for line in warning_msg.split('\n'):
+                warning_wrapped_lines.extend(textwrap.wrap(line, width=120))
+
+            # Set row height for latency analysis section
+            warn_row_height = max(35, len(warning_wrapped_lines) * 35)
+            sheet.row_dimensions[max_row].height = warn_row_height
+
+            max_row = sheet.max_row + 2
             # Add a title for the analysis section
             title_cell = sheet.cell(row=max_row, column=7)
             title_cell.value = "AI Performance Analysis"
-            title_cell.font = Font(size=16, bold=True, color="FF0000")  # Red, bold, 14pt
+            title_cell.font = Font(size=18, bold=True, color="FF0000")  # Red, bold, 18pt
 
             # Add a title description for the analysis section
             dec_cell = sheet.cell(row=max_row, column=8)
             dec_cell.value = self.ai.get_model_description()
-            dec_cell.font = Font(size=14, color="00CF00")  # Red, bold, 14pt
+            dec_cell.font = Font(size=16, color="00CF00")
 
             # Add the Throughput analysis section
             cell = sheet.cell(row=max_row + 2, column=7)
             cell.value = "Throughput Analysis"
-            cell.font = Font(size=14, bold=True, color = "EE00FF")
-                
-            # Set column width to fit 80 characters
-            # Using a larger multiplier to ensure 120 characters fit comfortably
-            sheet.column_dimensions['H'].width = 120 * 0.90  # Increased from 0.14 to 0.20 for better fit
-                
+            cell.font = Font(size=16, bold=True, color = "EE00FF")
+
             # Add the analysis text with word wrap
             cell = sheet.cell(row=max_row + 2, column=8)
             cell.value = throughput_analysis
-            cell.font = Font(size=12, color = "F0000E")
+            cell.font = Font(size=14, color = "FF800000")
             cell.border = Border(left=Side(style='thin'),
                                    right=Side(style='thin'),
                                    top=Side(style='thin'),
@@ -121,12 +140,12 @@ class SbkAI(SbkMultiCharts):
             # Add the Latency analysis section header
             cell = sheet.cell(row=latency_row, column=7)
             cell.value = "Latency Analysis"
-            cell.font = Font(size=14, bold=True, color="00AA00")  # Green, bold, 12pt
+            cell.font = Font(size=16, bold=True, color="00AA00")  # Green, bold, 12pt
             
             # Add the latency analysis text with word wrap
             cell = sheet.cell(row=latency_row, column=8)
             cell.value = latency_analysis
-            cell.font = Font(size=12, color = "B0000B")
+            cell.font = Font(size=14, color = "FF000080")
             cell.border = Border(left=Side(style='thin'),
                                right=Side(style='thin'),
                                top=Side(style='thin'),

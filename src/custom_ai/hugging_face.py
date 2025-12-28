@@ -35,8 +35,8 @@ class HuggingFace(SbkGenAI):
 
         completion = client.chat_completion(  # ← key change
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=400,
-            temperature=0.4,
+            max_tokens=1800,
+            temperature=0.7,
             top_p=0.9,
         )
         # OpenAI‑style response schema
@@ -82,13 +82,13 @@ class HuggingFace(SbkGenAI):
 
         # 4) Prompt engineering for a local instruct model
         prompt = (
-            "You are a storage performance expert. "
+            "You are a storage performance Engineer. "
             "I need a detailed technical analysis of storage system throughput based on the following metrics. "
             "Analyze the following throughput benchmark results for different storage systems. "
             "Throughput numbers are in MB/s, and higher values are better.\n\n"
             "Tasks:\n"
-            "- Identify which storage systems have the highest and lowest average throughput.\n"
-            "- Quantify relative differences roughly (for example, 'about 3x higher').\n"
+            "- Identify which storage systems have the highest and lowest minimum, average and maximum throughput.\n"
+            "- Quantify relative differences roughly (for example, 'about 2x higher').\n"
             "- Mention any big gaps or interesting patterns.\n"
             "- if any sentence of paragraph is of more than 70 characters, break it into multiple sentences.\n"
             "Here are the measurements:\n"
