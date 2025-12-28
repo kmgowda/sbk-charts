@@ -15,7 +15,6 @@ from src.main.sbk_version import __sbk_version__
 
 # Get the absolute path to the package directory
 package_dir = os.path.abspath(os.path.dirname(__file__))
-src_dir = os.path.join(package_dir, 'src')
 
 # Read requirements.txt if it exists
 required = []
@@ -38,14 +37,18 @@ else:
 setup(
     name='sbk-charts',
     version=__sbk_version__,
-    package_dir={'': 'src'},  # Tell setuptools to look for packages in src/
-    packages=find_packages(where='src'),  # Find all packages under src/
+    # Install the 'src' package as a top-level package so imports like
+    # `from src.ai.sbk_ai import SbkAI` work at runtime.
+    package_dir={'': '.'},  # Look for packages in the project root (will include 'src' package)
+    packages=find_packages(where='.'),
     package_data={
-        'charts': ['banner.txt'],  # Include banner.txt in the package
+        # Include banner.txt in the 'main' package (located at src/main/banner.txt)
+        'main': ['banner.txt'],
     },
     entry_points={
         'console_scripts': [
-            'sbk-charts=charts.sbk_charts:sbk_charts',
+            # Point the console script at the module inside the 'src' package
+            'sbk-charts=src.main.sbk_charts:sbk_charts',
         ],
     },
     url='https://github.com/kmgowda/sbk-charts',

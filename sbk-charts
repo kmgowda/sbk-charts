@@ -13,7 +13,7 @@ import sys
 
 # Add the project root to the Python path
 project_root = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, project_root)
+sys.path.insert(0, os.path.dirname(project_root))
 
 from src.main.sbk_charts import sbk_charts
 
