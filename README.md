@@ -8,10 +8,14 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 -->
 # SBK Charts 
-The sbk-charts is the python application to create the xlsx file for given single or multiple CSV file containing the SBK performance 
+The sbk-charts is the python application software to create the xlsx file for given single or multiple CSV file containing the SBK performance 
 results. The generated xlsx file contains the graphs of latency percentile variations and throughput variations.
 The [SBK framework](https://github.com/kmgowda/SBK) can be used to benchmark the performance of various storage engines like RocksDB, LMDB, LevelDB, etc. and to generate the performance results in CSV format.
 The sbk-charts application can be used to visualize these results in a more user-friendly way.
+**sbk-charts uses the AI to generate the descriptive summary about the throughput and latency analysis**
+
+*As of today , December 2025, the hugging face inference client APIs are used to generate the throughput and latency analysis; Many more models are yet to come*
+
 
 Running SBK Charts:
 
