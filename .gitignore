@@ -3,6 +3,7 @@ out.xls
 src/charts/__pycache__
 .DS_Store
 samples/.DS_Store
+samples/charts/.DS_Store
 __pycache__
 out.xlsx
 ~$out.xlsx
@@ -11,3 +12,4 @@ build/
 dist
 src/sbk_charts.egg-info
 sbk-charts-venv
+sbk_charts.egg-info
