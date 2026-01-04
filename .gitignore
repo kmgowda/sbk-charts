@@ -13,3 +13,4 @@ dist
 src/sbk_charts.egg-info
 sbk-charts-venv
 sbk_charts.egg-info
+.continue
