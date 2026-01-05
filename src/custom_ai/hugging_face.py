@@ -262,3 +262,11 @@ class HuggingFace(SbkGenAI):
 
         return self._call_llm_for_analysis(prompt)
 
+    def get_total_mb_analysis(self):
+        pass
+
+    def get_percentile_histogram_analysis(self):
+        pass
+
+    def get_performance_summary(self):
+        pass
