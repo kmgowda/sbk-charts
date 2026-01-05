@@ -17,7 +17,7 @@ for storage system benchmarks, including throughput and latency analysis.
 The module integrates with Hugging Face models to provide intelligent insights
 into storage performance metrics.
 """
-from typing import final
+from typing import final, override
 
 from src.charts import constants
 from src.charts.multicharts import SbkMultiCharts
@@ -42,11 +42,10 @@ class SbkAI(SbkMultiCharts):
     
     Attributes:
         version (str): Version information for the benchmark.
-        file (str): Path to the benchmark results file.
         ai (HuggingFace): Instance of HuggingFace for AI analysis.
     """
     
-    def __init__(self, version, file):
+    def __init__(self, version):
         """
         Initialize the SbkAI instance.
         
@@ -54,8 +53,19 @@ class SbkAI(SbkMultiCharts):
             version (str): Version information for the benchmark.
             file (str): Path to the benchmark results file.
         """
-        super().__init__(version, file)
+        super().__init__(version)
         self.ai = HuggingFace()
+        self.enable_ai = False
+
+    @override
+    def add_args(self, parser):
+        super().add_args(parser)
+        parser.add_argument( "-ai", "--enable-ai", "Enable AI analysis", default = False)
+
+    @override
+    def parse_args(self, args):
+        super().parse_args(args)
+        self.enable_ai = self.args.enable_ai
 
     @final
     def get_columns_values(self, ws):
@@ -104,6 +114,7 @@ class SbkAI(SbkMultiCharts):
                 stats.append(StorageStat(storage, timeunit, action, regular, total))
         return stats
 
+    @override
     def create_summary_sheet(self):
         """
         Create a summary sheet with AI-generated performance analysis.
@@ -119,6 +130,8 @@ class SbkAI(SbkMultiCharts):
         if sheet is None:
             print("Warning: Could not create summary sheet")
             return None
+        if not self.enable_ai:
+            return sheet
 
         # Set storage statistics for AI analysis
         self.ai.set_storage_stats(self.get_storage_stats())
@@ -230,6 +243,7 @@ class SbkAI(SbkMultiCharts):
         return sheet
 
 
+    @override
     def create_graphs(self):
         """
         Generate all performance graphs and AI analysis for the benchmark results.
@@ -247,38 +261,8 @@ class SbkAI(SbkMultiCharts):
         After generating all graphs and analysis, it saves the results to the
         Excel workbook and prints a confirmation message.
         """
-        if self.check_time_units():
-            # Create summary sheet with AI analysis
-            self.create_summary_sheet()
-            
-            # Generate throughput graphs
-            self.create_multi_throughput_mb_graph()
-            self.create_multi_throughput_records_graph()
-            
-            # Generate latency analysis graphs
-            self.create_all_latency_compare_graphs()
-            self.create_multi_latency_compare_graphs()
-            self.create_multi_latency_graphs()
-            
-            # Generate write/read metrics graphs
-            self.create_multi_write_read_records_graph()
-            self.create_multi_write_read_mb_graph()
-            self.create_multi_write_read_timeout_events_graph()
-            self.create_multi_write_read_timeout_events_per_sec_graph()
-            
-            # Generate percentile analysis
-            self.create_total_multi_latency_percentile_graphs()
-            self.create_total_multi_latency_percentile_count_graphs()
-            
-            # Generate comparative analysis graphs
-            self.create_total_mb_compare_graph()
-            self.create_total_throughput_mb_compare_graph()
-            self.create_total_throughput_records_compare_graph()
-            self.create_total_min_latency_compare_graph()
-            self.create_total_avg_latency_compare_graph()
-            self.create_total_max_latency_compare_graph()
-            self.create_total_write_read_timeout_events_compare_graph()
-            
-            # Save the workbook with all the generated content
-            self.wb.save(self.file)
+        super().create_graphs()
+        if not self.enable_ai:
+            print("AI is not enabled")
+        else:
             print(f"File updated with graphs and AI documentation: {self.file}")

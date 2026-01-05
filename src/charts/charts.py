@@ -55,7 +55,7 @@ class SbkCharts:
     Note: This docstring only documents behavior; no code paths are altered.
     """
 
-    def __init__(self, version, file):
+    def __init__(self, version):
         """Load workbook and initialize derived parameters.
 
         Parameters
@@ -70,9 +70,11 @@ class SbkCharts:
         - InvalidFileException: if the file is not a valid Excel workbook
         """
         self.version = version
-        self.file = file
-        self.wb = load_workbook(self.file)
-        self.time_unit = self.get_time_unit(self.wb[sheets_constants.R_PREFIX + "1"])
+        self.parser = None
+        self.args = None
+        self.file = None
+        self.wb = None
+        self.time_unit = None
         self.n_latency_charts = 5
         self.latency_groups = [
             [constants.MIN_LATENCY, constants.PERCENTILE_5],
@@ -110,6 +112,16 @@ class SbkCharts:
                                       constants.PERCENTILE_COUNT_99_5, constants.PERCENTILE_COUNT_99_75,
                                       constants.PERCENTILE_COUNT_99_9, constants.PERCENTILE_COUNT_99_95, 
                                       constants.PERCENTILE_COUNT_99_99]
+
+
+    def add_args(self, parser):
+        self.parser = parser
+
+    def parse_args(self, args):
+        self.args = args
+        self.file = self.args.ofile
+        self.wb = load_workbook(self.file)
+        self.time_unit = self.get_time_unit(self.wb[sheets_constants.R_PREFIX + "1"])
 
     @final
     def is_r_num_sheet(self, name):

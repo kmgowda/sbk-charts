@@ -52,8 +52,9 @@ class SbkMultiCharts(SbkCharts):
       unit; if mismatched, multi-sheet graphs will not be created.
     """
 
-    def __init__(self, version, file):
-        super().__init__(version, file)
+    def __init__(self, version):
+        super().__init__(version)
+
 
     def check_time_units(self):
         """Validate that all R-sheet time units are identical.

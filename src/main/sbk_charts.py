@@ -50,6 +50,8 @@ def sbk_charts():
     - None
     """
     parser = SbkParser()
+    ch = SbkAI(__sbk_version__)
+    ch.add_args(parser)
     args = parser.parse_args()
     print(open(SBK_BANNER_FILE, 'r').read())
     print("Sbk Charts Version : " + __sbk_version__)
@@ -57,5 +59,5 @@ def sbk_charts():
     print('Output File : ', args.ofile)
     sh = SbkMultiSheets(args.ifiles.split(","), args.ofile)
     sh.create_sheets()
-    ch = SbkAI(__sbk_version__, args.ofile)
+    ch.parse_args(args)
     ch.create_graphs()
