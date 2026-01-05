@@ -28,7 +28,6 @@ from src.charts.utils import is_r_num_sheet, get_columns_from_worksheet, get_sto
 from src.charts.utils import get_time_unit_from_worksheet, get_action_name_from_worksheet
 from src.sheets import constants as sheets_constants
 from src.charts.multicharts import SbkMultiCharts
-from src.custom_ai.hugging_face import HuggingFace
 from openpyxl.styles import Font, Border, Side, Alignment   
 import textwrap
 
