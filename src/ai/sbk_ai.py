@@ -22,6 +22,7 @@ from typing import final
 
 from openpyxl import load_workbook
 
+from src.ai.discover import discover_custom_ai_classes
 from src.charts import constants
 from src.charts.utils import is_r_num_sheet, get_columns_from_worksheet, get_storage_name_from_worksheet
 from src.charts.utils import get_time_unit_from_worksheet, get_action_name_from_worksheet
@@ -101,17 +102,21 @@ class SbkAI:
             file (str): Path to the benchmark results file.
         """
         self.version = version
-        self.ai = HuggingFace()
+        self.classes = discover_custom_ai_classes()
+        self.ai_class = None
         self.enable_ai = False
         self.args = None
         self.wb = None
 
     def add_args(self, parser):
         parser.add_argument( "-ai", "--enable-ai", "Enable AI analysis", default = False)
+        parser.add_argument( "-class", "--ai-class", "AI class to use, available classes : [ " + ", ".join(self.classes.keys()) + "]",
+                             default = "HuggingFace")
 
     def parse_args(self, args):
         self.args = args
         self.enable_ai = self.args.enable_ai
+        self.ai_class = self.classes[self.args.ai_class]
 
     def load_workbook(self):
         self.wb = load_workbook(self.args.ofile)
@@ -156,16 +161,16 @@ class SbkAI:
         """
 
         # Set storage statistics for AI analysis
-        self.ai.set_storage_stats(self.get_storage_stats())
+        self.ai_class.set_storage_stats(self.ai_class, self.get_storage_stats())
         
         # Get throughput analysis from AI
-        throughput_status, throughput_analysis = self.ai.get_throughput_analysis()
+        throughput_status, throughput_analysis = self.ai_class.get_throughput_analysis(self.ai_class)
         if not throughput_status:
             print(f"Error in throughput analysis: {throughput_analysis}")
             return
 
         # Get latency analysis from AI
-        latency_status, latency_analysis = self.ai.get_latency_analysis()
+        latency_status, latency_analysis = self.ai_class.get_latency_analysis(self.ai_class)
         if not latency_status:
             print(f"Error in latency analysis: {latency_analysis}")
             return
@@ -203,7 +208,7 @@ class SbkAI:
             
             # Add model description
             dec_cell = sheet.cell(row=max_row, column=8)
-            dec_cell.value = self.ai.get_model_description()
+            dec_cell.value = self.ai_class.get_model_description(self.ai_class)
             dec_cell.font = Font(size=16, color="00CF00")  # Green text for model info
 
             # Add Throughput Analysis section

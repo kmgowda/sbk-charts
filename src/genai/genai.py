@@ -47,6 +47,9 @@ class SbkGenAI(ABC):
         """
         self.storage_stats = stats
 
+    def get_class_name(self):
+        return self.__name__
+
     @abstractmethod
     def get_model_description(self) -> str:
         """

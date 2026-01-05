@@ -35,6 +35,43 @@ from src.charts import constants
 HF_MODEL_ID = "google/gemma-2-2b-it"
 
 
+def _call_llm_for_analysis(prompt):
+    """Send a prompt to the configured Hugging Face model and return the reply.
+
+    Parameters
+    - prompt (str): the textual prompt to send to the model. Prompts are
+      expected to be short technical instructions and metric tables.
+
+    Returns
+    - list: [True, <analysis string>] on success
+            [False, <error message>] if no API token is configured or
+            if another precondition prevents calling the API.
+
+    Notes
+    - Uses the `huggingface_hub.InferenceClient` and the chat_completion
+      interface to obtain the model's response. The method intentionally
+      returns a two-element list following the project's existing
+      convention for success/failure and message payloads.
+    """
+    api_token = os.getenv("HUGGINGFACE_API_TOKEN")
+    if not api_token:
+        return [False, (
+            "LLM analysis is not available (missing HUGGINGFACE_API_TOKEN environment variable). "
+            "Configure the token to enable Hugging Face-based analysis."
+        )]
+
+    client = InferenceClient(model=HF_MODEL_ID, token=api_token)
+
+    completion = client.chat_completion(  # ← key change
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1800,
+        temperature=0.7,
+        top_p=0.9,
+    )
+    # OpenAI‑style response schema
+    return [True, completion.choices[0].message["content"].strip()]
+
+
 class HuggingFace(SbkGenAI):
     """Adapter for calling a Hugging Face chat-style model for analysis.
 
@@ -51,43 +88,6 @@ class HuggingFace(SbkGenAI):
     """
     def __init__(self):
         super().__init__()
-
-    def _call_llm_for_analysis(self, prompt):
-        """Send a prompt to the configured Hugging Face model and return the reply.
-
-        Parameters
-        - prompt (str): the textual prompt to send to the model. Prompts are
-          expected to be short technical instructions and metric tables.
-
-        Returns
-        - list: [True, <analysis string>] on success
-                [False, <error message>] if no API token is configured or
-                if another precondition prevents calling the API.
-
-        Notes
-        - Uses the `huggingface_hub.InferenceClient` and the chat_completion
-          interface to obtain the model's response. The method intentionally
-          returns a two-element list following the project's existing
-          convention for success/failure and message payloads.
-        """
-        api_token = os.getenv("HUGGINGFACE_API_TOKEN")
-        if not api_token:
-            return [False, (
-                "LLM analysis is not available (missing HUGGINGFACE_API_TOKEN environment variable). "
-                "Configure the token to enable Hugging Face-based analysis."
-            )]
-
-        client = InferenceClient(model=HF_MODEL_ID, token=api_token)
-
-        completion = client.chat_completion(  # ← key change
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1800,
-            temperature=0.7,
-            top_p=0.9,
-        )
-        # OpenAI‑style response schema
-        return [True, completion.choices[0].message["content"].strip()]
-
 
     def get_model_description(self):
         """Return a short description of the configured Hugging Face model.
@@ -158,7 +158,7 @@ class HuggingFace(SbkGenAI):
             "Now write the analysis in clear, technical English."
         )
 
-        return self._call_llm_for_analysis(prompt)
+        return _call_llm_for_analysis(prompt)
 
 
     def get_latency_analysis(self):
@@ -260,7 +260,7 @@ class HuggingFace(SbkGenAI):
             "evaluating these systems. Focus on the most significant findings and their implications."
         )
 
-        return self._call_llm_for_analysis(prompt)
+        return _call_llm_for_analysis(prompt)
 
     def get_total_mb_analysis(self):
         pass
