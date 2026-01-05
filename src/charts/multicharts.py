@@ -34,8 +34,9 @@ from ordered_set import OrderedSet
 
 from src.sheets import constants
 from .charts import SbkCharts
+from typing import final
 
-
+@final
 class SbkMultiCharts(SbkCharts):
     """Create multi-sheet charts by extending SbkCharts.
 
@@ -52,8 +53,12 @@ class SbkMultiCharts(SbkCharts):
       unit; if mismatched, multi-sheet graphs will not be created.
     """
 
-    def __init__(self, version):
-        super().__init__(version)
+    # This should be final class ; just create graphs
+    def __init_subclass__(cls, **kwargs):
+        raise TypeError("Cannot create subclass for SbkMultiSheets")
+
+    def __init__(self, version, file):
+        super().__init__(version, file)
 
 
     def check_time_units(self):

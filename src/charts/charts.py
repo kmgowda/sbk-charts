@@ -55,7 +55,7 @@ class SbkCharts:
     Note: This docstring only documents behavior; no code paths are altered.
     """
 
-    def __init__(self, version):
+    def __init__(self, version, file):
         """Load workbook and initialize derived parameters.
 
         Parameters
@@ -70,11 +70,9 @@ class SbkCharts:
         - InvalidFileException: if the file is not a valid Excel workbook
         """
         self.version = version
-        self.parser = None
-        self.args = None
-        self.file = None
-        self.wb = None
-        self.time_unit = None
+        self.file = file
+        self.wb = load_workbook(self.file)
+        self.time_unit = self.get_time_unit(self.wb[sheets_constants.R_PREFIX + "1"])
         self.n_latency_charts = 5
         self.latency_groups = [
             [constants.MIN_LATENCY, constants.PERCENTILE_5],
@@ -114,15 +112,6 @@ class SbkCharts:
                                       constants.PERCENTILE_COUNT_99_99]
 
 
-    def add_args(self, parser):
-        self.parser = parser
-
-    def parse_args(self, args):
-        self.args = args
-        self.file = self.args.ofile
-        self.wb = load_workbook(self.file)
-        self.time_unit = self.get_time_unit(self.wb[sheets_constants.R_PREFIX + "1"])
-
     @final
     def is_r_num_sheet(self, name):
         """Return True if the worksheet name matches the R-prefix numeric pattern.
@@ -146,20 +135,6 @@ class SbkCharts:
         - bool: whether name matches the pattern 'T<digits>'
         """
         return re.match(r'^' + sheets_constants.T_PREFIX + r'\d+$', name)
-
-    @final
-    def get_t_num_sheet_name(self, r_num_name):
-        """Return the corresponding T-sheet name for an R-sheet name.
-
-        Example: 'R1' -> 'T1'
-
-        Parameters
-        - r_num_name (str): R-sheet name
-
-        Returns
-        - str: corresponding T-sheet name
-        """
-        return sheets_constants.T_PREFIX + r_num_name[1:]
 
     @final
     def get_columns_from_worksheet(self, ws):
