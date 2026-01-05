@@ -21,7 +21,6 @@ public API; no behavior or logic is modified by these additions.
 """
 
 # sbk_charts :  Storage Benchmark Kit - Charts
-import re
 import os
 from collections import OrderedDict
 from typing import final
@@ -34,6 +33,8 @@ from openpyxl_image_loader import SheetImageLoader
 
 import src.sheets.constants as sheets_constants
 from src.charts import constants
+from src.charts.utils import get_columns_from_worksheet, get_time_unit_from_worksheet, get_storage_name_from_worksheet
+
 
 class SbkCharts:
     """Create and manage Excel charts for SBK results.
@@ -72,7 +73,7 @@ class SbkCharts:
         self.version = version
         self.file = file
         self.wb = load_workbook(self.file)
-        self.time_unit = self.get_time_unit(self.wb[sheets_constants.R_PREFIX + "1"])
+        self.time_unit = get_time_unit_from_worksheet(self.wb[sheets_constants.R_PREFIX + "1"])
         self.n_latency_charts = 5
         self.latency_groups = [
             [constants.MIN_LATENCY, constants.PERCENTILE_5],
@@ -111,48 +112,6 @@ class SbkCharts:
                                       constants.PERCENTILE_COUNT_99_9, constants.PERCENTILE_COUNT_99_95, 
                                       constants.PERCENTILE_COUNT_99_99]
 
-
-    @final
-    def is_r_num_sheet(self, name):
-        """Return True if the worksheet name matches the R-prefix numeric pattern.
-
-        Parameters
-        - name (str): worksheet name
-
-        Returns
-        - bool: whether name matches the pattern 'R<digits>'
-        """
-        return re.match(r'^' + sheets_constants.R_PREFIX + r'\d+$', name)
-
-    @final
-    def is_t_num_sheet(self, name):
-        """Return True if the worksheet name matches the T-prefix numeric pattern.
-
-        Parameters
-        - name (str): worksheet name
-
-        Returns
-        - bool: whether name matches the pattern 'T<digits>'
-        """
-        return re.match(r'^' + sheets_constants.T_PREFIX + r'\d+$', name)
-
-    @final
-    def get_columns_from_worksheet(self, ws):
-        """Return an OrderedDict mapping column header names to Excel column
-        numbers from the first row of the provided worksheet.
-
-        Parameters
-        - ws: openpyxl worksheet
-
-        Returns
-        - OrderedDict[str, int]: mapping of header->column index
-        """
-        ret = OrderedDict()
-        for cell in ws[1]:
-            if cell.value:
-                ret[cell.value] = cell.column
-        return ret
-
     def get_latency_percentile_columns(self, ws):
         """Return only the latency percentile columns (names starting with
         'Percentile_' but not 'Percentile_Count').
@@ -163,7 +122,7 @@ class SbkCharts:
         Returns
         - OrderedDict[str, int]: mapping of percentile column name to index
         """
-        columns = self.get_columns_from_worksheet(ws)
+        columns = get_columns_from_worksheet(ws)
         ret = OrderedDict()
         for key in columns.keys():
             if key.startswith("Percentile_") and not key.startswith("Percentile_Count"):
@@ -180,7 +139,7 @@ class SbkCharts:
         Returns
         - OrderedDict[str, int]: mapping of percentile count column name to index
         """
-        columns = self.get_columns_from_worksheet(ws)
+        columns = get_columns_from_worksheet(ws)
         ret = OrderedDict()
         for key in columns.keys():
             if key.startswith("Percentile_Count"):
@@ -197,52 +156,13 @@ class SbkCharts:
         Returns
         - OrderedDict[str, int]
         """
-        columns = self.get_columns_from_worksheet(ws)
+        columns = get_columns_from_worksheet(ws)
         ret = OrderedDict()
         ret[constants.AVG_LATENCY] = columns[constants.AVG_LATENCY]
         ret[constants.MIN_LATENCY] = columns[constants.MIN_LATENCY]
         ret[constants.MAX_LATENCY] = columns[constants.MAX_LATENCY]
         ret.update(self.get_latency_percentile_columns(ws))
         return ret
-
-    @final
-    def get_time_unit(self, ws):
-        """Read and return the latency time unit from the supplied worksheet.
-
-        Parameters
-        - ws: openpyxl worksheet (expected to be an R sheet)
-
-        Returns
-        - str: time unit in uppercase (e.g. 'MS', 'US')
-        """
-        names = self.get_columns_from_worksheet(ws)
-        return str(ws.cell(row=2, column=names[constants.LATENCY_TIME_UNIT]).value).upper()
-
-    @final
-    def get_storage_name(self, ws):
-        """Return the storage name value from the second row of the worksheet.
-
-        Parameters
-        - ws: openpyxl worksheet
-
-        Returns
-        - str: storage name uppercased
-        """
-        names = self.get_columns_from_worksheet(ws)
-        return str(ws.cell(row=2, column=names[constants.STORAGE]).value).upper()
-
-    @final
-    def get_action_name(self, ws):
-        """Return the action name value from the second row of the worksheet.
-
-        Parameters
-        - ws: openpyxl worksheet
-
-        Returns
-        - str: action name
-        """
-        names = self.get_columns_from_worksheet(ws)
-        return str(ws.cell(row=2, column=names[constants.ACTION]).value)
 
     @final
     def __add_chart_attributes(self, chart, title, x_title, y_title, height, width):
@@ -395,7 +315,7 @@ class SbkCharts:
         Returns
         - list: cell values from row 2 to ws.max_row inclusive
         """
-        cols = self.get_columns_from_worksheet(ws)
+        cols = get_columns_from_worksheet(ws)
         values = []
         for row in range(2, ws.max_row + 1):
             cell_value = ws.cell(row=row, column=cols[column_name]).value
@@ -720,7 +640,7 @@ class SbkCharts:
         Notes
         - Series title is formed as '<ws_name>-<column_name>'.
         """
-        cols = self.get_columns_from_worksheet(ws)
+        cols = get_columns_from_worksheet(ws)
         return Series(Reference(ws, min_col=cols[column_name], min_row=2,
                                 max_col=cols[column_name], max_row=ws.max_row),
                       title=ws_name + "-" + column_name)
@@ -1261,10 +1181,10 @@ class SbkCharts:
         """
         r_name = sheets_constants.R_PREFIX + "1"
         r_ws = self.wb[r_name]
-        r_prefix = r_name + self.get_storage_name(r_ws)
+        r_prefix = r_name + get_storage_name_from_worksheet(r_ws)
         t_name = sheets_constants.T_PREFIX + "1"
         t_ws = self.wb[t_name]
-        t_prefix = t_name + self.get_storage_name(t_ws)
+        t_prefix = t_name + get_storage_name_from_worksheet(t_ws)
         self.create_throughput_mb_graph(r_ws, r_prefix)
         self.create_throughput_records_graph(r_ws, r_prefix)
         self.create_latency_compare_graphs(r_ws, r_prefix)
