@@ -153,27 +153,55 @@ class SbkAI:
         """
         Create a summary sheet with AI-generated performance analysis.
         
-        This method extends the parent class's create_summary_sheet method to add
-        AI-generated analysis of throughput and latency metrics.
+        This method runs AI analysis methods in parallel to improve performance.
+        It collects throughput and latency analysis from the AI instance and
+        stores the results in a dictionary.
         
         Returns:
-            openpyxl.worksheet.worksheet.Worksheet: The created or modified worksheet,
-            or None if creation failed.
+            dict: Dictionary containing the analysis results with keys:
+                - 'throughput': Tuple of (status, analysis) for throughput
+                - 'latency': Tuple of (status, analysis) for latency
         """
+        import concurrent.futures
+        from concurrent.futures import ThreadPoolExecutor
         
         # Set storage statistics for AI analysis
         self.ai_instance.set_storage_stats(self.get_storage_stats())
         
-        # Get throughput analysis from AI
-        throughput_status, throughput_analysis = self.ai_instance.get_throughput_analysis()
-        if not throughput_status:
-            print(f"Error in throughput analysis: {throughput_analysis}")
-            return
+        results = {}
+        
+        def run_analysis(method_name):
+            try:
+                method = getattr(self.ai_instance, method_name)
+                result = method()
+                return method_name,result
+            except Exception as e:
+                print(f"Error in {method_name}: {str(e)}")
+                return method_name, (False, str(e))
+        
+        # List of AI analysis methods to run in parallel
+        analysis_methods = [
+            'get_throughput_analysis',
+            'get_latency_analysis',
+            'get_model_description'
+        ]
+        
+        # Run all analysis methods in parallel
+        with ThreadPoolExecutor(max_workers=len(analysis_methods)) as executor:
+            future_to_method = {
+                executor.submit(run_analysis, method): method 
+                for method in analysis_methods
+            }
 
-        # Get latency analysis from AI
-        latency_status, latency_analysis = self.ai_instance.get_latency_analysis()
-        if not latency_status:
-            print(f"Error in latency analysis: {latency_analysis}")
+            return_on_error = False
+            for future in concurrent.futures.as_completed(future_to_method):
+                method_name, (status, analysis) = future.result()
+                results[method_name] = [status, analysis]
+                if not status:
+                    print(f"Error in {method_name}: {analysis}")
+                    return_on_error = True
+
+        if return_on_error:
             return
 
         # Format and add AI analysis to the worksheet
@@ -209,7 +237,7 @@ class SbkAI:
             
             # Add model description
             dec_cell = sheet.cell(row=max_row, column=8)
-            dec_cell.value = self.ai_instance.get_model_description()
+            dec_cell.value = results['get_model_description'][1]
             dec_cell.font = Font(size=16, color="00CF00")  # Green text for model info
 
             # Add Throughput Analysis section
@@ -220,6 +248,7 @@ class SbkAI:
             
             # Add throughput analysis content with formatting
             cell = sheet.cell(row=throughput_header_row, column=8)
+            throughput_analysis = results['get_throughput_analysis'][1]
             cell.value = throughput_analysis
             cell.font = Font(size=14, color="FF800000")  # Dark red text
             cell.border = Border(
@@ -248,6 +277,7 @@ class SbkAI:
             
             # Add latency analysis content with formatting
             cell = sheet.cell(row=latency_row, column=8)
+            latency_analysis = results['get_latency_analysis'][1]
             cell.value = latency_analysis
             cell.font = Font(size=14, color="FF000080")  # Dark blue text
             cell.border = Border(

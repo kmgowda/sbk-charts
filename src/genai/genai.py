@@ -51,11 +51,12 @@ class SbkGenAI(ABC):
         return self.__name__
 
     @abstractmethod
-    def get_model_description(self) -> str:
+    def get_model_description(self) -> Tuple[bool, str]:
         """
         Get a description of the AI model being used for analysis.
         
         Returns:
+            bool: True if analysis was successful, False otherwise
             str: A string describing the AI model, including its name and version.
         """
         pass

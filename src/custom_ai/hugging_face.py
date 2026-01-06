@@ -65,11 +65,11 @@ def _call_llm_for_analysis(prompt):
     completion = client.chat_completion(  # ← key change
         messages=[{"role": "user", "content": prompt}],
         max_tokens=1800,
-        temperature=0.7,
+        temperature=0.4,
         top_p=0.9,
     )
     # OpenAI‑style response schema
-    return [True, completion.choices[0].message["content"].strip()]
+    return (True, completion.choices[0].message["content"].strip())
 
 
 class HuggingFace(SbkGenAI):
@@ -93,9 +93,10 @@ class HuggingFace(SbkGenAI):
         """Return a short description of the configured Hugging Face model.
 
         Returns
-        - str: human-readable model identifier and brief note.
+         - tuple: (True, <model string>) on success or (False, <message>) on
+          failure.
         """
-        return "Hugging Face Inference APIs with model ID: " + HF_MODEL_ID
+        return (True, "Hugging Face Inference APIs with model ID: " + HF_MODEL_ID)
 
 
     def get_throughput_analysis(self):
@@ -111,7 +112,7 @@ class HuggingFace(SbkGenAI):
            result.
 
         Returns
-        - list: [True, <analysis string>] on success or [False, <message>] on
+        - tuple: (True, <analysis string>) on success or (False, <message>) on
           failure (for example, when there are no throughput values).
         """
 
@@ -128,7 +129,7 @@ class HuggingFace(SbkGenAI):
             )
 
         if not stats:
-            return [False, "No valid throughput values available for analysis."]
+            return (False, "No valid throughput values available for analysis.")
 
         # 2) Rank by average throughput (descending)
         ranked = sorted(stats, key=lambda kv: kv["avg"], reverse=True)
@@ -175,7 +176,7 @@ class HuggingFace(SbkGenAI):
           failure (for example, when latency data is missing).
         """
         if not self.storage_stats:
-            return [False, "No storage statistics available for latency analysis."]
+            return (False, "No storage statistics available for latency analysis.")
 
         # Define the key latency metrics we want to analyze
         latency_metrics = [
@@ -219,7 +220,7 @@ class HuggingFace(SbkGenAI):
             stats.append(storage_stats)
 
         if not stats:
-            return [False, "No valid latency data available for analysis."]
+            return (False, "No valid latency data available for analysis.")
 
         # Build a comparison table for the prompt
         def format_value(metric_data, key):
