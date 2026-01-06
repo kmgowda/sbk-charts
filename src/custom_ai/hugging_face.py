@@ -35,7 +35,7 @@ from src.charts import constants
 HF_MODEL_ID = "google/gemma-2-2b-it"
 
 
-def _call_llm_for_analysis(prompt):
+def _call_llm_for_analysis(model_id, prompt):
     """Send a prompt to the configured Hugging Face model and return the reply.
 
     Parameters
@@ -60,7 +60,7 @@ def _call_llm_for_analysis(prompt):
             "Configure the token to enable Hugging Face-based analysis."
         )]
 
-    client = InferenceClient(model=HF_MODEL_ID, token=api_token)
+    client = InferenceClient(model=model_id, token=api_token)
 
     completion = client.chat_completion(  # ← key change
         messages=[{"role": "user", "content": prompt}],
@@ -97,7 +97,7 @@ class HuggingFace(SbkGenAI):
 
     def parse_args(self, args):
 #        if hasattr(args, 'model_id') and args.model_id is not None:
-            self.model_id = args.model_id
+        self.model_id = args.model_id
 
     def get_model_description(self):
         """Return a short description of the configured Hugging Face model.
@@ -106,7 +106,7 @@ class HuggingFace(SbkGenAI):
          - tuple: (True, <model string>) on success or (False, <message>) on
           failure.
         """
-        return (True, "Hugging Face Inference APIs with model ID: " + HF_MODEL_ID)
+        return (True, "Hugging Face Inference APIs with model ID: " + self.model_id)
 
 
     def get_throughput_analysis(self):
@@ -169,7 +169,7 @@ class HuggingFace(SbkGenAI):
             "Now write the analysis in clear, technical English."
         )
 
-        return _call_llm_for_analysis(prompt)
+        return _call_llm_for_analysis(self.model_id, prompt)
 
 
     def get_latency_analysis(self):
@@ -271,7 +271,7 @@ class HuggingFace(SbkGenAI):
             "evaluating these systems. Focus on the most significant findings and their implications."
         )
 
-        return _call_llm_for_analysis(prompt)
+        return _call_llm_for_analysis(self.model_id, prompt)
 
     def get_total_mb_analysis(self):
         """Generate analysis of total MB processed and reporting intervals.
@@ -309,7 +309,7 @@ class HuggingFace(SbkGenAI):
             "Keep the analysis concise, technical, and focused on actionable insights."
         )
 
-        return _call_llm_for_analysis(prompt)
+        return _call_llm_for_analysis(self.model_id, prompt)
 
     def get_percentile_histogram_analysis(self):
         """Generate analysis of percentile histogram data.
@@ -392,4 +392,4 @@ class HuggingFace(SbkGenAI):
             "Higher counts in higher percentiles may indicate performance issues."
         )
 
-        return _call_llm_for_analysis(prompt)
+        return _call_llm_for_analysis(self.model_id, prompt)
