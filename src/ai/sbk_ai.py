@@ -192,7 +192,6 @@ class SbkAI:
             'get_latency_analysis',
             'get_total_mb_analysis',
             'get_percentile_histogram_analysis',
-            'get_performance_summary',
         ]
 
         print("AI analysis. Please wait...", end = "", flush=True)

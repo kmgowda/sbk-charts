@@ -99,7 +99,3 @@ class SbkGenAI(ABC):
     @abstractmethod
     def get_percentile_histogram_analysis(self) -> Tuple[bool, str]:
         pass
-
-    @abstractmethod
-    def get_performance_summary(self) -> Tuple[bool, str]:
-        pass

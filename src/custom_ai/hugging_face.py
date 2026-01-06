@@ -312,7 +312,86 @@ class HuggingFace(SbkGenAI):
         return _call_llm_for_analysis(prompt)
 
     def get_percentile_histogram_analysis(self):
-        return False, "Not yet implemented"
+        """Generate analysis of percentile histogram data.
 
-    def get_performance_summary(self):
-        return False, "Not yet implemented"
+        Returns:
+            tuple: (success, analysis) where:
+                - success (bool): True if analysis was successful
+                - analysis (str): The analysis text or error message
+        """
+        if not self.storage_stats:
+            return False, "No storage statistics available for percentile histogram analysis."
+
+        # List of all percentile count constants we want to analyze
+        percentile_count_consts = [
+            constants.PERCENTILE_COUNT_1, constants.PERCENTILE_COUNT_5, constants.PERCENTILE_COUNT_10,
+            constants.PERCENTILE_COUNT_15, constants.PERCENTILE_COUNT_20, constants.PERCENTILE_COUNT_25,
+            constants.PERCENTILE_COUNT_30, constants.PERCENTILE_COUNT_35, constants.PERCENTILE_COUNT_40,
+            constants.PERCENTILE_COUNT_45, constants.PERCENTILE_COUNT_50, constants.PERCENTILE_COUNT_55,
+            constants.PERCENTILE_COUNT_60, constants.PERCENTILE_COUNT_65, constants.PERCENTILE_COUNT_70,
+            constants.PERCENTILE_COUNT_75, constants.PERCENTILE_COUNT_80, constants.PERCENTILE_COUNT_85,
+            constants.PERCENTILE_COUNT_90, constants.PERCENTILE_COUNT_92_5, constants.PERCENTILE_COUNT_95,
+            constants.PERCENTILE_COUNT_97_5, constants.PERCENTILE_COUNT_99, constants.PERCENTILE_COUNT_99_25,
+            constants.PERCENTILE_COUNT_99_5, constants.PERCENTILE_COUNT_99_75, constants.PERCENTILE_COUNT_99_9,
+            constants.PERCENTILE_COUNT_99_95, constants.PERCENTILE_COUNT_99_99
+        ]
+
+        # Build the prompt with percentile count data
+        lines = []
+        for i, stat in enumerate(self.storage_stats, 1):
+            if not stat.total:
+                continue
+                
+            # Get all percentile count values for this storage
+            percentile_counts = []
+            for const in percentile_count_consts:
+                try:
+                    # Get the percentile count values from stat.total
+                    values = stat.total[const]
+                    if values:  # Only process if there are values
+                        # Calculate the total count for this percentile
+                        total_count = sum(values)
+                        # Extract the percentile number from the constant name
+                        percentile_str = const.replace('PERCENTILE_COUNT_', '').replace('_', '.')
+                        try:
+                            percentile = float(percentile_str)
+                            percentile_counts.append((percentile, total_count))
+                        except (ValueError, TypeError):
+                            continue
+                except (KeyError, AttributeError):
+                    continue
+            
+            if not percentile_counts:
+                continue
+                
+            # Sort by percentile
+            percentile_counts.sort()
+
+            print(percentile_counts)
+            
+            # Format the data for the prompt
+            storage_line = f"{i}. {stat.storage} ({stat.action}):\n"
+            for percentile, count in percentile_counts:
+                storage_line += f"   - {percentile}%: {count:,} samples\n"
+            lines.append(storage_line)
+
+        if not lines:
+            return False, "No valid percentile count data available for analysis."
+
+        prompt = (
+            "You are a storage performance engineer. Analyze the following percentile histogram data:\n\n"
+            "For each storage system, you'll see the number of samples at each percentile level.\n"
+            "This data shows the distribution of request latencies across different percentiles.\n\n"
+            f"{chr(10).join(lines)}\n\n"
+            "Please provide a technical analysis that includes:\n"
+            "1. The overall latency distribution pattern for each storage system\n"
+            "2. Any significant spikes or anomalies in the percentile distribution\n"
+            "3. How the distributions compare across different storage systems\n"
+            "4. Potential performance bottlenecks or optimization opportunities\n"
+            "5. Any patterns indicating specific performance characteristics (e.g., long tail latencies)\n\n"
+            "Focus on actionable insights and keep the analysis concise and technical.\n"
+            "Note: The values represent the number of operations that completed within each latency percentile. "
+            "Higher counts in higher percentiles may indicate performance issues."
+        )
+
+        return _call_llm_for_analysis(prompt)
