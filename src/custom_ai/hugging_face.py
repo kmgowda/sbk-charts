@@ -274,7 +274,42 @@ class HuggingFace(SbkGenAI):
         return _call_llm_for_analysis(prompt)
 
     def get_total_mb_analysis(self):
-        return False, "Not yet implemented"
+        """Generate analysis of total MB processed and reporting intervals.
+
+        Returns:
+            tuple: (success, analysis) where:
+                - success (bool): True if analysis was successful
+                - analysis (str): The analysis text or error message
+        """
+        if not self.storage_stats:
+            return False, "No storage statistics available for total MB analysis."
+
+        # Build the prompt
+        lines = []
+        for i, s in enumerate(self.storage_stats, 1):
+            lines.append(
+                f"{i}. {s.storage}: "
+                f"MB: {sum(s.total[constants.MB])} "
+                f"Time: {sum(s.total[constants.REPORT_SECONDS])} "
+                f"n= {len(s.total[constants.MB])} "
+            )
+
+        prompt = (
+            "You are a storage performance engineer. Analyze the following data processing metrics:\n\n"
+            "For each storage system, you'll see:\n"
+            "- MB: Total megabytes processed\n"
+            "- Time: Total reporting intervals in seconds\n"
+            "- n: Number of data points\n\n"
+            f"{chr(10).join(lines)}\n\n"
+            "Please provide a technical analysis that includes:\n"
+            "1. Which storage system processed the most/least data in total\n"
+            "2. Any correlations between data volume and reporting time\n"
+            "3. Potential bottlenecks or anomalies in the data processing\n"
+            "4. Recommendations for optimizing data processing based on the patterns observed\n\n"
+            "Keep the analysis concise, technical, and focused on actionable insights."
+        )
+
+        return _call_llm_for_analysis(prompt)
 
     def get_percentile_histogram_analysis(self):
         return False, "Not yet implemented"

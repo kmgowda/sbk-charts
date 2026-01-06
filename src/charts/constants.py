@@ -46,6 +46,8 @@ READ_RESPONSE_PENDING_RECORDS = "ReadResponsePendingRecords"
 AVG_LATENCY = "AvgLatency"
 MIN_LATENCY = "MinLatency"
 MAX_LATENCY = "MaxLatency"
+REPORT_SECONDS = "ReportSeconds"
+
 
 # Percentile columns
 PERCENTILE_1 = "Percentile_1"

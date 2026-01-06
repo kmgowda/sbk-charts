@@ -346,6 +346,35 @@ class SbkAI:
             
             latency_row_height = max(25, len(latency_wrapped_lines) * 25)
             sheet.row_dimensions[latency_row].height = latency_row_height
+            
+            # Add Total MB Analysis section
+            mb_row = sheet.max_row + 1
+            
+            # Format and add total MB analysis header
+            cell = sheet.cell(row=mb_row, column=7)
+            cell.value = "Total MB Analysis"
+            cell.font = Font(size=16, bold=True, color="0000FF")  # Blue header
+            
+            # Add total MB analysis content with formatting
+            cell = sheet.cell(row=mb_row, column=8)
+            mb_analysis = results['get_total_mb_analysis'][1]
+            cell.value = mb_analysis
+            cell.font = Font(size=14, color="008000")  # Green text
+            cell.border = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+            cell.alignment = Alignment(wrap_text=True, vertical='top')
+            
+            # Calculate and set optimal row height for total MB analysis
+            mb_wrapped_lines = []
+            for line in mb_analysis.split('\n'):
+                mb_wrapped_lines.extend(textwrap.wrap(line, width=120))
+            
+            mb_row_height = max(25, len(mb_wrapped_lines) * 25)
+            sheet.row_dimensions[mb_row].height = mb_row_height
 
         except Exception as e:
             print(f"Error adding analysis to summary sheet: {str(e)}")
