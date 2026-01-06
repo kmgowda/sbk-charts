@@ -23,19 +23,20 @@ Running SBK Charts:
 ```
 <SBK directory>./sbk-charts
 ...
-kmg@kmgs-MBP SBK % ./sbk-charts -h
-usage: sbk-charts [-h] -i IFILES [-o OFILE]
+(sbk-charts-venv) kmg@Mac-Studio sbk-charts % sbk-charts -h
+usage: sbk-charts [-h] -i IFILES [-o OFILE] {huggingface,noai} ...
 
 sbk charts
 
-optional arguments:
-  -h, --help            show this help message and exit
-  -i IFILES, --ifiles IFILES
-                        Input CSV files, seperated by ','
-  -o OFILE, --ofile OFILE
-                        Output xlsx file
+positional arguments:
+  {huggingface,noai}   Available sub-commands
 
-Please report issues at https://github.com/kmgowda/SBK
+options:
+  -h, --help           show this help message and exit
+  -i, --ifiles IFILES  Input CSV files, separated by ','
+  -o, --ofile OFILE    Output xlsx file
+
+Please report issues at https://github.com/kmgowda/sbk-charts
 
 ```
 
@@ -109,6 +110,48 @@ to deactivate from the venv
 deactivate
 ```
 
+## AI-Powered Analysis
 
+SBK Charts includes AI-powered analysis capabilities to provide deeper insights into your storage benchmark results.
+The analysis is performed using the Hugging Face model and includes:
+
+### Available AI Analyses
+
+1. **Throughput Analysis**
+   - Analyzes MB/s and records/s metrics
+   - Identifies performance patterns and anomalies
+   - Compares performance across different storage systems
+
+2. **Latency Analysis**
+   - Examines latency distributions
+   - Highlights tail latency patterns
+   - Provides comparative analysis between different storage configurations
+
+3. **Total MB Analysis**
+   - Analyzes total data transferred
+   - Identifies throughput patterns over time
+   - Compares data transfer efficiency
+
+4. **Percentile Histogram Analysis**
+   - Detailed analysis of latency percentiles
+   - Identifies performance bottlenecks
+   - Compares percentile distributions across storage systems
+
+### Usage
+
+To use AI analysis, run the tool with one of the available AI subcommands:
+
+```bash
+# Using Hugging Face model (default)
+sbk-charts -i input.csv -o output.xlsx huggingface
+
+# Example
+sbk-charts -i ./samples/charts/sbk-file-read.csv,./samples/charts/sbk-rocksdb-read.csv huggingface
+
+
+# Using NoAI (fallback with error messages)
+sbk-charts -i input.csv -o output.xlsx noai
+# Example
+sbk-charts -i ./samples/charts/sbk-file-read.csv,./samples/charts/sbk-rocksdb-read.csv noai
 
 
