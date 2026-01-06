@@ -78,6 +78,6 @@ def discover_custom_ai_classes(package_name: str = "src.custom_ai") -> Dict[str,
                 is_subclass = False
 
             if is_subclass and obj is not SbkGenAI and not inspect.isabstract(obj):
-                discovered[obj.__name__] = obj
+                discovered[obj.__name__.lower()] = obj
 
     return discovered

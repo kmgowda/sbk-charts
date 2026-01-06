@@ -102,7 +102,7 @@ class SbkAI:
         """
         self.version = version
         self.classes = discover_custom_ai_classes()
-        self.ai_class = None
+        self.ai_instance = None
         self.enable_ai = False
         self.args = None
         self.wb = None
@@ -115,7 +115,9 @@ class SbkAI:
     def parse_args(self, args):
         self.args = args
         self.enable_ai = self.args.enable_ai
-        self.ai_class = self.classes[self.args.ai_class]
+        if self.args.ai_class.lower() not in self.classes.keys():
+            raise ValueError(f"Invalid AI class: {self.args.ai_class}")
+        self.ai_instance = self.classes[self.args.ai_class.lower()]()
 
     def load_workbook(self):
         self.wb = load_workbook(self.args.ofile)
@@ -158,18 +160,18 @@ class SbkAI:
             openpyxl.worksheet.worksheet.Worksheet: The created or modified worksheet,
             or None if creation failed.
         """
-
+        
         # Set storage statistics for AI analysis
-        self.ai_class.set_storage_stats(self.ai_class, self.get_storage_stats())
+        self.ai_instance.set_storage_stats(self.get_storage_stats())
         
         # Get throughput analysis from AI
-        throughput_status, throughput_analysis = self.ai_class.get_throughput_analysis(self.ai_class)
+        throughput_status, throughput_analysis = self.ai_instance.get_throughput_analysis()
         if not throughput_status:
             print(f"Error in throughput analysis: {throughput_analysis}")
             return
 
         # Get latency analysis from AI
-        latency_status, latency_analysis = self.ai_class.get_latency_analysis(self.ai_class)
+        latency_status, latency_analysis = self.ai_instance.get_latency_analysis()
         if not latency_status:
             print(f"Error in latency analysis: {latency_analysis}")
             return
@@ -207,7 +209,7 @@ class SbkAI:
             
             # Add model description
             dec_cell = sheet.cell(row=max_row, column=8)
-            dec_cell.value = self.ai_class.get_model_description(self.ai_class)
+            dec_cell.value = self.ai_instance.get_model_description()
             dec_cell.font = Font(size=16, color="00CF00")  # Green text for model info
 
             # Add Throughput Analysis section
