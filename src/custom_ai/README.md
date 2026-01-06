@@ -49,9 +49,22 @@ options:
 ```
 
 
+### Model Selection
+
+The Hugging Face model can be selected using the `--model_id` option. The default model is `google/gemma-2-2b-it`.
+
+```bash
+# Using Hugging Face model (default)
+sbk-charts -i input.csv -o output.xlsx huggingface --model_id google/gemma-2-2b-it
+```
+
+
 The example command to use the NoAI implementation is:
 
 ```
 sbk-charts -i ./samples/charts/sbk-file-read.csv,./samples/charts/sbk-rocksdb-read.csv noai
 ```
+
+The Custom AI can be extended by creating a new class that inherits from the SbkGenAI base class and implements the required methods.
+As of today only Hugging Face and NoAI implementations are available. But, the custom AI can be extended to use other AI models.
 

@@ -15,9 +15,6 @@ The sbk-charts application can be used to visualize these results in a more user
 
 **sbk-charts uses the AI to generate the descriptive summary about the throughput and latency analysis**
 
-*As of today , December 2025, the hugging face inference client APIs are used to generate the throughput and latency analysis; Many more models are yet to come*
-
-
 Running SBK Charts:
 
 ```
@@ -110,10 +107,10 @@ to deactivate from the venv
 deactivate
 ```
 
-## AI-Powered Analysis
+## Generative AI-Powered Analysis
 
-SBK Charts includes AI-powered analysis capabilities to provide deeper insights into your storage benchmark results.
-The analysis is performed using the Hugging Face model and includes:
+SBK Charts includes AI-powered analysis descriptions to provide deeper insights into your storage benchmark results.
+As of today, The analysis is performed using the Hugging Face model and includes:
 
 ### Available AI Analyses
 
@@ -154,4 +151,7 @@ sbk-charts -i input.csv -o output.xlsx noai
 # Example
 sbk-charts -i ./samples/charts/sbk-file-read.csv,./samples/charts/sbk-rocksdb-read.csv noai
 
+```
+
+for further details on custom AI implementations, please refer to the [custom AI](./src/custom_ai/README.md) directory.
 
