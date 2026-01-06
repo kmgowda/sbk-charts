@@ -17,7 +17,7 @@ for storage system benchmarks, including throughput and latency analysis.
 The module integrates with Hugging Face models to provide intelligent insights
 into storage performance metrics.
 """
-
+import time
 from typing import final
 
 from openpyxl import load_workbook
@@ -32,6 +32,8 @@ from openpyxl.styles import Font, Border, Side, Alignment
 import textwrap
 
 from src.stat.storage import StorageStat
+import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor
 
 # Log the full exception for debugging
 import traceback
@@ -162,9 +164,6 @@ class SbkAI:
                 - 'throughput': Tuple of (status, analysis) for throughput
                 - 'latency': Tuple of (status, analysis) for latency
         """
-        import concurrent.futures
-        from concurrent.futures import ThreadPoolExecutor
-        
         # Set storage statistics for AI analysis
         self.ai_instance.set_storage_stats(self.get_storage_stats())
         
@@ -185,24 +184,67 @@ class SbkAI:
             'get_latency_analysis',
             'get_model_description'
         ]
-        
+
+        print("AI analysis. Please wait...", end = "", flush=True)
+
         # Run all analysis methods in parallel
         with ThreadPoolExecutor(max_workers=len(analysis_methods)) as executor:
             future_to_method = {
-                executor.submit(run_analysis, method): method 
+                executor.submit(lambda m=method: run_analysis(m)): method
                 for method in analysis_methods
             }
 
-            return_on_error = False
-            for future in concurrent.futures.as_completed(future_to_method):
-                method_name, (status, analysis) = future.result()
-                results[method_name] = [status, analysis]
-                if not status:
-                    print(f"Error in {method_name}: {analysis}")
-                    return_on_error = True
+        return_on_error = False
+        completed = 0
+        total = len(future_to_method)
+        start_time = time.time()
+        timeout_seconds = 600
+
+        while future_to_method:
+
+            # Check total timeout
+            if time.time() - start_time > timeout_seconds:
+                print("\nError: execution time exceeded 10 minutes")
+                # Cancel any remaining futures
+                for future in future_to_method:
+                    future.cancel()
+                raise TimeoutError("execution time exceeded 10 minutes")
+
+            try:
+                # Wait for the next future to complete with a timeout
+                done, _ = concurrent.futures.wait(
+                    future_to_method.keys(),
+                    timeout=5,  # Check every 5 second for timeouts
+                    return_when=concurrent.futures.FIRST_COMPLETED
+                )
+                print(".", end="", flush=True)
+                # Process completed futures
+                for future in done:
+                    method_name = future_to_method.pop(future)
+                    try:
+                        method_name, (status, analysis) = future.result(timeout=1)
+                        results[method_name] = (status, analysis)
+                        completed += 1
+                        print(f"\nCompleted {completed}/{total} tasks", end="", flush=True)
+                        start_time = time.time()   # one complete , we can wait for some more time
+                        if not status:
+                            print(f"\nError in {method_name}: {analysis}")
+                            return_on_error = True
+                    except TimeoutError:
+                        # Put the future back to be processed in the next iteration
+                        future_to_method[future] = method_name
+                    except Exception as e:
+                        print(f"\nError processing {method_name}: {str(e)}")
+                        return_on_error = True
+
+            except Exception as e:
+                print(f"\nUnexpected error: {str(e)}")
+                return_on_error = True
+                break
 
         if return_on_error:
             return
+        print()
 
         # Format and add AI analysis to the worksheet
         try:
