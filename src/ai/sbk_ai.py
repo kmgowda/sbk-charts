@@ -223,7 +223,7 @@ class SbkAI:
                 # Wait for the next future to complete with a timeout
                 done, _ = concurrent.futures.wait(
                     future_to_method.keys(),
-                    timeout=5,  # Check every 5 second for timeouts
+                    timeout=2,  # Check every 2 second for timeouts
                     return_when=concurrent.futures.FIRST_COMPLETED
                 )
                 print(".", end="", flush=True)

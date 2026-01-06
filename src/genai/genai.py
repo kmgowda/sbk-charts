@@ -47,10 +47,6 @@ class SbkGenAI(ABC):
         """
         self.storage_stats = stats
 
-    def get_class_name(self):
-        return self.__name__
-
-
     def add_args(self, parser):
         pass
 
