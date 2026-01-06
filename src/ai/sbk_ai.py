@@ -104,22 +104,30 @@ class SbkAI:
         """
         self.version = version
         self.classes = discover_custom_ai_classes()
+        self.ai_instance_map = dict()
         self.ai_instance = None
-        self.enable_ai = False
         self.args = None
         self.wb = None
+        self.subparsers = None
 
     def add_args(self, parser):
-        parser.add_argument( "-ai", "--enable-ai", "Enable AI analysis", default = False)
-        parser.add_argument( "-class", "--ai-class", "AI class to use, available classes : [ " + ", ".join(self.classes.keys()) + "]",
-                             default = "HuggingFace")
+        self.subparsers = parser.add_subparsers(dest="ai_class", help="Available sub-commands", required=False)
+        parser.set_defaults(ai_class=None)
+        for name, cls in self.classes.items():
+            try:
+                subp = self.subparsers.add_parser(name)
+                self.ai_instance_map[name.lower()] = cls()
+                self.ai_instance_map[name.lower()].add_args(subp)
+            except Exception:
+                # don't break arg registration if a class has issues; log for debugging
+                traceback.print_exc()
+
 
     def parse_args(self, args):
         self.args = args
-        self.enable_ai = self.args.enable_ai
-        if self.args.ai_class.lower() not in self.classes.keys():
-            raise ValueError(f"Invalid AI class: {self.args.ai_class}")
-        self.ai_instance = self.classes[self.args.ai_class.lower()]()
+        if self.args.ai_class:
+            self.ai_instance = self.ai_instance_map[self.args.ai_class.lower()]
+            self.ai_instance.parse_args(args)
 
     def load_workbook(self):
         self.wb = load_workbook(self.args.ofile)
@@ -362,8 +370,8 @@ class SbkAI:
         """
         excel_graphs =  SbkMultiCharts(self.version, self.args.ofile)
         excel_graphs.create_graphs()
-        if not self.enable_ai:
-            print("AI is not enabled")
+        if not self.ai_instance:
+            print("AI is not enabled!. you can use the subcommands ["+" ".join(self.classes.keys())+"] to enable it.")
         else:
             self.load_workbook()
             self.add_ai_analysis()

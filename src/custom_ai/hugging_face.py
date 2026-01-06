@@ -88,6 +88,16 @@ class HuggingFace(SbkGenAI):
     """
     def __init__(self):
         super().__init__()
+        self.model_id = HF_MODEL_ID
+
+
+    def add_args(self, parser):
+        parser.add_argument("-id", "--model_id", help="Hugging Face model ID; default model: "+HF_MODEL_ID, default=HF_MODEL_ID)
+        parser.set_defaults(model_id=HF_MODEL_ID)
+
+    def parse_args(self, args):
+#        if hasattr(args, 'model_id') and args.model_id is not None:
+            self.model_id = args.model_id
 
     def get_model_description(self):
         """Return a short description of the configured Hugging Face model.

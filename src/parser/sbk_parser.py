@@ -44,10 +44,13 @@ class SbkParser:
         - `-i/--ifiles`: required, comma-separated input CSV files
         - `-o/--ofile`: optional, output xlsx file path (defaults to 'out.xlsx')
         """
-        self.parser = argparse.ArgumentParser(description='sbk charts',
-                                         epilog='Please report issues at https://github.com/kmgowda/sbk-charts')
-        self.parser.add_argument('-i', '--ifiles', help="Input CSV files, separated by ','", required=True)
-        self.parser.add_argument('-o', '--ofile', help='Output xlsx file', default="out.xlsx")
+        self.__parser = argparse.ArgumentParser(description='sbk charts',
+                                                epilog='Please report issues at https://github.com/kmgowda/sbk-charts')
+        self.__parser.add_argument('-i', '--ifiles', help="Input CSV files, separated by ','", required=True)
+        self.__parser.add_argument('-o', '--ofile', help='Output xlsx file', default="out.xlsx")
+
+    def add_subparsers(self, dest, help, required = False):
+        return self.__parser.add_subparsers(dest=dest, help=help, required=required)
 
     def add_argument(self, short_name, name, help_msg, required = False, default = None):
         """Add an argument to the underlying ArgumentParser.
@@ -59,7 +62,7 @@ class SbkParser:
         - required (bool): whether the argument is required (default False)
         - default: default value for the argument if not supplied
         """
-        self.parser.add_argument(short_name, name, help=help_msg, required=required, default=default)
+        self.__parser.add_argument(short_name, name, help=help_msg, required=required, default=default)
 
     def parse_args(self):
         """Parse command-line arguments and return the populated namespace.
@@ -67,4 +70,7 @@ class SbkParser:
         Returns
         - argparse.Namespace: parsed arguments as attributes (e.g. args.ifiles)
         """
-        return self.parser.parse_args()
+        return self.__parser.parse_args()
+
+    def set_defaults(self, **kwargs):
+        self.__parser.set_defaults(**kwargs)
