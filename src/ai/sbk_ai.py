@@ -374,6 +374,35 @@ class SbkAI:
             
             mb_row_height = max(25, len(mb_wrapped_lines) * 25)
             sheet.row_dimensions[mb_row].height = mb_row_height
+            
+            # Add Percentile Histogram Analysis section
+            percentile_row = sheet.max_row + 1  # Add an extra blank row
+            
+            # Format and add percentile histogram analysis header
+            cell = sheet.cell(row=percentile_row, column=7)
+            cell.value = "Percentile Histogram Analysis"
+            cell.font = Font(size=16, bold=True, color="8B008B")  # Dark magenta header
+            
+            # Add percentile histogram analysis content with formatting
+            cell = sheet.cell(row=percentile_row, column=8)
+            percentile_analysis = results['get_percentile_histogram_analysis'][1]
+            cell.value = percentile_analysis
+            cell.font = Font(size=14, color="8B4513")  # Saddle brown text
+            cell.border = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+            cell.alignment = Alignment(wrap_text=True, vertical='top')
+            
+            # Calculate and set optimal row height for percentile histogram analysis
+            percentile_wrapped_lines = []
+            for line in percentile_analysis.split('\n'):
+                percentile_wrapped_lines.extend(textwrap.wrap(line, width=120))
+            
+            percentile_row_height = max(25, len(percentile_wrapped_lines) * 25)
+            sheet.row_dimensions[percentile_row].height = percentile_row_height
 
         except Exception as e:
             print(f"Error adding analysis to summary sheet: {str(e)}")

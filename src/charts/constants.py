@@ -50,7 +50,6 @@ REPORT_SECONDS = "ReportSeconds"
 
 
 # Percentile columns
-PERCENTILE_1 = "Percentile_1"
 PERCENTILE_5 = "Percentile_5"
 PERCENTILE_10 = "Percentile_10"
 PERCENTILE_15 = "Percentile_15"
@@ -81,7 +80,6 @@ PERCENTILE_99_95 = "Percentile_99.95"
 PERCENTILE_99_99 = "Percentile_99.99"
 
 # Percentile count columns
-PERCENTILE_COUNT_1 = "Percentile_Count_1"
 PERCENTILE_COUNT_5 = "Percentile_Count_5"
 PERCENTILE_COUNT_10 = "Percentile_Count_10"
 PERCENTILE_COUNT_15 = "Percentile_Count_15"
@@ -100,9 +98,9 @@ PERCENTILE_COUNT_75 = "Percentile_Count_75"
 PERCENTILE_COUNT_80 = "Percentile_Count_80"
 PERCENTILE_COUNT_85 = "Percentile_Count_85"
 PERCENTILE_COUNT_90 = "Percentile_Count_90"
-PERCENTILE_COUNT_92_5 = "Percentile_Count_92_5"
+PERCENTILE_COUNT_92_5 = "Percentile_Count_92.5"
 PERCENTILE_COUNT_95 = "Percentile_Count_95"
-PERCENTILE_COUNT_97_5 = "Percentile_Count_97_5"
+PERCENTILE_COUNT_97_5 = "Percentile_Count_97.5"
 PERCENTILE_COUNT_99 = "Percentile_Count_99"
 PERCENTILE_COUNT_99_25 = "Percentile_Count_99.25"
 PERCENTILE_COUNT_99_5 = "Percentile_Count_99.5"

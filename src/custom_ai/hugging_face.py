@@ -324,7 +324,7 @@ class HuggingFace(SbkGenAI):
 
         # List of all percentile count constants we want to analyze
         percentile_count_consts = [
-            constants.PERCENTILE_COUNT_1, constants.PERCENTILE_COUNT_5, constants.PERCENTILE_COUNT_10,
+            constants.PERCENTILE_COUNT_5, constants.PERCENTILE_COUNT_10,
             constants.PERCENTILE_COUNT_15, constants.PERCENTILE_COUNT_20, constants.PERCENTILE_COUNT_25,
             constants.PERCENTILE_COUNT_30, constants.PERCENTILE_COUNT_35, constants.PERCENTILE_COUNT_40,
             constants.PERCENTILE_COUNT_45, constants.PERCENTILE_COUNT_50, constants.PERCENTILE_COUNT_55,
@@ -352,22 +352,20 @@ class HuggingFace(SbkGenAI):
                         # Calculate the total count for this percentile
                         total_count = sum(values)
                         # Extract the percentile number from the constant name
-                        percentile_str = const.replace('PERCENTILE_COUNT_', '').replace('_', '.')
+                        percentile_str = const.replace('Percentile_Count_', '').replace('_', '.')
                         try:
                             percentile = float(percentile_str)
                             percentile_counts.append((percentile, total_count))
-                        except (ValueError, TypeError):
-                            continue
-                except (KeyError, AttributeError):
-                    continue
-            
+                        except (ValueError, TypeError) as e:
+                            raise ValueError(f"Invalid percentile value: {percentile_str}, error: {e}")
+                except (KeyError, AttributeError) as e:
+                    raise ValueError(f"Invalid total percentile value: {const}, error: {e}")
+
             if not percentile_counts:
                 continue
                 
             # Sort by percentile
             percentile_counts.sort()
-
-            print(percentile_counts)
             
             # Format the data for the prompt
             storage_line = f"{i}. {stat.storage} ({stat.action}):\n"
