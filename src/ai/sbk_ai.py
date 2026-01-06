@@ -190,7 +190,10 @@ class SbkAI:
         analysis_methods = [
             'get_throughput_analysis',
             'get_latency_analysis',
-            'get_model_description'
+            'get_model_description',
+            'get_total_mb_analysis',
+            'get_percentile_histogram_analysis',
+            'get_performance_summary',
         ]
 
         print("AI analysis. Please wait...", end = "", flush=True)

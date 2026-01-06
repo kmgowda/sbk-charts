@@ -274,10 +274,10 @@ class HuggingFace(SbkGenAI):
         return _call_llm_for_analysis(prompt)
 
     def get_total_mb_analysis(self):
-        pass
+        return False, "Not yet implemented"
 
     def get_percentile_histogram_analysis(self):
-        pass
+        return False, "Not yet implemented"
 
     def get_performance_summary(self):
-        pass
+        return False, "Not yet implemented"
