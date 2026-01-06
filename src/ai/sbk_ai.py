@@ -190,7 +190,6 @@ class SbkAI:
         analysis_methods = [
             'get_throughput_analysis',
             'get_latency_analysis',
-            'get_model_description',
             'get_total_mb_analysis',
             'get_percentile_histogram_analysis',
             'get_performance_summary',
@@ -205,7 +204,7 @@ class SbkAI:
                 for method in analysis_methods
             }
 
-        return_on_error = False
+        return_on_error = True
         completed = 0
         total = len(future_to_method)
         start_time = time.time()
@@ -240,21 +239,20 @@ class SbkAI:
                         start_time = time.time()   # one complete , we can wait for some more time
                         if not status:
                             print(f"\nError in {method_name}: {analysis}")
-                            return_on_error = True
+                        else:
+                            return_on_error = False  # once success , then we can continue
                     except TimeoutError:
                         # Put the future back to be processed in the next iteration
                         future_to_method[future] = method_name
                     except Exception as e:
                         print(f"\nError processing {method_name}: {str(e)}")
-                        return_on_error = True
 
             except Exception as e:
                 print(f"\nUnexpected error: {str(e)}")
-                return_on_error = True
                 break
 
         if return_on_error:
-            return
+            return False
         print()
 
         # Format and add AI analysis to the worksheet
@@ -290,7 +288,7 @@ class SbkAI:
             
             # Add model description
             dec_cell = sheet.cell(row=max_row, column=8)
-            dec_cell.value = results['get_model_description'][1]
+            dec_cell.value = self.ai_instance.get_model_description()[1]
             dec_cell.font = Font(size=16, color="00CF00")  # Green text for model info
 
             # Add Throughput Analysis section
@@ -352,7 +350,8 @@ class SbkAI:
         except Exception as e:
             print(f"Error adding analysis to summary sheet: {str(e)}")
             traceback.print_exc()
-        return
+
+        return True
 
     def create_graphs(self):
         """
@@ -377,6 +376,7 @@ class SbkAI:
             print("AI is not enabled!. you can use the subcommands ["+" ".join(self.classes.keys())+"] to enable it.")
         else:
             self.load_workbook()
-            self.add_ai_analysis()
+            if self.add_ai_analysis():
+                print(f"File updated with graphs and AI documentation: {self.args.ofile}")
             self.save_workbook()
-            print(f"File updated with graphs and AI documentation: {self.args.ofile}")
+
