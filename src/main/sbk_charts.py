@@ -28,7 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from src.ai.sbk_ai import SbkAI
 from src.sheets.sheets import SbkMultiSheets
 from src.main.sbk_version import __sbk_version__
-from src.parser.sbk_parser import SbkParser
+from src.parser.sbk_parser import get_sbk_parser
 
 SBK_BANNER_FILE = os.path.join(os.path.curdir, 'src/main', 'banner.txt')
 
@@ -49,7 +49,7 @@ def sbk_charts():
     Returns
     - None
     """
-    parser = SbkParser()
+    parser = get_sbk_parser()
     ch = SbkAI(__sbk_version__)
     ch.add_args(parser)
     args = parser.parse_args()
