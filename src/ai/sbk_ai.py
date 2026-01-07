@@ -419,6 +419,6 @@ class SbkAI:
         else:
             self.load_workbook()
             if self.add_ai_analysis():
-                print(f"File updated with graphs and AI documentation: {self.args.ofile}")
+                print(f"File updated with graphs and AI documentation: {self.file}")
             self.save_workbook()
 
