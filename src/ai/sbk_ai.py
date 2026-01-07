@@ -88,18 +88,6 @@ class SbkAI:
     This class adds AI-generated performance analysis to storage benchmark results,
     including throughput and latency analysis using Hugging Face models.
     """
-    
-    def initialize(self, file, ai_instance):
-        """
-        Initialize the SbkAI instance.
-        
-        Args:
-            file (str): Path to the benchmark results file.
-            ai_instance: the ai_instance to create the AI summary
-        """
-        self.file =  file
-        self.ai_instance = ai_instance
-        self.web = None
 
     def __init__(self):
         self.classes = discover_custom_ai_classes()
