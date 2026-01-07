@@ -10,12 +10,21 @@
 """
 SBK AI Analysis Module
 
-This module provides AI-powered analysis capabilities for storage benchmark results.
-It extends the SbkMultiCharts class to add AI-generated performance analysis
-for storage system benchmarks, including throughput and latency analysis.
+This module provides AI-powered analysis of storage benchmark results through
+the SbkAI class. It enables automated generation of performance insights,
+including throughput and latency analysis, by leveraging various AI backends.
 
-The module integrates with Hugging Face models to provide intelligent insights
-into storage performance metrics.
+Supported AI Backends:
+- Hugging Face (default)
+- LM Studio (local models)
+- Ollama (local LLMs)
+- No-AI (stub implementation)
+
+Key Features:
+- Automated performance analysis of benchmark results
+- Support for multiple AI providers
+- Threaded execution for parallel analysis
+- Configurable timeouts and error handling
 """
 import time
 from typing import final
@@ -82,11 +91,21 @@ def get_columns_values(ws):
 
 @final
 class SbkAI:
-    """
-    SBK AI Analysis class that extends SbkMultiCharts to provide AI-powered analysis.
+    """SBK AI Analysis Engine
     
-    This class adds AI-generated performance analysis to storage benchmark results,
-    including throughput and latency analysis using Hugging Face models.
+    This class provides AI-powered analysis of storage benchmark results.
+    It supports multiple AI backends and provides methods for generating
+    performance insights, including throughput and latency analysis.
+    
+    Attributes:
+        classes (dict): Dictionary of available AI backend classes
+        ai_instance_map (dict): Mapping of AI instances by name
+        subparsers: Command-line argument subparsers
+        file (str): Path to the output Excel file
+        ai_instance: Active AI backend instance
+        web: Web interface component (if enabled)
+        timeout_seconds (int): Timeout for AI operations in seconds
+        no_threads (bool): Flag to disable threaded execution
     """
 
     def __init__(self):

@@ -13,9 +13,46 @@ results. The generated xlsx file contains the graphs of latency percentile varia
 The [SBK framework](https://github.com/kmgowda/SBK) can be used to benchmark the performance of various storage engines like RocksDB, LMDB, LevelDB, etc. and to generate the performance results in CSV format.
 The sbk-charts application can be used to visualize these results in a more user-friendly way.
 
-**sbk-charts uses the AI to generate the descriptive summary about the throughput and latency analysis**
+**sbk-charts uses AI to generate descriptive summaries about throughput and latency analysis**
 
-Running SBK Charts:
+## AI Backends
+
+SBK Charts supports multiple AI backends for analysis:
+
+1. **LM Studio** - For local AI inference with LM Studio
+2. **Ollama** - For running local LLMs through the Ollama API
+3. **Hugging Face** - For cloud-based AI analysis (default)
+
+### LM Studio Setup
+
+1. Install [LM Studio](https://lmstudio.ai/)
+2. Download and host a suitable model (e.g., Mistral 7B, Llama 2)
+3. Start the LM Studio server
+
+Example usage:
+```bash
+sbk-charts -i input.csv -o output.xlsx lmstudio --lm-model mistral
+```
+
+### Ollama Setup
+
+1. Install [Ollama](https://ollama.com/)
+2. Pull required models:
+   ```bash
+   ollama pull llama3
+   ollama pull mistral
+   ```
+
+Example usage:
+```bash
+sbk-charts -i input.csv -o output.xlsx ollama --model llama3
+```
+
+For more details, see the documentation in `src/custom_ai/<backend>/README.md`
+
+---
+
+## Running SBK Charts:
 
 ```
 <SBK directory>./sbk-charts
@@ -84,7 +121,13 @@ Reading : FILE, ROCKSDB
 ```
 you can see the sample [fil read in csv](./samples/charts/sbk-file-read.csv) and the [rocksdb red in csv](./samples/charts/sbk-rocksdb-read.csv) as input files and the generated output file is [file and rocksdb read comparesion](./samples/charts/sbk-file-rocksdb-read.xlsx)
 
-## python Virtual Environment setup for sbk-charts
+## Python Virtual Environment Setup
+
+### Prerequisites
+- Python 3.8 or higher
+- pip (Python package installer)
+
+### Setup Instructions
 
 ```
 #create the env

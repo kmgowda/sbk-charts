@@ -8,11 +8,23 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 ##
 
-"""sbk_charts.custom_ai.ollama
+"""Ollama AI Integration Module
 
-Integration with Ollama's REST API for local model inference.
-This module provides the Ollama class that interfaces with
-a locally running Ollama server for generating AI analysis.
+This module provides integration with the Ollama server for local LLM inference,
+enabling AI-powered analysis of storage benchmark results without requiring
+cloud services. It supports any model compatible with the Ollama runtime.
+
+Key Features:
+- Local LLM inference using Ollama
+- Support for any Ollama-compatible models (e.g., llama3, mistral)
+- Configurable model parameters and timeouts
+- Automatic server health checking
+- Connection pooling for performance
+
+Requirements:
+- Ollama server running locally (https://ollama.ai/)
+- Desired models pre-downloaded via 'ollama pull <model>'
+- Network access to the Ollama server (default: localhost:11434)
 """
 
 import requests
@@ -24,10 +36,20 @@ DEFAULT_MODEL = "llama3.1"  # Default model
 
 
 class Ollama(SbkGenAI):
-    """Adapter for using Ollama's REST API for local model inference.
-
-    This class provides an interface to a locally running Ollama server
-    for generating AI-powered analysis of storage benchmark results.
+    """Ollama AI Analysis Backend
+    
+    This class implements the SbkGenAI interface to provide AI-powered analysis
+    using a locally running Ollama server. It handles all communication with
+    the Ollama REST API and formats benchmark data for effective analysis.
+    
+    Configuration Options:
+    - Server URL: Configurable via --ollama-url (default: http://localhost:11434)
+    - Model: Specify with --ollama-model (default: llama3.1)
+    - Temperature: Control response randomness with --ollama-temperature (0.0-1.0)
+    - Timeout: Set request timeout with --ollama-timeout (seconds)
+    
+    The implementation includes automatic reconnection and error handling to
+    ensure robust operation even if the Ollama server is temporarily unavailable.
     """
 
     def __init__(self):

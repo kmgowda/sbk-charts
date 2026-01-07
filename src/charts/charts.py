@@ -8,19 +8,24 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 ##
 
-"""sbk_charts.charts
+"""SBK Charts Module
 
-This module contains the SbkCharts class which is responsible for creating
-charts (line and bar) in an Excel workbook produced by the SBK benchmarking
-pipeline. Charts include latency percentiles, throughput (MB/sec and
-records/sec) and histograms for percentile counts.
+This module provides the SbkCharts class for generating visual representations
+of storage benchmark results in Excel workbooks. It creates various charts
+including latency percentiles, throughput metrics (MB/sec and records/sec),
+and percentile distribution histograms.
 
-The module uses openpyxl for chart creation and manipulation. Docstrings in
-this file describe the main responsibilities, inputs and outputs of the
-public API; no behavior or logic is modified by these additions.
+Key Features:
+- Line and bar chart generation for performance metrics
+- Support for multiple storage systems and test scenarios
+- Customizable chart styling and formatting
+- Integration with openpyxl for Excel workbook manipulation
+
+Note: This module focuses on visualization only and does not modify the
+underlying benchmark data.
 """
 
-# sbk_charts :  Storage Benchmark Kit - Charts
+# Storage Benchmark Kit - Charts Module
 import os
 from collections import OrderedDict
 from typing import final

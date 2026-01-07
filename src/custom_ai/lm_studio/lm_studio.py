@@ -7,12 +7,22 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 ##
+"""LM Studio AI Integration Module
 
-"""sbk_charts.custom_ai.local_lm
+This module provides integration with LM Studio's local inference server for
+generating AI-powered analysis of storage benchmark results. It allows running
+AI analysis locally without requiring cloud-based AI services.
 
-Integration with LM Studio's Python SDK for local model inference.
-This module provides the LocalLMAnalysis class that interfaces with
-a locally running LM Studio instance for generating AI analysis.
+Key Features:
+- Local model inference using LM Studio
+- Support for various open-source LLMs
+- Configurable model parameters (temperature, max tokens)
+- Automatic reconnection on connection failures
+
+Requirements:
+- LM Studio application running locally
+- Compatible LLM model loaded in LM Studio
+- Network access to the LM Studio server (default: localhost:1234)
 """
 
 from openai import OpenAI
@@ -24,10 +34,19 @@ API_KEY = "lm-studio"
 
 
 class LmStudio(SbkGenAI):
-    """Adapter for using LM Studio's Python SDK for local model inference.
-
-    This class provides an interface to a locally running LM Studio instance
-    for generating AI-powered analysis of storage benchmark results.
+    """LM Studio AI Analysis Backend
+    
+    This class implements the SbkGenAI interface to provide AI-powered analysis
+    using a locally running LM Studio instance. It handles communication with
+    the LM Studio server and formats the benchmark data for analysis.
+    
+    Configuration:
+    - Server URL: Configurable, defaults to http://localhost:1234/v1
+    - Model: Can be specified via command line (default: openai/gpt-oss-20b)
+    - Temperature: Controls randomness (default: 0.4)
+    - Max Tokens: Limits response length (default: 1800)
+    
+    The class automatically handles connection management and error recovery.
     """
 
     def __init__(self):
