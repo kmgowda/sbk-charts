@@ -4,6 +4,33 @@ This directory contains LM  AI implementations for the sbk-charts application.
 To use the LM studio for analysis make sure that you hare LMG studio server is up and running locally in your machine or in your reachable network.
 you need to ensure that model is loaded properly at LM studio.
 
+
+- Inherits from `SbkGenAI` class for consistent interface
+- Implements all required analysis methods:
+  - `get_throughput_analysis()`
+  - `get_latency_analysis()`
+  - `get_total_mb_analysis()`
+  - `get_percentile_histogram_analysis()`
+- Uses LM Studio's local AI inference capabilities for analysis
+- Supports local model hosting without internet dependency
+
+## Prerequisites
+
+1. Install [LM Studio](https://lmstudio.ai/)
+2. Download and host a suitable model (e.g., Mistral 7B, Llama 2, etc.)
+3. Start the LM Studio server
+4. Ensure LM Studio server is running and accessible
+
+## Configuration
+
+The LM Studio AI backend requires the following configuration:
+
+- LM Studio server URL (default: `http://localhost:1234`)
+- Model name to use for analysis
+- API key (if required by your LM Studio setup)
+
+## Usage
+
 The example command to use the Hugging Face implementation is:
 
 ```

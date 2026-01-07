@@ -59,4 +59,74 @@ sbk-charts -i ./samples/charts/sbk-file-read.csv,./samples/charts/sbk-rocksdb-re
 # With custom model
 sbk-charts -i ./samples/charts/sbk-file-read.csv -o ./samples/charts/sbk-file-read-ollama.xlsx ollama --model mistral
 
+# Ollama Integration with SBK Charts
 
+The Ollama implementation integrates seamlessly with the existing SBK Charts framework:
+
+- Inherits from `SbkGenAI` class for consistent interface
+- Implements all required analysis methods:
+  - `get_throughput_analysis()`
+  - `get_latency_analysis()`
+  - `get_total_mb_analysis()`
+  - `get_percentile_histogram_analysis()`
+- Uses the same prompt templates as other AI implementations
+- Maintains same return format (`success, result` tuple)
+
+## Prerequisites
+
+### Ollama Installation
+
+Install Ollama from https://ollama.com/
+Pull required models:
+```bash
+ollama pull llama3
+ollama pull mistral
+```
+
+## Python Dependencies
+
+- **requests library**
+- **ollama Python package** (if using Ollama's Python client)
+
+# Error Handling
+
+The implementation includes robust error handling for:
+- Ollama server connectivity issues
+- Model loading failures
+- API response errors
+- Network timeouts
+- Invalid configuration parameters
+
+# Performance Considerations
+
+- **Local Processing**: Analysis is performed locally, which may be slower than cloud-based solutions
+- **Memory Usage**: LLMs require significant memory resources
+- **Model Size**: Larger models will take longer to process
+- **Network Latency**: If Ollama is running remotely, network latency affects performance
+
+# Troubleshooting
+
+## Common Issues
+
+- **Ollama Server Not Running**: Ensure Ollama is started (`ollama serve`)
+- **Model Not Pulled**: Pull required model using `ollama pull <model-name>`
+- **Network Connectivity**: Verify Ollama endpoint is accessible
+- **Resource Constraints**: Monitor memory usage during analysis
+
+# Debugging
+
+Enable verbose logging by setting environment variable:
+
+```
+export OLLAMA_DEBUG=1
+```
+
+# Directory Structure
+```
+src/
+└── custom_ai/
+    └── ollama/
+        ├── __init__.py
+        ├── ollama_ai.py          # Main implementation
+        └── README.md             # This document
+```
