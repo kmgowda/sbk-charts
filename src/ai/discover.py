@@ -63,8 +63,8 @@ def discover_custom_ai_classes(package_name: str = "src.custom_ai") -> Dict[str,
 
         try:
             module = importlib.import_module(module_name)
-        except Exception:
-            # Silently skip modules that fail to import
+        except Exception as e:
+            print(f"Importing module {module_name} failed with error : {str(e)}")
             return
 
         # Inspect classes in the module
