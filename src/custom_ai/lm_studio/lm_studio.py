@@ -60,7 +60,7 @@ class LmStudio(SbkGenAI):
         )
         parser.add_argument(
             "--lm-model",
-            help="Model name or path to use (default: None, uses LM Studio's selected model)",
+            help=f"Model name or path to use (default: {self.model}, uses LM Studio's selected model)",
             default="openai/gpt-oss-20b"
         )
         parser.add_argument(
@@ -90,8 +90,8 @@ class LmStudio(SbkGenAI):
             tuple: (success, description) where success is a boolean and
                   description is a string describing the configuration
         """
-        desc = (f" LM Studio at {self.url}\n"
-                f" Model: {self.model or 'LM Studio default'}\n"
+        desc = (f" LM Studio at {self.url},\n"
+                f" Model: {self.model or 'LM Studio default'},\n"
                 f" Temperature: {self.temperature}, Max Tokens: {self.max_tokens}")
         return True, desc
 
