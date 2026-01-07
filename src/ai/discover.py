@@ -21,29 +21,29 @@ from src.genai.genai import SbkGenAI
 def discover_custom_ai_classes(package_name: str = "src.custom_ai") -> Dict[str, type]:
     """
     Discover and import all concrete subclasses of SbkGenAI defined in the
-    `package_name` package (by default `src.custom_ai`).
+    `package_name` package and its subpackages.
 
     Behavior and notes:
-    - Attempts to import the package and each submodule found in the package
-      directory using pkgutil.iter_modules.
-    - If the `src` package is not on sys.path, the function will add the
-      repository root (one level above the `src` directory) to sys.path so the
-      import can succeed when running from the repository root.
-    - Only returns classes that are subclasses of `SbkGenAI` (excluding the
-      base class itself) and are not abstract (inspect.isabstract == False).
+    - Recursively searches through all subpackages in the specified package
+    - Attempts to import each module found in the package and subpackages
+    - Only returns classes that are concrete subclasses of `SbkGenAI`
+    - Handles both Python files and package directories
+
+    Args:
+        package_name: The root package name to search in (default: "src.custom_ai")
 
     Returns:
         Dict[str, type]: mapping from class name to the class object for each
         discovered concrete SbkGenAI implementation.
     """
-
     discovered: Dict[str, type] = {}
+    processed_modules = set()
 
     # Ensure the repo root (parent of `src`) is on sys.path so imports like
     # `src.custom_ai` succeed when running tools from the project root.
     try:
         pkg = importlib.import_module(package_name)
-    except Exception:
+    except ImportError:
         # Try to add the parent of the `src` directory to sys.path
         this_file = Path(__file__).resolve()
         repo_root = this_file.parents[1]  # parent of `src`
@@ -52,22 +52,23 @@ def discover_custom_ai_classes(package_name: str = "src.custom_ai") -> Dict[str,
             sys.path.insert(0, repo_root_str)
         pkg = importlib.import_module(package_name)
 
-    # Iterate modules in the package and import them
     if not hasattr(pkg, "__path__"):
         return discovered
 
-    for finder, name, ispkg in pkgutil.iter_modules(pkg.__path__):
-        # import the module
-        full_name = f"{pkg.__name__}.{name}"
-        try:
-            module = importlib.import_module(full_name)
-        except Exception:
-            # Silently skip modules that fail to import; callers can decide how
-            # to handle missing dependencies.
-            continue
+    def process_module(module_name: str):
+        """Helper function to process a single module and its submodules"""
+        if module_name in processed_modules:
+            return
+        processed_modules.add(module_name)
 
-        # inspect classes in the module
-        for _name, obj in inspect.getmembers(module, inspect.isclass):
+        try:
+            module = importlib.import_module(module_name)
+        except Exception:
+            # Silently skip modules that fail to import
+            return
+
+        # Inspect classes in the module
+        for name, obj in inspect.getmembers(module, inspect.isclass):
             # Ensure class is defined in the module we just imported
             if obj.__module__ != module.__name__:
                 continue
@@ -79,5 +80,17 @@ def discover_custom_ai_classes(package_name: str = "src.custom_ai") -> Dict[str,
 
             if is_subclass and obj is not SbkGenAI and not inspect.isabstract(obj):
                 discovered[obj.__name__.lower()] = obj
+
+    # Process the root package
+    process_module(package_name)
+
+    # Process all submodules and subpackages
+    for finder, name, ispkg in pkgutil.walk_packages(pkg.__path__, package_name + '.'):
+        if ispkg:
+            # If it's a package, process it
+            process_module(name)
+        else:
+            # If it's a module, process it
+            process_module(name)
 
     return discovered
