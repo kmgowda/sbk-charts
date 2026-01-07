@@ -22,6 +22,9 @@ stdout.
 
 import os
 import sys
+
+from src.charts.multicharts import SbkMultiCharts
+
 # Add the project root to the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -50,14 +53,22 @@ def sbk_charts():
     - None
     """
     parser = get_sbk_parser()
-    ch = SbkAI(__sbk_version__)
+    ch = SbkAI()
     ch.add_args(parser)
     args = parser.parse_args()
     print(open(SBK_BANNER_FILE, 'r').read())
     print("Sbk Charts Version : " + __sbk_version__)
     print('Input Files : ', args.ifiles)
     print('Output File : ', args.ofile)
+
+    # create the excel sheet file
     sh = SbkMultiSheets(args.ifiles.split(","), args.ofile)
     sh.create_sheets()
+
+    # create graphs in excel file
+    excel_graphs = SbkMultiCharts(args.ofile)
+    excel_graphs.create_graphs()
+
+    # create AI Summary in excel file
     ch.parse_args(args)
-    ch.create_graphs()
+    ch.add_performance_details()

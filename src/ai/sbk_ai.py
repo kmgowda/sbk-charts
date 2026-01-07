@@ -27,7 +27,6 @@ from src.charts import constants
 from src.charts.utils import is_r_num_sheet, get_columns_from_worksheet, get_storage_name_from_worksheet
 from src.charts.utils import get_time_unit_from_worksheet, get_action_name_from_worksheet
 from src.sheets import constants as sheets_constants
-from src.charts.multicharts import SbkMultiCharts
 from openpyxl.styles import Font, Border, Side, Alignment   
 import textwrap
 
@@ -88,27 +87,27 @@ class SbkAI:
     
     This class adds AI-generated performance analysis to storage benchmark results,
     including throughput and latency analysis using Hugging Face models.
-    
-    Attributes:
-        version (str): Version information for the benchmark.
-        ai (HuggingFace): Instance of HuggingFace for AI analysis.
     """
     
-    def __init__(self, version):
+    def initialize(self, file, ai_instance):
         """
         Initialize the SbkAI instance.
         
         Args:
-            version (str): Version information for the benchmark.
             file (str): Path to the benchmark results file.
+            ai_instance: the ai_instance to create the AI summary
         """
-        self.version = version
+        self.file =  file
+        self.ai_instance = ai_instance
+        self.web = None
+
+    def __init__(self):
         self.classes = discover_custom_ai_classes()
         self.ai_instance_map = dict()
-        self.ai_instance = None
-        self.args = None
-        self.wb = None
         self.subparsers = None
+        self.file =  None
+        self.ai_instance = None
+        self.web = None
 
     def add_args(self, parser):
         self.subparsers = parser.add_subparsers(dest="ai_class", help="Available sub-commands", required=False)
@@ -124,16 +123,16 @@ class SbkAI:
 
 
     def parse_args(self, args):
-        self.args = args
-        if self.args.ai_class:
-            self.ai_instance = self.ai_instance_map[self.args.ai_class.lower()]
+        self.file = args.ofile
+        if args.ai_class:
+            self.ai_instance = self.ai_instance_map[args.ai_class.lower()]
             self.ai_instance.parse_args(args)
 
     def load_workbook(self):
-        self.wb = load_workbook(self.args.ofile)
+        self.wb = load_workbook(self.file)
 
     def save_workbook(self):
-        self.wb.save(self.args.ofile)
+        self.wb.save(self.file)
 
     def get_storage_stats(self):
         """
@@ -410,7 +409,7 @@ class SbkAI:
 
         return True
 
-    def create_graphs(self):
+    def add_performance_details(self):
         """
         Generate all performance graphs and AI analysis for the benchmark results.
         
@@ -427,8 +426,6 @@ class SbkAI:
         After generating all graphs and analysis, it saves the results to the
         Excel workbook and prints a confirmation message.
         """
-        excel_graphs =  SbkMultiCharts(self.version, self.args.ofile)
-        excel_graphs.create_graphs()
         if not self.ai_instance:
             print("AI is not enabled!. you can use the subcommands ["+" ".join(self.classes.keys())+"] to enable it.")
         else:

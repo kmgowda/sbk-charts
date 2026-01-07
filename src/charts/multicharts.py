@@ -60,8 +60,8 @@ class SbkMultiCharts(SbkCharts):
     def __init_subclass__(cls, **kwargs):
         raise TypeError("Cannot create subclass for SbkMultiSheets")
 
-    def __init__(self, version, file):
-        super().__init__(version, file)
+    def __init__(self, file):
+        super().__init__( file)
 
 
     def check_time_units(self):

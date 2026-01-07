@@ -34,7 +34,7 @@ from openpyxl_image_loader import SheetImageLoader
 import src.sheets.constants as sheets_constants
 from src.charts import constants
 from src.charts.utils import get_columns_from_worksheet, get_time_unit_from_worksheet, get_storage_name_from_worksheet
-
+from src.version.sbk_version import __sbk_version__
 
 class SbkCharts:
     """Create and manage Excel charts for SBK results.
@@ -46,7 +46,6 @@ class SbkCharts:
       into new worksheets in the workbook.
 
     Initialization
-    - version: version string shown in outputs (no strict constraints)
     - file: path to the workbook file to open and modify
 
     Public highlights
@@ -56,11 +55,10 @@ class SbkCharts:
     Note: This docstring only documents behavior; no code paths are altered.
     """
 
-    def __init__(self, version, file):
+    def __init__(self,  file):
         """Load workbook and initialize derived parameters.
 
         Parameters
-        - version (str): version string for the SBK run
         - file (str): path to the Excel workbook file to open
 
         Returns
@@ -70,7 +68,7 @@ class SbkCharts:
         - FileNotFoundError: if the specified file does not exist
         - InvalidFileException: if the file is not a valid Excel workbook
         """
-        self.version = version
+        self.version = __sbk_version__
         self.file = file
         self.wb = load_workbook(self.file)
         self.time_unit = get_time_unit_from_worksheet(self.wb[sheets_constants.R_PREFIX + "1"])
