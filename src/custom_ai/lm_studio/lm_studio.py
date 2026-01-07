@@ -15,16 +15,15 @@ This module provides the LocalLMAnalysis class that interfaces with
 a locally running LM Studio instance for generating AI analysis.
 """
 
-from lmstudio import LMStudioClient
+from openai import OpenAI
 from src.genai.genai import SbkGenAI
 
 # Default LM Studio configuration
-DEFAULT_HOST = "localhost"
-DEFAULT_PORT = 1234
-DEFAULT_TIMEOUT = 60  # seconds
+BASE_URL = "http://localhost:1234/v1"
+API_KEY = "lm-studio"
 
 
-class lm_studio(SbkGenAI):
+class LmStudio(SbkGenAI):
     """Adapter for using LM Studio's Python SDK for local model inference.
 
     This class provides an interface to a locally running LM Studio instance
@@ -33,10 +32,8 @@ class lm_studio(SbkGenAI):
 
     def __init__(self):
         super().__init__()
-        self.host = DEFAULT_HOST
-        self.port = DEFAULT_PORT
-        self.timeout = DEFAULT_TIMEOUT
-        self.model = None
+        self.url = BASE_URL
+        self.model = "openai/gpt-oss-20b"
         self.temperature = 0.4
         self.max_tokens = 1800
         self.client = None
@@ -48,7 +45,7 @@ class lm_studio(SbkGenAI):
             bool: True if connection was successful, False otherwise
         """
         try:
-            self.client = LMStudioClient(host=self.host, port=self.port, timeout=self.timeout)
+            self.client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
             return True
         except Exception as e:
             print(f"Failed to connect to LM Studio: {str(e)}")
@@ -57,26 +54,14 @@ class lm_studio(SbkGenAI):
     def add_args(self, parser):
         """Add command-line arguments for LM Studio configuration."""
         parser.add_argument(
-            "--lm-host",
-            help=f"LM Studio server host (default: {DEFAULT_HOST})",
-            default=DEFAULT_HOST
-        )
-        parser.add_argument(
-            "--lm-port",
-            type=int,
-            help=f"LM Studio server port (default: {DEFAULT_PORT})",
-            default=DEFAULT_PORT
-        )
-        parser.add_argument(
-            "--lm-timeout",
-            type=int,
-            help=f"Connection timeout in seconds (default: {DEFAULT_TIMEOUT})",
-            default=DEFAULT_TIMEOUT
+            "--url",
+            help=f"server url (default: {BASE_URL})",
+            default=BASE_URL
         )
         parser.add_argument(
             "--lm-model",
             help="Model name or path to use (default: None, uses LM Studio's selected model)",
-            default=None
+            default="openai/gpt-oss-20b"
         )
         parser.add_argument(
             "--lm-temperature",
@@ -93,9 +78,7 @@ class lm_studio(SbkGenAI):
 
     def parse_args(self, args):
         """Parse command-line arguments."""
-        self.host = args.lm_host
-        self.port = args.lm_port
-        self.timeout = args.lm_timeout
+        self.url = args.url
         self.model = args.lm_model
         self.temperature = args.lm_temperature
         self.max_tokens = args.lm_max_tokens
@@ -107,9 +90,9 @@ class lm_studio(SbkGenAI):
             tuple: (success, description) where success is a boolean and
                   description is a string describing the configuration
         """
-        desc = (f"LM Studio at {self.host}:{self.port}\n"
-                f"Model: {self.model or 'LM Studio default'}\n"
-                f"Temperature: {self.temperature}, Max Tokens: {self.max_tokens}")
+        desc = (f" LM Studio at {self.url}\n"
+                f" Model: {self.model or 'LM Studio default'}\n"
+                f" Temperature: {self.temperature}, Max Tokens: {self.max_tokens}")
         return True, desc
 
     def _call_analysis(self, prompt: str) -> tuple[bool, str]:

@@ -181,64 +181,57 @@ class SbkAI:
             'get_percentile_histogram_analysis',
         ]
 
-        print("AI analysis. Please wait...", end = "", flush=True)
-
         # Run all analysis methods in parallel
-        with ThreadPoolExecutor(max_workers=len(analysis_methods)) as executor:
-            future_to_method = {
-                executor.submit(lambda m=method: run_analysis(m)): method
-                for method in analysis_methods
-            }
-
-        return_on_error = True
-        completed = 0
-        total = len(future_to_method)
+        print("Starting AI analysis. This may take a few minutes...", flush=True)
         start_time = time.time()
-        timeout_seconds = 600
+        timeout_seconds = 300  # 5 minutes total timeout
 
-        while future_to_method:
+        # Create a dictionary to store results
+        results = {}
 
-            # Check total timeout
-            if time.time() - start_time > timeout_seconds:
-                print("\nError: execution time exceeded 10 minutes")
-                # Cancel any remaining futures
-                for future in future_to_method:
-                    future.cancel()
-                raise TimeoutError("execution time exceeded 10 minutes")
+        # Submit all tasks
+        with ThreadPoolExecutor(max_workers=len(analysis_methods)) as executor:
+            # Submit all tasks and store futures
+            future_to_method = {executor.submit(run_analysis, method): method
+                                for method in analysis_methods}
 
-            try:
-                # Wait for the next future to complete with a timeout
+            # Process completed tasks as they finish
+            while future_to_method and (time.time() - start_time) < timeout_seconds:
+                # Wait for the next future to complete, with a timeout
                 done, _ = concurrent.futures.wait(
                     future_to_method.keys(),
-                    timeout=2,  # Check every 2 second for timeouts
+                    timeout=2.0,  # Check every second for timeouts
                     return_when=concurrent.futures.FIRST_COMPLETED
                 )
-                print(".", end="", flush=True)
+
                 # Process completed futures
                 for future in done:
                     method_name = future_to_method.pop(future)
                     try:
-                        method_name, (status, analysis) = future.result(timeout=1)
-                        results[method_name] = (status, analysis)
-                        completed += 1
-                        print(f"\nCompleted {completed}/{total} tasks", end="", flush=True)
-                        start_time = time.time()   # one complete , we can wait for some more time
-                        if not status:
-                            print(f"\nError in {method_name}: {analysis}")
-                        else:
-                            return_on_error = False  # once success , then we can continue
-                    except TimeoutError:
-                        # Put the future back to be processed in the next iteration
-                        future_to_method[future] = method_name
+                        # Get the result with a small timeout to prevent hanging
+                        result_method, result = future.result(timeout=1.0)
+                        results[result_method] = result
+                        print(f"✓ Completed {result_method}")
+                    except concurrent.futures.TimeoutError:
+                        print(f"⚠️ Timeout waiting for {method_name}, skipping...")
                     except Exception as e:
-                        print(f"\nError processing {method_name}: {str(e)}")
+                        print(f"⚠️ Error in {method_name}: {str(e)}")
+                        results[method_name] = (False, str(e))
 
-            except Exception as e:
-                print(f"\nUnexpected error: {str(e)}")
-                break
+                # Print progress
+                remaining = len(future_to_method)
+                if remaining > 0:
+                    print(f"⏳ Waiting for {remaining} more analysis tasks...")
 
-        if return_on_error:
-            return False
+            # Cancel any remaining futures
+            for future in future_to_method:
+                future.cancel()
+
+            # If we timed out, add placeholders for any missing results
+            for method_name in analysis_methods:
+                if method_name not in results:
+                    results[method_name] = (False, "Analysis timed out or failed")
+
         print()
 
         # Format and add AI analysis to the worksheet
