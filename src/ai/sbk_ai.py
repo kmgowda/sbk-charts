@@ -96,8 +96,11 @@ class SbkAI:
         self.file =  None
         self.ai_instance = None
         self.web = None
+        self.timeout_seconds = 120
 
     def add_args(self, parser):
+        parser.add_argument("-secs", "--seconds", help=f"Timeout seconds, default : {self.timeout_seconds}",
+                            default=self.timeout_seconds)
         self.subparsers = parser.add_subparsers(dest="ai_class", help="Available sub-commands", required=False)
         parser.set_defaults(ai_class=None)
         for name, cls in self.classes.items():
@@ -112,6 +115,7 @@ class SbkAI:
 
     def parse_args(self, args):
         self.file = args.ofile
+        self.timeout_seconds = args.seconds
         if args.ai_class:
             self.ai_instance = self.ai_instance_map[args.ai_class.lower()]
             self.ai_instance.parse_args(args)
@@ -161,17 +165,15 @@ class SbkAI:
         """
         # Set storage statistics for AI analysis
         self.ai_instance.set_storage_stats(self.get_storage_stats())
-        
-        results = {}
-        
-        def run_analysis(method_name):
+
+        def run_analysis(function_name):
             try:
-                method = getattr(self.ai_instance, method_name)
-                result = method()
-                return method_name,result
+                method = getattr(self.ai_instance, function_name)
+                ret = method()
+                return function_name,ret
             except Exception as e:
-                print(f"Error in {method_name}: {str(e)}")
-                return method_name, (False, str(e))
+                print(f"Error in {function_name}: {str(e)}")
+                return function_name, (False, str(e))
         
         # List of AI analysis methods to run in parallel
         analysis_methods = [
@@ -184,7 +186,6 @@ class SbkAI:
         # Run all analysis methods in parallel
         print("Starting AI analysis. This may take a few minutes...", flush=True)
         start_time = time.time()
-        timeout_seconds = 300  # 5 minutes total timeout
 
         # Create a dictionary to store results
         results = {}
@@ -196,7 +197,7 @@ class SbkAI:
                                 for method in analysis_methods}
 
             # Process completed tasks as they finish
-            while future_to_method and (time.time() - start_time) < timeout_seconds:
+            while future_to_method and (time.time() - start_time) < self.timeout_seconds:
                 # Wait for the next future to complete, with a timeout
                 done, _ = concurrent.futures.wait(
                     future_to_method.keys(),
