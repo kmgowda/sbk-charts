@@ -11,7 +11,7 @@
 """sbk_charts.custom_ai.ollama
 
 Integration with Ollama's REST API for local model inference.
-This module provides the OllamaAI class that interfaces with
+This module provides the Ollama class that interfaces with
 a locally running Ollama server for generating AI analysis.
 """
 
