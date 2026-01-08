@@ -183,5 +183,61 @@ sbk-charts -i input.csv -o output.xlsx ollama
 ```
 
 For more details, see the documentation in [custom AI models](src/custom_ai/README.md)
+
+## Contributing
+
+We welcome and appreciate contributions from the open-source community!
+Whether you're interested in improving the code, enhancing documentation, or adding new AI backend models, your contributions help make SBK Charts better for everyone.
+
+### How to Contribute
+
+1. **Fork the repository** and create your feature branch (`git checkout -b feature/amazing-feature`)
+2. **Commit your changes** with clear, descriptive messages
+3. **Push to the branch** (`git push origin feature/amazing-feature`)
+4. **Open a Pull Request** with a clear description of your changes
+
+### Areas Needing Contributions
+
+#### 1. Code Improvements
+- Performance optimizations
+- Bug fixes
+- New features and enhancements
+- Test coverage improvements
+
+#### 2. Documentation
+- Improve existing documentation
+- Add usage examples
+- Create tutorials or guides
+- Translate documentation to other languages
+
+#### 3. AI Model Integrations
+We're particularly interested in expanding our AI capabilities. You can help by:
+- Adding support for new AI providers (e.g., OpenAI, Anthropic, local LLMs)
+- Improving prompt engineering for better analysis
+- Adding new types of performance analysis
+- Supporting more benchmark result formats
+
+### Setting Up for Development
+Set up the development environment as described in the [Python Virtual Environment Setup](#python-virtual-environment-setup) section
+
+### Code Style
+
+- Follow [PEP 8](https://www.python.org/dev/peps/pep-0008/) for Python code
+- Use type hints for better code clarity
+- Write docstrings for all public functions and classes
+- Keep commits atomic and focused
+
+### Reporting Issues
+
+Found a bug or have a feature request? Please open an issue on our [GitHub Issues](https://github.com/kmgowda/sbk-charts/issues) page with:
+- A clear description of the issue
+- Steps to reproduce
+- Expected vs actual behavior
+- Any relevant screenshots or logs
+
+### License
+
+By contributing, you agree that your contributions will be licensed under the [Apache License 2.0](LICENSE).
+
 ---
 
