@@ -53,15 +53,16 @@ warning_msg = ("The AI may hallucinate !. "
 
 
 def get_t_num_sheet_name(r_num_name):
-    """Return the corresponding T-sheet name for an R-sheet name.
+    """
+    Return the corresponding T-sheet name for an R-sheet name.
 
     Example: 'R1' -> 'T1'
 
-    Parameters
-    - r_num_name (str): R-sheet name
+    Parameters:
+        r_num_name (str): R-sheet name
 
-    Returns
-    - str: corresponding T-sheet name
+    Returns:
+        str: corresponding T-sheet name
     """
     return sheets_constants.T_PREFIX + r_num_name[1:]
 
@@ -70,11 +71,15 @@ def get_columns_values(ws):
     """
     Extract column values from a worksheet, excluding metadata columns.
 
+    This function processes the data in a worksheet to extract all relevant
+    performance metrics while excluding metadata columns like ID, HEADER, TYPE,
+    STORAGE, ACTION, and LATENCY_TIME_UNIT.
+
     Args:
         ws (openpyxl.worksheet.worksheet.Worksheet): The worksheet to extract data from.
 
     Returns:
-        dict: Dictionary mapping column names to their values.
+        dict: Dictionary mapping column names to their values as lists
     """
     columns = get_columns_from_worksheet(ws)
     ret = dict()
@@ -91,24 +96,38 @@ def get_columns_values(ws):
 
 @final
 class SbkAI:
-    """SBK AI Analysis Engine
+    """
+    SBK AI Analysis Engine
     
     This class provides AI-powered analysis of storage benchmark results.
     It supports multiple AI backends and provides methods for generating
     performance insights, including throughput and latency analysis.
     
+    The engine handles the complete workflow from loading benchmark data,
+    running AI analyses in parallel, formatting results into Excel sheets,
+    and saving the enhanced workbook with performance insights.
+
     Attributes:
-        classes (dict): Dictionary of available AI backend classes
-        ai_instance_map (dict): Mapping of AI instances by name
-        subparsers: Command-line argument subparsers
-        file (str): Path to the output Excel file
-        ai_instance: Active AI backend instance
+        classes (dict): Dictionary of available AI backend classes discovered at runtime
+        ai_instance_map (dict): Mapping of AI instances by name for easy access
+        subparsers: Command-line argument subparsers for configuring different AI backends
+        file (str): Path to the output Excel file being processed
+        ai_instance: Active AI backend instance currently in use
         web: Web interface component (if enabled)
-        timeout_seconds (int): Timeout for AI operations in seconds
-        no_threads (bool): Flag to disable threaded execution
+        timeout_seconds (int): Timeout for AI operations in seconds, default 120
+        no_threads (bool): Flag to disable threaded execution for debugging purposes, default False
     """
 
     def __init__(self):
+        """
+        Initialize the SbkAI analysis engine.
+
+        This constructor discovers all available AI backend classes and sets up
+        the basic configuration for analysis execution.
+
+        The discovery process uses reflection to find all classes that implement
+        the AI interface in the custom_ai module.
+        """
         self.classes = discover_custom_ai_classes()
         self.ai_instance_map = dict()
         self.subparsers = None
@@ -119,6 +138,19 @@ class SbkAI:
         self.no_threads = False
 
     def add_args(self, parser):
+        """
+        Add command-line arguments for AI configuration to the argument parser.
+
+        This method configures the command-line interface with options specific
+        to AI analysis, including timeout settings and threading controls.
+
+        Args:
+            parser (argparse.ArgumentParser): The argument parser to add arguments to
+
+        Side Effects:
+            - Adds timeout and threading configuration options
+            - Registers subparsers for each available AI backend class
+        """
         parser.add_argument("-secs", "--seconds", help=f"Timeout seconds, default : {self.timeout_seconds}",
                             default=self.timeout_seconds)
         parser.add_argument("-nothreads", "--nothreads", help=f"No parallel threads, default : {self.no_threads}",
@@ -136,6 +168,21 @@ class SbkAI:
 
 
     def parse_args(self, args):
+        """
+        Parse command-line arguments and configure the AI instance.
+
+        This method processes the parsed command-line arguments to set up
+        the analysis engine with appropriate configuration and activate
+        the selected AI backend.
+
+        Args:
+            args (argparse.Namespace): Parsed command-line arguments
+
+        Side Effects:
+            - Sets the output file path
+            - Configures timeout and threading settings
+            - Activates the selected AI backend instance if specified
+        """
         self.file = args.ofile
         self.timeout_seconds = args.seconds
         self.no_threads = args.nothreads
@@ -144,18 +191,59 @@ class SbkAI:
             self.ai_instance.parse_args(args)
 
     def load_workbook(self):
+        """
+        Load the Excel workbook from the specified file path.
+
+        This method reads an existing Excel file and loads it into memory
+        for further processing. It's typically called before any analysis
+        or modification operations.
+
+        Side Effects:
+            - Loads the workbook into self.wb attribute
+            - Raises IOError if file cannot be read
+
+        Note:
+            The workbook must exist and be in a valid Excel format.
+        """
         self.wb = load_workbook(self.file)
 
     def save_workbook(self):
+        """
+        Save the current workbook to disk.
+
+        This method writes any modifications made to the workbook back
+        to the original file location. It should be called after all
+        analysis and formatting operations are complete.
+
+        Side Effects:
+            - Writes the workbook to disk
+            - Overwrites the original file
+
+        Note:
+            This operation will overwrite any existing data in the output file.
+        """
         self.wb.save(self.file)
 
     def get_storage_stats(self):
         """
         Collect and organize storage statistics from all worksheets.
         
+        This method processes each R-sheet in the workbook to extract
+        performance metrics and organizes them into StorageStat objects.
+        It handles both regular (R) and total (T) data sheets to provide
+        comprehensive performance analysis.
+
         Returns:
             list: List of StorageStat objects containing performance metrics
-                  for each storage system in the benchmark.
+                  for each storage system in the benchmark. Each object contains:
+                  - Storage name
+                  - Time unit
+                  - Action type
+                  - Regular performance metrics (from R sheets)
+                  - Total performance metrics (from T sheets)
+
+        Note:
+            Only worksheets that match the R<number> pattern are processed.
         """
         stats = list()
         for name in self.wb.sheetnames:
@@ -177,19 +265,44 @@ class SbkAI:
         """
         Create a summary sheet with AI-generated performance analysis.
         
-        This method runs AI analysis methods in parallel to improve performance.
-        It collects throughput and latency analysis from the AI instance and
-        stores the results in a dictionary.
+        This method orchestrates the execution of all available AI analysis
+        methods in parallel to improve performance. It collects throughput,
+        latency, total MB, and percentile histogram analysis from the active
+        AI backend and formats the results into Excel cells with appropriate styling.
+
+        The method handles both sequential and parallel execution modes based
+        on the no_threads configuration flag, with configurable timeouts to
+        prevent hanging operations.
         
         Returns:
-            dict: Dictionary containing the analysis results with keys:
-                - 'throughput': Tuple of (status, analysis) for throughput
-                - 'latency': Tuple of (status, analysis) for latency
+            bool: True if analysis was successful, False otherwise
+
+        Side Effects:
+            - Modifies the workbook by adding AI analysis content to Summary sheet
+            - Sets various cell formatting including fonts, borders, and alignment
+            - Adjusts row heights based on content length
+
+        Note:
+            This method requires the workbook to be loaded and an AI instance
+            to be configured before calling.
         """
         # Set storage statistics for AI analysis
         self.ai_instance.set_storage_stats(self.get_storage_stats())
 
         def run_analysis(function_name):
+            """
+            Execute a single AI analysis method and handle exceptions.
+
+            This helper function wraps the execution of individual AI methods
+            to provide consistent error handling and return format.
+
+            Args:
+                function_name (str): Name of the method to execute
+
+            Returns:
+                tuple: (method_name, result_tuple) where result_tuple is
+                       (success_bool, analysis_content_or_error_message)
+            """
             try:
                 method = getattr(self.ai_instance, function_name)
                 ret = method()
@@ -214,7 +327,7 @@ class SbkAI:
         results = {}
 
         if self.no_threads:
-            # Run analysis methods sequentially
+            # Run analysis methods sequentially for debugging or simpler execution
             print("Running analysis sequentially (no threads)...")
             for method_name in analysis_methods:
                 try:
@@ -235,7 +348,7 @@ class SbkAI:
                     print(f"⚠️ Error in {method_name}: {str(e)}")
                     results[method_name] = (False, str(e))
         else:
-            # Run analysis methods in parallel using ThreadPoolExecutor
+            # Run analysis methods in parallel using ThreadPoolExecutor for better performance
             print(f"Running analysis in parallel with timeout: {self.timeout_seconds} seconds...")
             with ThreadPoolExecutor(max_workers=len(analysis_methods)) as executor:
                 # Submit all tasks and store futures
@@ -447,18 +560,29 @@ class SbkAI:
         """
         Generate all performance graphs and AI analysis for the benchmark results.
         
-        This method orchestrates the creation of various performance graphs and
-        AI analysis, then saves the results to the output file.
+        This is the main entry point method that orchestrates the complete workflow:
+        1. Loads the Excel workbook
+        2. Runs AI analysis on performance data
+        3. Saves the enhanced workbook with graphs and AI documentation
         
-        The method creates the following types of graphs:
+        The method creates various performance visualizations including:
         - Throughput graphs (MB/s and records/s)
         - Latency comparison graphs
         - Write/Read metrics graphs
         - Percentile analysis graphs
         - Comparative analysis graphs
         
-        After generating all graphs and analysis, it saves the results to the
-        Excel workbook and prints a confirmation message.
+        After generating all visualizations and AI insights, it saves the final
+        enhanced workbook to disk.
+
+        Side Effects:
+            - Loads and modifies an Excel workbook
+            - Saves the modified workbook to disk
+            - Prints status messages during execution
+
+        Note:
+            This method should only be called when an AI backend is properly configured.
+            If no AI instance is set, it will display a warning message and skip analysis.
         """
         if not self.ai_instance:
             print("AI is not enabled!. you can use the subcommands ["+" ".join(self.classes.keys())+"] to enable it.")
