@@ -15,43 +15,6 @@ The sbk-charts application can be used to visualize these results in a more user
 
 **sbk-charts uses AI to generate descriptive summaries about throughput and latency analysis**
 
-## AI Backends
-
-SBK Charts supports multiple AI backends for analysis:
-
-1. **LM Studio** - For local AI inference with LM Studio
-2. **Ollama** - For running local LLMs through the Ollama API
-3. **Hugging Face** - For cloud-based AI analysis (default)
-
-### LM Studio Setup
-
-1. Install [LM Studio](https://lmstudio.ai/)
-2. Download and host a suitable model (e.g., Mistral 7B, Llama 2)
-3. Start the LM Studio server
-
-Example usage:
-```bash
-sbk-charts -i input.csv -o output.xlsx lmstudio --lm-model mistral
-```
-
-### Ollama Setup
-
-1. Install [Ollama](https://ollama.com/)
-2. Pull required models:
-   ```bash
-   ollama pull llama3
-   ollama pull mistral
-   ```
-
-Example usage:
-```bash
-sbk-charts -i input.csv -o output.xlsx ollama --model llama3
-```
-
-For more details, see the documentation in [custom AI models](src/custom_ai/README.md)
-
----
-
 ## Running SBK Charts:
 
 ```
@@ -177,24 +140,38 @@ As of today, The analysis is performed using the Hugging Face model and includes
    - Identifies performance bottlenecks
    - Compares percentile distributions across storage systems
 
-### Usage
+## AI Backends
 
-To use AI analysis, run the tool with one of the available AI subcommands:
+SBK Charts supports multiple AI backends for analysis:
 
+1. **LM Studio** - For local AI inference with LM Studio
+2. **Ollama** - For running local LLMs through the Ollama API
+3. **Hugging Face** - For cloud-based AI analysis (default)
+
+### LM Studio Setup
+
+1. Install [LM Studio](https://lmstudio.ai/)
+2. Download and host a suitable model (e.g., Mistral 7B, Llama 3.1)
+3. Start the LM Studio server
+
+Example usage:
 ```bash
-# Using Hugging Face model (default)
-sbk-charts -i input.csv -o output.xlsx huggingface
-
-# Example
-sbk-charts -i ./samples/charts/sbk-file-read.csv,./samples/charts/sbk-rocksdb-read.csv huggingface
-
-
-# Using NoAI (fallback with error messages)
-sbk-charts -i input.csv -o output.xlsx noai
-# Example
-sbk-charts -i ./samples/charts/sbk-file-read.csv,./samples/charts/sbk-rocksdb-read.csv noai
-
+sbk-charts -i input.csv -o output.xlsx lmstudio 
 ```
 
-for further details on custom AI implementations, please refer to the [custom AI](./src/custom_ai/README.md) directory.
+### Ollama Setup
+
+1. Install [Ollama](https://ollama.com/)
+2. Pull required models:
+   ```bash
+   ollama pull llama3.1
+   ```
+
+Example usage:
+```bash
+sbk-charts -i input.csv -o output.xlsx ollama
+```
+
+For more details, see the documentation in [custom AI models](src/custom_ai/README.md)
+---
 
