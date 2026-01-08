@@ -131,10 +131,10 @@ you can see the sample [fil read in csv](./samples/charts/sbk-file-read.csv) and
 
 ```
 #create the env
-python3 -m venv sbk-charts-venv
+python3 -m venv venv-sbk-charts
 
 #set the env
-source sbk-charts-venv/bin/activate
+source venv-sbk-charts/bin/activate
 
 # install required packages
 pip install -e .
