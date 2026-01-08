@@ -34,8 +34,12 @@ from ordered_set import OrderedSet
 
 from src.sheets import constants
 from .charts import SbkCharts
+from typing import final
+
+from .utils import is_r_num_sheet, is_t_num_sheet, get_time_unit_from_worksheet, get_storage_name_from_worksheet, get_action_name_from_worksheet
 
 
+@final
 class SbkMultiCharts(SbkCharts):
     """Create multi-sheet charts by extending SbkCharts.
 
@@ -52,8 +56,13 @@ class SbkMultiCharts(SbkCharts):
       unit; if mismatched, multi-sheet graphs will not be created.
     """
 
-    def __init__(self, version, file):
-        super().__init__(version, file)
+    # This should be final class ; just create graphs
+    def __init_subclass__(cls, **kwargs):
+        raise TypeError("Cannot create subclass for SbkMultiSheets")
+
+    def __init__(self, file):
+        super().__init__( file)
+
 
     def check_time_units(self):
         """Validate that all R-sheet time units are identical.
@@ -64,8 +73,8 @@ class SbkMultiCharts(SbkCharts):
         """
         ret = OrderedSet()
         for name in self.wb.sheetnames:
-            if self.is_r_num_sheet(name):
-                ret.add(self.get_time_unit(self.wb[name]))
+            if is_r_num_sheet(name):
+                ret.add(get_time_unit_from_worksheet(self.wb[name]))
         if len(ret) > 1:
             print("ERROR: Multiple Time unit are preset in " + self.file + " " + str(ret))
             return False
@@ -81,11 +90,11 @@ class SbkMultiCharts(SbkCharts):
         """
         ret = OrderedDict()
         for name in self.wb.sheetnames:
-            if self.is_r_num_sheet(name):
-                action = self.get_action_name(self.wb[name])
+            if is_r_num_sheet(name):
+                action = get_action_name_from_worksheet(self.wb[name])
                 if action not in ret:
                     ret[action] = OrderedSet()
-                ret[action].add(self.get_storage_name(self.wb[name]))
+                ret[action].add(get_storage_name_from_worksheet(self.wb[name]))
         return ret
 
     def create_summary_sheet(self):
@@ -158,7 +167,7 @@ class SbkMultiCharts(SbkCharts):
         cell.value = "Time Unit"
         cell.font = Font(size="18", bold=False, color=BLUE)
         cell = sheet.cell(row, col + 1)
-        cell.value = self.get_time_unit(self.wb[constants.R_PREFIX + "1"])
+        cell.value = get_time_unit_from_worksheet(self.wb[constants.R_PREFIX + "1"])
         cell.font = Font(size="18", bold=False, color=BLACK)
         row += 1
         for i, key in enumerate(acts):
@@ -184,9 +193,9 @@ class SbkMultiCharts(SbkCharts):
             charts.append(self.create_latency_line_graph("Latency Variations"))
             sheets.append(self.wb.create_sheet("Latencies-" + str(i + 1)))
         for name in self.wb.sheetnames:
-            if self.is_r_num_sheet(name):
+            if is_r_num_sheet(name):
                 ws = self.wb[name]
-                prefix = name + "-" + self.get_storage_name(ws)
+                prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 latency_series = self.get_latency_series(ws, prefix)
                 for x in latency_series:
                     for i, g in enumerate(self.latency_groups):
@@ -210,9 +219,9 @@ class SbkMultiCharts(SbkCharts):
         """
         all_sheets = []
         for name in self.wb.sheetnames:
-            if self.is_r_num_sheet(name):
+            if is_r_num_sheet(name):
                 ws = self.wb[name]
-                prefix = name + "-" + self.get_storage_name(ws)
+                prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 sheets = super().create_latency_compare_graphs(ws, prefix)
                 all_sheets.extend(sheets)
         return all_sheets
@@ -229,9 +238,9 @@ class SbkMultiCharts(SbkCharts):
         charts = OrderedDict()
         sheets = []
         for name in self.wb.sheetnames:
-            if self.is_r_num_sheet(name):
+            if is_r_num_sheet(name):
                 ws = self.wb[name]
-                prefix = name + "-" + self.get_storage_name(ws)
+                prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 latency_series = self.get_latency_series(ws, prefix)
                 for x in latency_series:
                     if x not in charts:
@@ -258,9 +267,9 @@ class SbkMultiCharts(SbkCharts):
             chart = self.create_line_chart(title, "Percentiles", "Latency time in " + self.time_unit, 25, 50)
             x_labels = False
             for name in self.wb.sheetnames:
-                if self.is_t_num_sheet(name):
+                if is_t_num_sheet(name):
                     ws = self.wb[name]
-                    prefix = name + "_" + self.get_storage_name(ws)
+                    prefix = name + "_" + get_storage_name_from_worksheet(ws)
                     latency_series = self.get_latency_percentile_series(ws, prefix, names_list)
                     for x in latency_series:
                         chart.append(latency_series[x])
@@ -285,9 +294,9 @@ class SbkMultiCharts(SbkCharts):
         chart = self.create_bar_chart(title, "Percentiles", "Count", 25, 50)
         x_labels = False
         for name in self.wb.sheetnames:
-            if self.is_t_num_sheet(name):
+            if is_t_num_sheet(name):
                 ws = self.wb[name]
-                prefix = name + "_" + self.get_storage_name(ws)
+                prefix = name + "_" + get_storage_name_from_worksheet(ws)
                 latency_series = self.get_latency_percentile_count_series(ws, prefix, self.percentile_count_names)
                 for x in latency_series:
                     chart.append(latency_series[x])
@@ -311,9 +320,9 @@ class SbkMultiCharts(SbkCharts):
         chart = self.create_line_chart("Throughput Variations in Mega Bytes / Seconds",
                                        "Intervals", "Throughput in MB/Sec", 25, 50)
         for name in self.wb.sheetnames:
-            if self.is_r_num_sheet(name):
+            if is_r_num_sheet(name):
                 ws = self.wb[name]
-                prefix = name + "-" + self.get_storage_name(ws)
+                prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_throughput_write_request_mb_series(ws, prefix))
                 chart.append(self.get_throughput_read_request_mb_series(ws, prefix))
                 chart.append(self.get_throughput_mb_series(ws, prefix))
@@ -331,9 +340,9 @@ class SbkMultiCharts(SbkCharts):
         chart = self.create_line_chart("Throughput Variations in Records / Seconds",
                                        "Intervals", "Throughput in Records/Sec", 25, 50)
         for name in self.wb.sheetnames:
-            if self.is_r_num_sheet(name):
+            if is_r_num_sheet(name):
                 ws = self.wb[name]
-                prefix = name + "-" + self.get_storage_name(ws)
+                prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_throughput_write_request_records_series(ws, prefix))
                 chart.append(self.get_throughput_read_request_records_series(ws, prefix))
                 chart.append(self.get_throughput_records_series(ws, prefix))
@@ -351,9 +360,9 @@ class SbkMultiCharts(SbkCharts):
         chart = self.create_line_chart("Write and Read Records Variations",
                                        "Intervals", "Write and Read Records", 25, 50)
         for name in self.wb.sheetnames:
-            if self.is_r_num_sheet(name):
+            if is_r_num_sheet(name):
                 ws = self.wb[name]
-                prefix = name + "-" + self.get_storage_name(ws)
+                prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_write_request_records_series(ws, prefix))
                 chart.append(self.get_read_request_records_series(ws, prefix))
                 chart.append(self.get_write_response_pending_records_series(ws, prefix))
@@ -374,9 +383,9 @@ class SbkMultiCharts(SbkCharts):
         chart = self.create_line_chart("Write and Read MBs Variations",
                                        "Intervals", "Write and Read MBs", 25, 50)
         for name in self.wb.sheetnames:
-            if self.is_r_num_sheet(name):
+            if is_r_num_sheet(name):
                 ws = self.wb[name]
-                prefix = name + "-" + self.get_storage_name(ws)
+                prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_write_request_mb_series(ws, prefix))
                 chart.append(self.get_read_request_mb_series(ws, prefix))
                 chart.append(self.get_write_response_pending_mb_series(ws, prefix))
@@ -396,12 +405,12 @@ class SbkMultiCharts(SbkCharts):
         """
         chart = None
         for name in self.wb.sheetnames:
-            if self.is_t_num_sheet(name):
+            if is_t_num_sheet(name):
                 ws = self.wb[name]
                 if chart is None:
-                    action = self.get_action_name(ws)
+                    action = get_action_name_from_worksheet(ws)
                     chart = self.create_bar_chart("Total Mega Bytes " + action, action, "MB", 25, 50)
-                prefix = name + "-" + self.get_storage_name(ws)
+                prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_write_request_mb_series(ws, prefix))
                 chart.append(self.get_read_request_mb_series(ws, prefix))
                 chart.append(self.get_write_response_pending_mb_series(ws, prefix))
@@ -424,9 +433,9 @@ class SbkMultiCharts(SbkCharts):
         chart = self.create_line_chart("Write and Read Timeout Events Variations",
                                        "Intervals", "Write and Read Timeout Events", 25, 50)
         for name in self.wb.sheetnames:
-            if self.is_r_num_sheet(name):
+            if is_r_num_sheet(name):
                 ws = self.wb[name]
-                prefix = name + "-" + self.get_storage_name(ws)
+                prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_write_timeout_events_series(ws, prefix))
                 chart.append(self.get_read_timeout_events_series(ws, prefix))
         # add chart to the sheet
@@ -443,9 +452,9 @@ class SbkMultiCharts(SbkCharts):
         chart = self.create_line_chart("Write and Read Timeout Events / Sec Variations",
                                        "Intervals", "Write and Read Timeout Events / Sec", 25, 50)
         for name in self.wb.sheetnames:
-            if self.is_r_num_sheet(name):
+            if is_r_num_sheet(name):
                 ws = self.wb[name]
-                prefix = name + "-" + self.get_storage_name(ws)
+                prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_write_timeout_events_per_sec_series(ws, prefix))
                 chart.append(self.get_read_timeout_events_per_sec_series(ws, prefix))
         # add chart to the sheet
@@ -461,13 +470,13 @@ class SbkMultiCharts(SbkCharts):
         """
         chart = None
         for name in self.wb.sheetnames:
-            if self.is_t_num_sheet(name):
+            if is_t_num_sheet(name):
                 ws = self.wb[name]
                 if chart is None:
-                    action = self.get_action_name(ws)
+                    action = get_action_name_from_worksheet(ws)
                     chart = self.create_bar_chart("Total Throughput Variations in Mega Bytes / Seconds",
                                                   action, "Total Throughput in MB/Sec", 25, 50)
-                prefix = name + "-" + self.get_storage_name(ws)
+                prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_throughput_write_request_mb_series(ws, prefix))
                 chart.append(self.get_throughput_read_request_mb_series(ws, prefix))
                 chart.append(self.get_throughput_mb_series(ws, prefix))
@@ -486,13 +495,13 @@ class SbkMultiCharts(SbkCharts):
         """
         chart = None
         for name in self.wb.sheetnames:
-            if self.is_t_num_sheet(name):
+            if is_t_num_sheet(name):
                 ws = self.wb[name]
                 if chart is None:
-                    action = self.get_action_name(ws)
+                    action = get_action_name_from_worksheet(ws)
                     chart = self.create_bar_chart("Total Throughput Variations in Records / Seconds",
                                                   action, "Total Throughput in Records/Sec", 25, 50)
-                prefix = name + "-" + self.get_storage_name(ws)
+                prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_throughput_write_request_records_series(ws, prefix))
                 chart.append(self.get_throughput_read_request_records_series(ws, prefix))
                 chart.append(self.get_throughput_records_series(ws, prefix))
@@ -511,13 +520,13 @@ class SbkMultiCharts(SbkCharts):
         """
         chart = None
         for name in self.wb.sheetnames:
-            if self.is_t_num_sheet(name):
+            if is_t_num_sheet(name):
                 ws = self.wb[name]
                 if chart is None:
-                    action = self.get_action_name(ws)
+                    action = get_action_name_from_worksheet(ws)
                     chart = self.create_bar_chart("Total Average Latency Comparison",
                                                   action, "Total Average Latency", 25, 50)
-                prefix = name + "-" + self.get_storage_name(ws)
+                prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_avg_latency_series(ws, prefix))
         if chart is not None:
             # add chart to the sheet
@@ -534,13 +543,13 @@ class SbkMultiCharts(SbkCharts):
         """
         chart = None
         for name in self.wb.sheetnames:
-            if self.is_t_num_sheet(name):
+            if is_t_num_sheet(name):
                 ws = self.wb[name]
                 if chart is None:
-                    action = self.get_action_name(ws)
+                    action = get_action_name_from_worksheet(ws)
                     chart = self.create_bar_chart("Total Min Latency Comparison",
                                                   action, "Total Min Latency", 25, 50)
-                prefix = name + "-" + self.get_storage_name(ws)
+                prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_min_latency_series(ws, prefix))
         if chart is not None:
             # add chart to the sheet
@@ -557,13 +566,13 @@ class SbkMultiCharts(SbkCharts):
         """
         chart = None
         for name in self.wb.sheetnames:
-            if self.is_t_num_sheet(name):
+            if is_t_num_sheet(name):
                 ws = self.wb[name]
                 if chart is None:
-                    action = self.get_action_name(ws)
+                    action = get_action_name_from_worksheet(ws)
                     chart = self.create_bar_chart("Total Max Latency Comparison",
                                                   action, "Total Max Latency", 25, 50)
-                prefix = name + "-" + self.get_storage_name(ws)
+                prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_max_latency_series(ws, prefix))
         if chart is not None:
             # add chart to the sheet
@@ -580,13 +589,13 @@ class SbkMultiCharts(SbkCharts):
         """
         chart = None
         for name in self.wb.sheetnames:
-            if self.is_t_num_sheet(name):
+            if is_t_num_sheet(name):
                 ws = self.wb[name]
                 if chart is None:
-                    action = self.get_action_name(ws)
+                    action = get_action_name_from_worksheet(ws)
                     chart = self.create_bar_chart("Total Write and Read Timeout Events Comparison",
                                                   action, "Write and Read Timeout Events", 25, 50)
-                prefix = name + "-" + self.get_storage_name(ws)
+                prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_write_timeout_events_series(ws, prefix))
                 chart.append(self.get_read_timeout_events_series(ws, prefix))
         if chart is not None:

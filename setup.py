@@ -10,7 +10,7 @@
 
 import os
 from setuptools import setup, find_packages
-from src.main.sbk_version import __sbk_version__
+from src.version.sbk_version import __sbk_version__
 
 
 # Get the absolute path to the package directory
