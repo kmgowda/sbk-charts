@@ -17,6 +17,8 @@ This directory contains custom AI implementations for analyzing storage benchmar
   sbk-charts -i ./samples/charts/sbk-file-read.csv huggingface
   ```
 
+For more details, see the documentation in [Hugging face](hugging_face/README.md)
+
 ### 2. LM Studio
 - **Description**: Local AI analysis using LM Studio's local inference server
 - **Requirements**:
@@ -32,6 +34,8 @@ This directory contains custom AI implementations for analyzing storage benchmar
   ```bash
   sbk-charts -i ./samples/charts/sbk-file-read.csv lmstudio
   ```
+For more details, see the documentation in [LM Studio](lm_studio/README.md)
+
 
 ### 3. Ollama
 - **Description**: Local AI analysis using Ollama's local model serving
@@ -47,6 +51,8 @@ This directory contains custom AI implementations for analyzing storage benchmar
   ```bash
   sbk-charts -i ./samples/charts/sbk-file-read.csv ollama --ollama-model llama3.1 --ollama-temperature 0.4
   ```
+
+For more details, see the documentation in [ollama](ollama/README.md)
 
 ### 4. NoAI (Default)
 - **Description**: Placeholder implementation that returns error messages

@@ -48,7 +48,7 @@ Example usage:
 sbk-charts -i input.csv -o output.xlsx ollama --model llama3
 ```
 
-For more details, see the documentation in `src/custom_ai/<backend>/README.md`
+For more details, see the documentation in [custom AI models](src/custom_ai/README.md)
 
 ---
 
