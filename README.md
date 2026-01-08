@@ -20,18 +20,23 @@ The sbk-charts application can be used to visualize these results in a more user
 ```
 <SBK directory>./sbk-charts
 ...
-(sbk-charts-venv) kmg@Mac-Studio sbk-charts % sbk-charts -h
-usage: sbk-charts [-h] -i IFILES [-o OFILE] {huggingface,noai} ...
+(venv-sbk-charts) kmg@Mac-Studio sbk-charts % sbk-charts -h
+usage: sbk-charts [-h] -i IFILES [-o OFILE] [-secs SECONDS] [-nothreads NOTHREADS] {huggingface,lmstudio,noai,ollama} ...
 
-sbk charts
+SBK Charts - Storage Benchmark Visualization Tool
 
 positional arguments:
-  {huggingface,noai}   Available sub-commands
+  {huggingface,lmstudio,noai,ollama}
+                        Available sub-commands
 
 options:
-  -h, --help           show this help message and exit
-  -i, --ifiles IFILES  Input CSV files, separated by ','
-  -o, --ofile OFILE    Output xlsx file
+  -h, --help            show this help message and exit
+  -i, --ifiles IFILES   Comma-separated list of input CSV files containing benchmark results
+  -o, --ofile OFILE     Output XLSX file path (default: out.xlsx)
+  -secs, --seconds SECONDS
+                        Timeout seconds, default : 120
+  -nothreads, --nothreads NOTHREADS
+                        No parallel threads, default : False
 
 Please report issues at https://github.com/kmgowda/sbk-charts
 
@@ -41,7 +46,7 @@ Please report issues at https://github.com/kmgowda/sbk-charts
 
 Example command with single CSV file
 ```
-kmg@kmgs-MBP SBK % ./sbk-charts -i ./samples/charts/sbk-file-read.csv -o ./samples/charts/sbk-file-read.xlsx 
+(venv-sbk-charts) kmg@Mac-Studio sbk-charts % sbk-charts -i ./samples/charts/sbk-file-read.csv -o ./samples/charts/sbk-file-read.xlsx
 
    _____   ____    _  __            _____   _    _              _____    _______    _____
   / ____| |  _ \  | |/ /           / ____| | |  | |     /\     |  __ \  |__   __|  / ____|
@@ -50,13 +55,15 @@ kmg@kmgs-MBP SBK % ./sbk-charts -i ./samples/charts/sbk-file-read.csv -o ./sampl
   ____) | | |_) | | . \           | |____  | |  | |  / ____ \  | | \ \     | |     ____) |
  |_____/  |____/  |_|\_\           \_____| |_|  |_| /_/    \_\ |_|  \_\    |_|    |_____/
 
-Sbk Charts Version : 0.96
+Sbk Charts Version : 3.26.1.0
 Input Files :  ./samples/charts/sbk-file-read.csv
 Output File :  ./samples/charts/sbk-file-read.xlsx
+SBK logo image found: /Users/kmg/projects/sbk-charts/images/sbk-logo.png
 xlsx file : ./samples/charts/sbk-file-read.xlsx created
 Time Unit : NANOSECONDS
 Reading : FILE
-
+file : ./samples/charts/sbk-file-read.xlsx updated with graphs
+AI is not enabled!. you can use the subcommands [huggingface lmstudio noai ollama] to enable it.
 ```
 you can see the sample [fil read in csv](./samples/charts/sbk-file-read.csv) as input file and the generated output file is [file read graphs](./samples/charts/sbk-file-read.xlsx)
 
@@ -65,7 +72,7 @@ you can see the sample [fil read in csv](./samples/charts/sbk-file-read.csv) as 
 
 Example command with multiple CSV files
 ```
-kmg@kmgs-MBP SBK % ./sbk-charts -i ./samples/charts/sbk-file-read.csv,./samples/charts/sbk-rocksdb-read.csv -o ./samples/charts/sbk-file-rocksdb-read.xlsx
+(venv-sbk-charts) kmg@Mac-Studio sbk-charts % sbk-charts -i ./samples/charts/sbk-file-read.csv,./samples/charts/sbk-rocksdb-read.csv -o ./samples/charts/sbk-file-rocksdb-read.xlsx
 
    _____   ____    _  __            _____   _    _              _____    _______    _____
   / ____| |  _ \  | |/ /           / ____| | |  | |     /\     |  __ \  |__   __|  / ____|
@@ -74,12 +81,15 @@ kmg@kmgs-MBP SBK % ./sbk-charts -i ./samples/charts/sbk-file-read.csv,./samples/
   ____) | | |_) | | . \           | |____  | |  | |  / ____ \  | | \ \     | |     ____) |
  |_____/  |____/  |_|\_\           \_____| |_|  |_| /_/    \_\ |_|  \_\    |_|    |_____/
 
-Sbk Charts Version : 0.96
+Sbk Charts Version : 3.26.1.0
 Input Files :  ./samples/charts/sbk-file-read.csv,./samples/charts/sbk-rocksdb-read.csv
 Output File :  ./samples/charts/sbk-file-rocksdb-read.xlsx
+SBK logo image found: /Users/kmg/projects/sbk-charts/images/sbk-logo.png
 xlsx file : ./samples/charts/sbk-file-rocksdb-read.xlsx created
 Time Unit : NANOSECONDS
 Reading : FILE, ROCKSDB
+file : ./samples/charts/sbk-file-rocksdb-read.xlsx updated with graphs
+AI is not enabled!. you can use the subcommands [huggingface lmstudio noai ollama] to enable it.
 
 ```
 you can see the sample [fil read in csv](./samples/charts/sbk-file-read.csv) and the [rocksdb red in csv](./samples/charts/sbk-rocksdb-read.csv) as input files and the generated output file is [file and rocksdb read comparesion](./samples/charts/sbk-file-rocksdb-read.xlsx)
