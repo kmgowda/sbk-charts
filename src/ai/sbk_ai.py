@@ -177,14 +177,14 @@ class SbkAI:
 
         Args:
             args (argparse.Namespace): Parsed command-line arguments
-
+            
         Side Effects:
             - Sets the output file path
-            - Configures timeout and threading settings
+            - Configures timeout (converted to int) and threading settings
             - Activates the selected AI backend instance if specified
         """
+        self.timeout_seconds = int(args.seconds) if hasattr(args, 'seconds') and args.seconds is not None else 120
         self.file = args.ofile
-        self.timeout_seconds = args.seconds
         self.no_threads = args.nothreads
         if args.ai_class:
             self.ai_instance = self.ai_instance_map[args.ai_class.lower()]
