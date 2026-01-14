@@ -308,19 +308,30 @@ class PyTorchLLM(SbkGenAI):
         return True, desc
 
     def _clean_generated_text(self, text: str) -> str:
-        """Clean up generated text by removing multiple consecutive question marks.
+        """Clean up generated text by removing multiple consecutive non-text symbols.
         
         Args:
             text: The text to clean
             
         Returns:
-            str: Cleaned text with at most one question mark at the end of sentences
+            str: Cleaned text with normalized punctuation and symbols
         """
-        # Replace 2 or more question marks with a single question mark
-        cleaned = re.sub(r'\?{2,}', '?', text)
-        # Handle cases where multiple question marks might be separated by whitespace
-        cleaned = re.sub(r'\?\s+\?', '? ', cleaned)
+        if not text:
+            return text
+            
+        cleaned = text
+        # List of special characters to clean up
+        special_chars = ['.', '|', '%', '?']
+        
+        for char in special_chars:
+            # Escape special regex characters
+            escaped_char = re.escape(char)
+            # Replace multiple consecutive characters with a single one
+            cleaned = re.sub(fr'{escaped_char}+', char, cleaned)
+            # Replace characters separated by whitespace with a single one
+            cleaned = re.sub(fr'({escaped_char}\s*)+', char, cleaned)
 
+        
         return cleaned.strip()
 
     def _train_on_example(self, prompt: str, target: str) -> None:
