@@ -31,6 +31,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 from src.genai.genai import SbkGenAI
 import traceback
 import re
+import os
 
 # Default model configuration
 DEFAULT_MODEL = "openai/gpt-oss-20b"
@@ -81,11 +82,8 @@ class PyTorchLLM(SbkGenAI):
             
         try:
             print(f"Loading model {self.model_name} on {self.device}...")
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            
-            # Set padding token if not set
-            if self.tokenizer.pad_token is None:
-                self.tokenizer.pad_token = self.tokenizer.eos_token
+            # Check if we have a saved model
+            saved_model_dir = os.path.join(os.path.dirname(__file__), 'saved_models', self.model_name.split('/')[-1])
 
             # In _initialize_model, update the device and dtype handling:
             if 'cuda' in self.device and torch.cuda.is_available():
@@ -96,44 +94,40 @@ class PyTorchLLM(SbkGenAI):
             else:
                 dtype = torch.float32
 
-            # Load model with appropriate device mapping
-            if self.device.startswith('cuda'):
-                # For CUDA, use device_map='auto' for better memory management
+            if os.path.exists(saved_model_dir):
+                print(f"Loading model from {saved_model_dir}")
                 self.model = AutoModelForCausalLM.from_pretrained(
-                    self.model_name,
+                    saved_model_dir,
+                    device_map="auto",
                     dtype=dtype,
-                    device_map='auto',
-                    low_cpu_mem_usage=True,
+                    trust_remote_code=True
+                )
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    saved_model_dir,
                     trust_remote_code=True
                 )
             else:
-                # For CPU/MPS, first load to CPU then move to device if needed
-                self.model = AutoModelForCausalLM.from_pretrained(
+                print(f"Downloading model {self.model_name}")
+                self.tokenizer = AutoTokenizer.from_pretrained(
                     self.model_name,
-                    dtype=dtype,
-                    device_map=None,
-                    low_cpu_mem_usage=True,
                     trust_remote_code=True
                 )
-                
-                # Move to device using to_empty() for meta tensors
-                if any(t.is_meta for t in self.model.parameters()):
-                    self.model = self.model.to_empty(device=self.device)
-                    self.model.load_state_dict(
-                        AutoModelForCausalLM.from_pretrained(
-                            self.model_name,
-                            dtype=dtype,
-                            device_map=None,
-                            low_cpu_mem_usage=True,
-                            trust_remote_code=True
-                        ).state_dict(),
-                        assign=True
-                    )
-                else:
-                    self.model = self.model.to(self.device)
-            
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    device_map="auto",
+                    dtype=dtype,
+                    trust_remote_code=True
+                )
+
+            self.model = self.model.to(self.device)
+
+            # Set padding token if not set
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+
             # Set model to evaluation mode
             self.model.eval()
+
             self._is_initialized = True
             return True
             
@@ -196,11 +190,110 @@ class PyTorchLLM(SbkGenAI):
         if not self._is_initialized:
             self._initialize_model()
             self._is_initialized = True
-            
-        # If in training mode, set model to training mode
-        if self.train_mode and self.model is not None:
-            self.model.train()
 
+
+    def _save_model(self, output_dir: str = None) -> bool:
+        """Save the model and tokenizer to disk.
+        
+        Args:
+            output_dir: Directory to save the model. If None, uses model_name.
+            
+        Returns:
+            bool: True if save was successful, False otherwise
+        """
+        try:
+            if output_dir is None:
+                output_dir = os.path.join(os.path.dirname(__file__), 'saved_models', self.model_name.split('/')[-1])
+            
+            os.makedirs(output_dir, exist_ok=True)
+            print(f"💾 Saving model to {output_dir}...")
+            
+            # Save model and tokenizer
+            self.model.save_pretrained(output_dir)
+            self.tokenizer.save_pretrained(output_dir)
+            
+            print(f"✅ Model successfully saved to {output_dir}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error saving model: {str(e)}")
+            return False
+            
+    def _train_on_output(self, prompt: str, generated_text: str) -> Optional[float]:
+        """Train the model on the generated output.
+        
+        Args:
+            prompt: The original input prompt
+            generated_text: The text generated by the model
+            
+        Returns:
+            float: The loss value if successful, None otherwise
+        """
+        try:
+            print(f"🔄 Starting training on generated output (length: {len(generated_text)} chars)...")
+            # Combine prompt and generated text for training
+            training_text = f"{prompt}{generated_text}"
+            
+            # Get model's dtype for consistent typing
+            model_dtype = next(self.model.parameters()).dtype
+            
+            # Tokenize the training text
+            inputs = self.tokenizer(
+                training_text,
+                return_tensors="pt",
+                padding="max_length",
+                max_length=self.max_length,
+                truncation=True
+            )
+            
+            # Move inputs to the correct device and type
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+            
+            # Create labels (shifted input) and ensure correct dtype
+            labels = inputs["input_ids"].clone()
+            
+            # Ensure attention mask is the same dtype as the model
+            if 'attention_mask' in inputs:
+                inputs['attention_mask'] = inputs['attention_mask'].to(dtype=model_dtype)
+            
+            # Initialize optimizer if not already done
+            if not hasattr(self, 'optimizer'):
+                self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=5e-5)
+            
+            # Zero gradients
+            self.optimizer.zero_grad()
+
+            device = torch.device(self.device)
+
+            device_type = 'mps' if 'mps' in str(device) else 'cuda' if 'cuda' in str(device) else 'cpu'
+            
+            # Forward pass with autocast for mixed precision training
+            with torch.autocast(device_type=device_type,
+                              dtype=model_dtype if model_dtype in [torch.float16, torch.bfloat16] else None):
+                outputs = self.model(
+                    input_ids=inputs["input_ids"],
+                    attention_mask=inputs.get("attention_mask", None),
+                    labels=labels
+                )
+            
+            # Backward pass and optimize
+            loss = outputs.loss
+            if loss is not None:
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                self.optimizer.step()
+                # Print training progress
+                print(f"✅ Training complete - Loss: {loss.item():.4f}")
+                return loss.item()
+
+            print("⚠️ No loss computed during training")
+            return None
+            
+        except Exception as e:
+            print(f"❌ Error during training: {str(e)}")
+            traceback.print_exc()
+            return None
+    
     def _generate_text(self, prompt: str) -> Tuple[bool, str]:
         """Generate text using the loaded PyTorch model.
         
@@ -214,12 +307,10 @@ class PyTorchLLM(SbkGenAI):
         if not self._is_initialized and not self._initialize_model():
             return False, "Model initialization failed"
             
+        was_training = self.model.training
         try:
-            # Ensure model is on the correct device and in the right mode
+            # Ensure model is on the correct device and in evaluation mode
             device = torch.device(self.device)
-            was_training = self.model.training
-            
-            # Set model to evaluation mode for generation
             self.model.eval()
             
             # Get model's dtype for consistent typing
@@ -237,8 +328,6 @@ class PyTorchLLM(SbkGenAI):
             
             # Move inputs to the correct device and type
             inputs = {k: v.to(device) for k, v in inputs.items()}
-            
-            # Ensure all tensors are in the correct dtype
             inputs['input_ids'] = inputs['input_ids'].to(dtype=torch.long)
             if 'attention_mask' in inputs:
                 inputs['attention_mask'] = inputs['attention_mask'].to(dtype=torch.long)
@@ -247,49 +336,57 @@ class PyTorchLLM(SbkGenAI):
             max_new_tokens = max(DEFAULT_MAX_LENGTH, inputs['input_ids'].shape[1])
             
             # Generate text with appropriate settings
-            try:
-                with torch.inference_mode():
-                    # Determine device type for autocast
-                    device_type = 'mps' if 'mps' in str(device) else 'cuda' if 'cuda' in str(device) else 'cpu'
-                    with torch.autocast(device_type=device_type, 
-                                     enabled=device_type != 'cpu',  # Disable autocast for CPU
-                                     dtype=model_dtype if model_dtype in [torch.float16, torch.bfloat16] else None):
-                        outputs = self.model.generate(
-                            input_ids=inputs['input_ids'],
-                            attention_mask=inputs.get('attention_mask', None),
-                            max_new_tokens=max_new_tokens,
-                            temperature=self.temperature,
-                            top_p=self.top_p,
-                            do_sample=True,
-                            pad_token_id=self.tokenizer.eos_token_id,
-                            no_repeat_ngram_size=3,
-                        )
-                
-                # Decode the full generated text
-                full_text = self.tokenizer.decode(
-                    outputs[0],
-                    skip_special_tokens=True
-                )
-                
-                # Remove the input prompt from the output if it appears at the beginning
-                generated_text = full_text
-                if full_text.startswith(prompt):
-                    generated_text = full_text[len(prompt):].strip()
-                
-                # Clean up multiple question marks and other artifacts
-                cleaned_text = self._clean_generated_text(generated_text)
-                
-                return True, cleaned_text
-                
-            finally:
-                # Restore original training state
-                if was_training:
-                    self.model.train()
+            with torch.no_grad():
+                device_type = 'mps' if 'mps' in str(device) else 'cuda' if 'cuda' in str(device) else 'cpu'
+                with torch.autocast(device_type=device_type, 
+                                 enabled=device_type != 'cpu',
+                                 dtype=model_dtype if model_dtype in [torch.float16, torch.bfloat16] else None):
+                    outputs = self.model.generate(
+                        input_ids=inputs['input_ids'],
+                        attention_mask=inputs.get('attention_mask', None),
+                        max_new_tokens=max_new_tokens,
+                        temperature=self.temperature,
+                        top_p=self.top_p,
+                        do_sample=True,
+                        pad_token_id=self.tokenizer.eos_token_id,
+                        no_repeat_ngram_size=3,
+                    )
+            
+            # Decode the generated text
+            full_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            
+            # Remove the input prompt from the output if it appears at the beginning
+            generated_text = full_text[len(prompt):].strip() if full_text.startswith(prompt) else full_text
+            
+            # Clean up the generated text
+            cleaned_text = self._clean_generated_text(generated_text)
+
+            # If in training mode and we have a target, train on the generated output
+            if self.train_mode:
+                print("\n" + "=" * 50)
+                print("🚀 Starting training on generated output")
+                print(f"📝 Prompt length: {len(prompt)} chars")
+                print(f"📄 Generated length: {len(cleaned_text)} chars")
+                print("=" * 50)
+                self.model.train()
+                loss = self._train_on_output(prompt, cleaned_text)
+
+                # Save the model after training
+                if loss is not None:
+                    print("\n💾 Saving trained model...")
+                    save_success = self._save_model()
+                    if save_success:
+                        print("✅ Model saved successfully")
+                    else:
+                        print("❌ Failed to save model")
+            
+            return True, cleaned_text
             
         except Exception as e:
             error_msg = f"Error in text generation: {str(e)}\n{traceback.format_exc()}"
             print(error_msg)
             return False, error_msg
+
 
     def get_model_description(self) -> Tuple[bool, str]:
         """Get a description of the current PyTorch LLM configuration.
