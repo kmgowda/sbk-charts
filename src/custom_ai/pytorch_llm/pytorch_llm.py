@@ -29,6 +29,8 @@ import torch
 from typing import Tuple, Optional
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 from src.genai.genai import SbkGenAI
+import traceback
+import re
 
 # Default model configuration
 DEFAULT_MODEL = "openai/gpt-oss-20b"
@@ -150,6 +152,12 @@ class PyTorchLLM(SbkGenAI):
             default=DEFAULT_MODEL
         )
         parser.add_argument(
+            "--pt-train",
+            action="store_true",
+            help="Enable training mode (default: False)",
+            default=False
+        )
+        parser.add_argument(
             "--pt-device",
             help=f"Device to run the model on (default: {DEFAULT_DEVICE})",
             default=DEFAULT_DEVICE
@@ -181,10 +189,107 @@ class PyTorchLLM(SbkGenAI):
         self.temperature = args.pt_temperature
         self.top_p = args.pt_top_p
         
+        # Store training flag
+        self.train_mode = args.pt_train
+        
         # Reinitialize model if needed
         if not self._is_initialized:
             self._initialize_model()
             self._is_initialized = True
+            
+        # If in training mode, set model to training mode
+        if self.train_mode and self.model is not None:
+            self.model.train()
+
+    def _generate_text(self, prompt: str) -> Tuple[bool, str]:
+        """Generate text using the loaded PyTorch model.
+        
+        Args:
+            prompt: The input prompt for text generation
+            
+        Returns:
+            tuple: (success, response) where success is a boolean and
+                   response is either the generated text or an error message
+        """
+        if not self._is_initialized and not self._initialize_model():
+            return False, "Model initialization failed"
+            
+        try:
+            # Ensure model is on the correct device and in the right mode
+            device = torch.device(self.device)
+            was_training = self.model.training
+            
+            # Set model to evaluation mode for generation
+            self.model.eval()
+            
+            # Get model's dtype for consistent typing
+            model_dtype = next(self.model.parameters()).dtype
+
+            # Tokenize input
+            inputs = self.tokenizer(
+                prompt,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=self.max_length,
+                return_token_type_ids=False
+            )
+            
+            # Move inputs to the correct device and type
+            inputs = {k: v.to(device) for k, v in inputs.items()}
+            
+            # Ensure all tensors are in the correct dtype
+            inputs['input_ids'] = inputs['input_ids'].to(dtype=torch.long)
+            if 'attention_mask' in inputs:
+                inputs['attention_mask'] = inputs['attention_mask'].to(dtype=torch.long)
+            
+            # Calculate max_new_tokens, ensuring it's at least DEFAULT_MAX_LENGTH
+            max_new_tokens = max(DEFAULT_MAX_LENGTH, inputs['input_ids'].shape[1])
+            
+            # Generate text with appropriate settings
+            try:
+                with torch.inference_mode():
+                    # Determine device type for autocast
+                    device_type = 'mps' if 'mps' in str(device) else 'cuda' if 'cuda' in str(device) else 'cpu'
+                    with torch.autocast(device_type=device_type, 
+                                     enabled=device_type != 'cpu',  # Disable autocast for CPU
+                                     dtype=model_dtype if model_dtype in [torch.float16, torch.bfloat16] else None):
+                        outputs = self.model.generate(
+                            input_ids=inputs['input_ids'],
+                            attention_mask=inputs.get('attention_mask', None),
+                            max_new_tokens=max_new_tokens,
+                            temperature=self.temperature,
+                            top_p=self.top_p,
+                            do_sample=True,
+                            pad_token_id=self.tokenizer.eos_token_id,
+                            no_repeat_ngram_size=3,
+                        )
+                
+                # Decode the full generated text
+                full_text = self.tokenizer.decode(
+                    outputs[0],
+                    skip_special_tokens=True
+                )
+                
+                # Remove the input prompt from the output if it appears at the beginning
+                generated_text = full_text
+                if full_text.startswith(prompt):
+                    generated_text = full_text[len(prompt):].strip()
+                
+                # Clean up multiple question marks and other artifacts
+                cleaned_text = self._clean_generated_text(generated_text)
+                
+                return True, cleaned_text
+                
+            finally:
+                # Restore original training state
+                if was_training:
+                    self.model.train()
+            
+        except Exception as e:
+            error_msg = f"Error in text generation: {str(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            return False, error_msg
 
     def get_model_description(self) -> Tuple[bool, str]:
         """Get a description of the current PyTorch LLM configuration.
@@ -202,64 +307,73 @@ class PyTorchLLM(SbkGenAI):
                 f"Model Class: {self.model.__class__.__name__ if self.model else 'Not loaded'}")
         return True, desc
 
-    def _generate_text(self, prompt: str) -> Tuple[bool, str]:
-        """Generate text using the loaded PyTorch model.
+    def _clean_generated_text(self, text: str) -> str:
+        """Clean up generated text by removing multiple consecutive question marks.
         
         Args:
-            prompt: The input prompt for text generation
+            text: The text to clean
             
         Returns:
-            tuple: (success, response) where success is a boolean and
-                   response is either the generated text or an error message
+            str: Cleaned text with at most one question mark at the end of sentences
         """
-        if not self._is_initialized and not self._initialize_model():
-            return False, "Model initialization failed"
+        # Replace 2 or more question marks with a single question mark
+        cleaned = re.sub(r'\?{2,}', '?', text)
+        # Handle cases where multiple question marks might be separated by whitespace
+        cleaned = re.sub(r'\?\s+\?', '? ', cleaned)
+
+        return cleaned.strip()
+
+    def _train_on_example(self, prompt: str, target: str) -> None:
+        """Train the model on a single example.
+        
+        Args:
+            prompt: The input prompt
+            target: The target response
             
+        Returns:
+            float: The loss value if successful, None otherwise
+        """
         try:
-            # Ensure model is on the correct device
-            device = torch.device(self.device)
-            self.model = self.model.to(device)
-
-            prompt =  "Role: user, Content: " + prompt
-
-            # Tokenize input
-            inputs = self.tokenizer(
-                prompt,
-                return_tensors="pt",
-                padding=True,
-                truncation=True,
-                max_length=self.max_length,
-                return_token_type_ids=False
-            )
-            # Move all input tensors to the same device as the model
-            inputs = {k: v.to(device) for k, v in inputs.items()}
-
-            # Calculate max_new_tokens, ensuring it's at least 1
-            max_new_tokens = max(1, min(4096, self.max_length - inputs['input_ids'].shape[1]))
-
-            # Generate text
-            with torch.no_grad():
-                outputs = self.model.generate(
-                    **inputs,
-                    max_new_tokens=max_new_tokens,
-                    temperature=self.temperature,
-                    top_p=self.top_p,
-                    do_sample=True,
-                    pad_token_id=self.tokenizer.eos_token_id,
-                    no_repeat_ngram_size=3,
-                )
-
-            # Decode and clean up the output
-            full_text = self.tokenizer.decode(
-                outputs[0],
-                skip_special_tokens=True
-            )
-            # Remove the input prompt from the output
-            generated_text = full_text
-            if full_text.startswith(prompt):
-                generated_text = full_text[len(prompt):].strip()
+            # Combine prompt and target with separator
+            text = f"{prompt}{target}{self.tokenizer.eos_token}"
             
-            return True, generated_text
+            # Get model's dtype for consistent typing
+            model_dtype = next(self.model.parameters()).dtype
+            
+            # Tokenize the input
+            inputs = self.tokenizer(
+                text,
+                return_tensors="pt",
+                padding="max_length",
+                max_length=self.max_length,
+                truncation=True
+            )
+            
+            # Move inputs to the correct device and type
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+            
+            # Create labels (shifted input) and ensure correct dtype
+            labels = inputs["input_ids"].clone()
+            
+            # Ensure attention mask is the same dtype as the model
+            if 'attention_mask' in inputs:
+                inputs['attention_mask'] = inputs['attention_mask'].to(dtype=model_dtype)
+            
+            # Forward pass with autocast for mixed precision training
+            with torch.autocast(device_type='cuda' if 'cuda' in str(self.device) else 'cpu', 
+                              dtype=model_dtype):
+                outputs = self.model(
+                    input_ids=inputs["input_ids"],
+                    attention_mask=inputs.get("attention_mask", None),
+                    labels=labels
+                )
+            
+            # Backward pass and optimize
+            loss = outputs.loss
+            if loss is not None:
+                loss.backward()
+                return loss.item()
+            return None
             
         except Exception as e:
             return False, f"Error in text generation: {str(e)}"
