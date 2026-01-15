@@ -13,7 +13,10 @@ This document describes the PyTorch LLM implementation for SBK Charts, which ena
 
 ## Overview
 
-The PyTorch LLM implementation allows SBK Charts to leverage local language models through PyTorch's inference capabilities. This implementation is particularly useful for users who want to run AI analysis locally without relying on external APIs.
+The PyTorch LLM implementation allows SBK Charts to leverage local language models through PyTorch's inference capabilities.
+This implementation is particularly useful for users who want to run AI analysis locally without relying on external APIs.
+This implementation is based on the Hugging Face Transformers library and PyTorch.
+you can train the model by providing '--pt-train' option, but the default model : 'openai/gpt-oss-20b' consumes more than 200GB RAM.
 
 ## Implementation Details
 

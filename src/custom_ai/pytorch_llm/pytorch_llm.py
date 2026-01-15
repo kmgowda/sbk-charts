@@ -404,10 +404,10 @@ class PyTorchLLM(SbkGenAI):
         if not self._is_initialized:
             return False, "Model initialization failed"
             
-        desc = (f"PyTorch LLM: {self.model_name}\n"
-                f"Device: {self.device}, Max Length: {self.max_length}\n"
-                f"Temperature: {self.temperature}, Top-p: {self.top_p}\n"
-                f"Model Class: {self.model.__class__.__name__ if self.model else 'Not loaded'}")
+        desc = (f"PyTorch LLM: {self.model_name}"
+                f", Device: {self.device}, Max Length: {self.max_length}"
+                f", Temperature: {self.temperature}, Top-p: {self.top_p}"
+                f", Model Class: {self.model.__class__.__name__ if self.model else 'Not loaded'}\n")
         return True, desc
 
     def _clean_generated_text(self, text: str) -> str:
