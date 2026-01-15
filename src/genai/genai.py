@@ -55,6 +55,12 @@ class SbkGenAI(ABC):
     def parse_args(self, args):
         pass
 
+    def open(self, args):
+        pass
+
+    def close(self, args):
+        pass
+
     @abstractmethod
     def get_model_description(self) -> Tuple[bool, str]:
         """
