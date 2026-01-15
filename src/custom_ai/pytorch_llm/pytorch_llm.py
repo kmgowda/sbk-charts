@@ -330,8 +330,7 @@ class PyTorchLLM(SbkGenAI):
         """
         if not self._is_initialized and not self._initialize_model():
             return False, "Model initialization failed"
-            
-        was_training = self.model.training
+
         try:
             # Ensure model is on the correct device and in evaluation mode
             device = torch.device(self.device)
