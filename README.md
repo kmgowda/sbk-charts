@@ -102,6 +102,8 @@ you can see the sample [fil read in csv](./samples/charts/sbk-file-read.csv) and
 
 ### Setup Instructions
 
+#### Setup with Python virtual environment 
+
 ```
 #create the env
 python3 -m venv venv-sbk-charts
@@ -121,6 +123,31 @@ to deactivate from the venv
 ```
 # deactivate the venv
 deactivate
+```
+
+#### Setup with conda
+
+```
+# Create a new conda environment with Python 3.14 or higher
+conda create -n conda-sbk-charts python=3.14 -y
+
+# Activate the environment
+conda activate conda-sbk-charts
+
+# Install pip if not already installed
+conda install pip -y
+
+# Install the project in editable mode using pip
+pip install -e .
+
+# Build the sbk-charts package
+python -m build
+```
+
+To deactivate
+
+```
+conda deactivate
 ```
 
 ## Generative AI-Powered Analysis
