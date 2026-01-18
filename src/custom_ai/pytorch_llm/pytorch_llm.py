@@ -28,10 +28,12 @@ Requirements:
 import torch
 from typing import Tuple, Optional
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+from transformers.utils.hub import cached_file, TRANSFORMERS_CACHE
 from src.genai.genai import SbkGenAI
 import traceback
 import re
 import os
+import glob
 
 # Default model configuration
 DEFAULT_MODEL = "openai/gpt-oss-20b"
@@ -109,16 +111,55 @@ class PyTorchLLM(SbkGenAI):
                 )
             else:
                 print(f"Downloading model {self.model_name}")
+                # Get the default cache directory
+                print(f"Default cache directory: {TRANSFORMERS_CACHE}")
+                
+                # Download the tokenizer
                 self.tokenizer = AutoTokenizer.from_pretrained(
                     self.model_name,
                     trust_remote_code=True
                 )
+                
+                # Download the model
                 self.model = AutoModelForCausalLM.from_pretrained(
                     self.model_name,
                     device_map="auto",
                     dtype=dtype,
                     trust_remote_code=True
                 )
+                
+                # Print the model's cache location
+                try:
+                    # Try to get the model's configuration file path
+                    config_file = None
+                    if hasattr(self.model.config, 'name_or_path'):
+                        # For most models, the config is in the same directory as the model
+                        model_name = self.model.config.name_or_path
+                        if os.path.exists(model_name):
+                            # If it's a local path
+                            config_file = os.path.join(model_name, 'config.json')
+                        else:
+                            # If it's a model name, check the cache
+                            try:
+                                config_file = cached_file(model_name, 'config.json')
+                            except:
+                                pass
+                    
+                    if config_file and os.path.exists(config_file):
+                        model_dir = os.path.dirname(config_file)
+                        print(f"✅ Model files cached at: {model_dir}")
+                    else:
+                        # Fallback: try to find any .bin or .safetensors file in the cache
+                        cache_files = glob.glob(os.path.join(TRANSFORMERS_CACHE, '**/*.bin'), recursive=True) + \
+                                     glob.glob(os.path.join(TRANSFORMERS_CACHE, '**/*.safetensors'), recursive=True)
+                        if cache_files:
+                            model_dir = os.path.dirname(cache_files[0])
+                            print(f"✅ Found model weights at: {model_dir}")
+                        else:
+                            print(f"⚠️ Could not determine exact cache location. Using default: {TRANSFORMERS_CACHE}")
+                except Exception as e:
+                    print(f"⚠️ Could not determine exact cache location: {str(e)}")
+                    print(f"Using default cache directory: {TRANSFORMERS_CACHE}")
 
             self.model = self.model.to(self.device)
 
