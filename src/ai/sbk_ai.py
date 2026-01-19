@@ -156,7 +156,7 @@ class SbkAI:
                             default=self.timeout_seconds)
         parser.add_argument("-nothreads", "--nothreads", help=f"No parallel threads, default : {self.no_threads}",
                             default=self.no_threads)
-        self.subparsers = parser.add_subparsers(dest="ai_class", help="Available sub-commands", required=False)
+        self.subparsers = parser.add_subparsers(dest="ai_class", help="Available GenAI commands", required=False)
         parser.set_defaults(ai_class=None)
         for name, cls in self.classes.items():
             try:
