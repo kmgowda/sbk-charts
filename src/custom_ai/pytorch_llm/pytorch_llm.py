@@ -26,7 +26,7 @@ Requirements:
 """
 
 import torch
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict, Any
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 from transformers.utils.hub import cached_file, TRANSFORMERS_CACHE
 from src.genai.genai import SbkGenAI
@@ -34,6 +34,7 @@ import traceback
 import re
 import os
 import glob
+import logging
 
 # Default model configuration
 DEFAULT_MODEL = "openai/gpt-oss-20b"
@@ -46,6 +47,9 @@ DEFAULT_MAX_LENGTH = 2048
 DEFAULT_TEMPERATURE = 0.4
 DEFAULT_TOP_P = 0.9
 
+# Configure logging
+logger = logging.getLogger(__name__)
+
 
 class PyTorchLLM(SbkGenAI):
     """PyTorch LLM Analysis Backend
@@ -55,14 +59,25 @@ class PyTorchLLM(SbkGenAI):
     from the Hugging Face model hub that's compatible with PyTorch.
     
     Configuration:
-    - Model: Any Hugging Face model ID or local path (default: gpt2)
+    - Model: Any Hugging Face model ID or local path (default: openai/gpt-oss-20b)
     - Device: 'cuda', 'mps', or 'cpu' (auto-detects CUDA by default)
-    - Max Length: Maximum sequence length for generation (default: 512)
-    - Temperature: Controls randomness (default: 0.7)
+    - Max Length: Maximum sequence length for generation (default: 2048)
+    - Temperature: Controls randomness (default: 0.4)
     - Top-p: Nucleus sampling parameter (default: 0.9)
+    
+    Attributes:
+        model_name (str): Name or path of the loaded model
+        device (str): Device type for model execution
+        max_length (int): Maximum sequence length
+        temperature (float): Sampling temperature
+        top_p (float): Top-p sampling parameter
+        model: The loaded PyTorch model
+        tokenizer: The loaded tokenizer
+        _is_initialized (bool): Whether the model is initialized
+        output_list (list): List of generated outputs for training
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.model_name = DEFAULT_MODEL
         self.device = DEFAULT_DEVICE
@@ -84,7 +99,7 @@ class PyTorchLLM(SbkGenAI):
             return True
             
         try:
-            print(f"Loading model {self.model_name} on {self.device}...")
+            logger.info(f"Loading model {self.model_name} on {self.device}...")
             # Check if we have a saved model
             saved_model_dir = os.path.join(os.path.dirname(__file__), 'saved_models', self.model_name.split('/')[-1])
 
@@ -98,7 +113,7 @@ class PyTorchLLM(SbkGenAI):
                 dtype = torch.float32
 
             if os.path.exists(saved_model_dir):
-                print(f"Loading model from {saved_model_dir}")
+                logger.info(f"Loading model from {saved_model_dir}")
                 self.model = AutoModelForCausalLM.from_pretrained(
                     saved_model_dir,
                     device_map="auto",
@@ -110,9 +125,9 @@ class PyTorchLLM(SbkGenAI):
                     trust_remote_code=True
                 )
             else:
-                print(f"Downloading model {self.model_name}")
+                logger.info(f"Downloading model {self.model_name}")
                 # Get the default cache directory
-                print(f"Default cache directory: {TRANSFORMERS_CACHE}")
+                logger.info(f"Default cache directory: {TRANSFORMERS_CACHE}")
                 
                 # Download the tokenizer
                 self.tokenizer = AutoTokenizer.from_pretrained(
@@ -147,19 +162,19 @@ class PyTorchLLM(SbkGenAI):
                     
                     if config_file and os.path.exists(config_file):
                         model_dir = os.path.dirname(config_file)
-                        print(f"✅ Model files cached at: {model_dir}")
+                        logger.info(f"✅ Model files cached at: {model_dir}")
                     else:
                         # Fallback: try to find any .bin or .safetensors file in the cache
                         cache_files = glob.glob(os.path.join(TRANSFORMERS_CACHE, '**/*.bin'), recursive=True) + \
                                      glob.glob(os.path.join(TRANSFORMERS_CACHE, '**/*.safetensors'), recursive=True)
                         if cache_files:
                             model_dir = os.path.dirname(cache_files[0])
-                            print(f"✅ Found model weights at: {model_dir}")
+                            logger.info(f"✅ Found model weights at: {model_dir}")
                         else:
-                            print(f"⚠️ Could not determine exact cache location. Using default: {TRANSFORMERS_CACHE}")
+                            logger.warning(f"⚠️ Could not determine exact cache location. Using default: {TRANSFORMERS_CACHE}")
                 except Exception as e:
-                    print(f"⚠️ Could not determine exact cache location: {str(e)}")
-                    print(f"Using default cache directory: {TRANSFORMERS_CACHE}")
+                    logger.warning(f"⚠️ Could not determine exact cache location: {str(e)}")
+                    logger.info(f"Using default cache directory: {TRANSFORMERS_CACHE}")
 
             self.model = self.model.to(self.device)
 
@@ -174,13 +189,28 @@ class PyTorchLLM(SbkGenAI):
             return True
             
         except Exception as e:
-            print(f"Failed to initialize model: {str(e)}")
+            logger.error(f"Failed to initialize model: {str(e)}")
             self.model = None
             self.tokenizer = None
             self._is_initialized = False
             return False
 
-    def add_args(self, parser):
+    def _get_device_type(self) -> str:
+        """Get standardized device type string.
+        
+        Returns:
+            str: 'cuda', 'mps', or 'cpu'
+        """
+        device = torch.device(self.device)
+        device_str = str(device).lower()
+        if 'cuda' in device_str:
+            return 'cuda'
+        elif 'mps' in device_str:
+            return 'mps'
+        else:
+            return 'cpu'
+
+    def add_args(self, parser) -> None:
         """Add command-line arguments for PyTorch LLM configuration."""
         parser.add_argument(
             "--pt-model",
@@ -217,7 +247,7 @@ class PyTorchLLM(SbkGenAI):
             default=DEFAULT_TOP_P
         )
 
-    def parse_args(self, args):
+    def parse_args(self, args) -> None:
         """Parse command-line arguments."""
         self.model_name = args.pt_model
         self.device = args.pt_device
@@ -229,35 +259,36 @@ class PyTorchLLM(SbkGenAI):
         self.train_mode = args.pt_train
         
 
-    def open(self, args):
+    def open(self, args) -> None:
         # Reinitialize model if needed
         if not self._is_initialized:
-            self._initialize_model()
-            self._is_initialized = True
+            if not self._initialize_model():
+                logger.error("Failed to initialize model during open")
+                return
 
 
-    def close(self, args):
+    def close(self, args) -> None:
         loss = None
         # If in training mode and we have a target, train on the generated output
         if self.train_mode:
             self.model.train()
-            print("\n" + "=" * 50)
-            print("🚀 Starting training on generated output")
+            logger.info("\n" + "=" * 50)
+            logger.info("🚀 Starting training on generated output")
 
             for output_text in self.output_list:
-                print(f"📄 Generated length: {len(output_text)} chars")
+                logger.info(f"📄 Generated length: {len(output_text)} chars")
                 loss = self._train_on_output(output_text)
                 if loss is None:
                     break
-            print("=" * 50)
+            logger.info("=" * 50)
             # Save the model after training
             if loss is not None:
-                print("\n💾 Saving trained model...")
+                logger.info("💾 Saving trained model...")
                 save_success = self._save_model()
                 if save_success:
-                    print("✅ Model saved successfully")
+                    logger.info("✅ Model saved successfully")
                 else:
-                    print("❌ Failed to save model")
+                    logger.error("❌ Failed to save model")
 
 
     def _save_model(self, output_dir: str = None) -> bool:
@@ -273,18 +304,29 @@ class PyTorchLLM(SbkGenAI):
             if output_dir is None:
                 output_dir = os.path.join(os.path.dirname(__file__), 'saved_models', self.model_name.split('/')[-1])
             
+            # Validate output directory path
+            if not output_dir or not isinstance(output_dir, str):
+                logger.error("Invalid output directory path")
+                return False
+                
+            # Sanitize path to prevent directory traversal
+            output_dir = os.path.normpath(output_dir)
+            if '..' in output_dir:
+                logger.error("Directory traversal detected in output path")
+                return False
+            
             os.makedirs(output_dir, exist_ok=True)
-            print(f"💾 Saving model to {output_dir}...")
+            logger.info(f"💾 Saving model to {output_dir}...")
             
             # Save model and tokenizer
             self.model.save_pretrained(output_dir)
             self.tokenizer.save_pretrained(output_dir)
             
-            print(f"✅ Model successfully saved to {output_dir}")
+            logger.info(f"✅ Model successfully saved to {output_dir}")
             return True
             
         except Exception as e:
-            print(f"❌ Error saving model: {str(e)}")
+            logger.error(f"❌ Error saving model: {str(e)}")
             return False
             
     def _train_on_output(self, generated_text: str) -> Optional[float]:
@@ -296,8 +338,16 @@ class PyTorchLLM(SbkGenAI):
         Returns:
             float: The loss value if successful, None otherwise
         """
+        # Input validation
+        if not generated_text or not isinstance(generated_text, str):
+            logger.error("Invalid generated text for training")
+            return None
+            
+        if len(generated_text.strip()) == 0:
+            logger.error("Empty generated text for training")
+            return None
         try:
-            print(f"🔄 Starting training on generated output (length: {len(generated_text)} chars)...")
+            logger.info(f"🔄 Starting training on generated output (length: {len(generated_text)} chars)...")
 
             # Get model's dtype for consistent typing
             model_dtype = next(self.model.parameters()).dtype
@@ -330,7 +380,7 @@ class PyTorchLLM(SbkGenAI):
 
             device = torch.device(self.device)
 
-            device_type = 'mps' if 'mps' in str(device) else 'cuda' if 'cuda' in str(device) else 'cpu'
+            device_type = self._get_device_type()
             
             # Forward pass with autocast for mixed precision training
             with torch.autocast(device_type=device_type,
@@ -348,14 +398,14 @@ class PyTorchLLM(SbkGenAI):
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 self.optimizer.step()
                 # Print training progress
-                print(f"✅ Training complete - Loss: {loss.item():.4f}")
+                logger.info(f"✅ Training complete - Loss: {loss.item():.4f}")
                 return loss.item()
 
-            print("⚠️ No loss computed during training")
+            logger.warning("⚠️ No loss computed during training")
             return None
             
         except Exception as e:
-            print(f"❌ Error during training: {str(e)}")
+            logger.error(f"❌ Error during training: {str(e)}")
             traceback.print_exc()
             return None
     
@@ -369,6 +419,13 @@ class PyTorchLLM(SbkGenAI):
             tuple: (success, response) where success is a boolean and
                    response is either the generated text or an error message
         """
+        # Input validation
+        if not prompt or not isinstance(prompt, str):
+            return False, "Invalid prompt: must be a non-empty string"
+            
+        if len(prompt.strip()) == 0:
+            return False, "Invalid prompt: cannot be empty or whitespace only"
+            
         if not self._is_initialized and not self._initialize_model():
             return False, "Model initialization failed"
 
@@ -400,7 +457,7 @@ class PyTorchLLM(SbkGenAI):
             
             # Generate text with appropriate settings
             with torch.no_grad():
-                device_type = 'mps' if 'mps' in str(device) else 'cuda' if 'cuda' in str(device) else 'cpu'
+                device_type = self._get_device_type()
                 with torch.autocast(device_type=device_type, 
                                  enabled=device_type != 'cpu',
                                  dtype=model_dtype if model_dtype in [torch.float16, torch.bfloat16] else None):
@@ -430,7 +487,7 @@ class PyTorchLLM(SbkGenAI):
             
         except Exception as e:
             error_msg = f"Error in text generation: {str(e)}\n{traceback.format_exc()}"
-            print(error_msg)
+            logger.error(error_msg)
             return False, error_msg
 
 
@@ -477,7 +534,7 @@ class PyTorchLLM(SbkGenAI):
         
         return cleaned.strip()
 
-    def _train_on_example(self, prompt: str, target: str) -> None:
+    def _train_on_example(self, prompt: str, target: str) -> Optional[float]:
         """Train the model on a single example.
         
         Args:
@@ -530,7 +587,7 @@ class PyTorchLLM(SbkGenAI):
             return None
             
         except Exception as e:
-            return False, f"Error in text generation: {str(e)}"
+            return None, f"Error during training: {str(e)}"
 
     def get_throughput_analysis(self) -> Tuple[bool, str]:
         """Generate throughput analysis using the PyTorch LLM."""
@@ -564,7 +621,7 @@ class PyTorchLLM(SbkGenAI):
         except Exception as e:
             return False, f"Failed to generate percentile histogram analysis: {str(e)}"
 
-    def __del__(self):
+    def __del__(self) -> None:
         """Clean up resources when the object is destroyed."""
         if hasattr(self, 'model') and self.model is not None:
             del self.model
