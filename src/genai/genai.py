@@ -55,6 +55,12 @@ class SbkGenAI(ABC):
     def parse_args(self, args):
         pass
 
+    def open(self, args):
+        pass
+
+    def close(self, args):
+        pass
+
     @abstractmethod
     def get_model_description(self) -> Tuple[bool, str]:
         """
@@ -108,7 +114,7 @@ class SbkGenAI(ABC):
             "- Identify which storage systems have the highest and lowest minimum, average and maximum throughput.\n"
             "- Quantify relative differences roughly (for example, 'about 2x higher').\n"
             "- Mention any big gaps or interesting patterns.\n"
-            "- if any sentence of paragraph is of more than 70 characters, break it into multiple sentences.\n"
+            "- If any sentence of paragraph is of more than 70 characters, break it into multiple sentences.\n"
             "Here are the measurements:\n"
             f"{metrics_block}\n\n"
             "Now write the analysis in clear, technical English."
