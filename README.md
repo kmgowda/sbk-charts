@@ -266,5 +266,15 @@ Found a bug or have a feature request? Please open an issue on our [GitHub Issue
 
 By contributing, you agree that your contributions will be licensed under the [Apache License 2.0](LICENSE).
 
+
+### Release format
+
+Release Number : .<2 digits year>.<2 digits month>.
+Example: 1.25.6.0
+Major number - 1
+Year - 25 (2025)
+Mont - 6 (Jun)
+Minor Number - 0
+
 ---
 
