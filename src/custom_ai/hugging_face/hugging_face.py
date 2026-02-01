@@ -27,6 +27,7 @@ Key behavior
 """
 
 import  os
+from typing import Tuple
 from huggingface_hub import InferenceClient
 from src.genai.genai import SbkGenAI
 
