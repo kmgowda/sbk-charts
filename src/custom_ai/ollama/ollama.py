@@ -261,6 +261,33 @@ class Ollama(SbkGenAI):
         except Exception as e:
             return False, f"Failed to generate percentile histogram analysis: {str(e)}"
 
+    def get_response(self, query: str) -> tuple[bool, str]:
+        """
+        Generate a response for a custom query using RAG-enhanced context.
+
+        Args:
+            query: The query string to analyze
+
+        Returns:
+            tuple: (success, response) where success is a boolean and
+                   response is either the generated text or an error message
+        """
+        try:
+            # Create a prompt for the custom query
+            prompt = f"""You are a storage performance engineer. Please analyze the following query based on the provided context:
+
+Query: {query}
+
+Please provide a detailed technical analysis that addresses the query comprehensively. Use the contextual information provided to give specific and accurate insights."""
+            
+            # Enhance with RAG context
+            enhanced_prompt = self._enhance_prompt_with_rag(prompt, query)
+            
+            return self._call_analysis(enhanced_prompt)
+            
+        except Exception as e:
+            return False, f"Failed to generate response for query: {str(e)}"
+
     def __del__(self):
         """Clean up resources."""
         if self.session:

@@ -42,6 +42,7 @@ import textwrap
 from src.stat.storage import StorageStat
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
+from src.rag.sbk_simple_rag import SbkSimpleRAGPipeline
 
 # Log the full exception for debugging
 import traceback
@@ -146,11 +147,13 @@ class SbkAI:
         self.classes = discover_custom_ai_classes()
         self.ai_instance_map = dict()
         self.subparsers = None
+        self.input_files = None
         self.file =  None
         self.ai_instance = None
         self.web = None
         self.timeout_seconds = DEFAULT_TIMEOUT_SECONDS
         self.no_threads = False
+        self.rag_pipeline = None
 
     def add_args(self, parser):
         """
@@ -197,21 +200,101 @@ class SbkAI:
             - Sets the output file path
             - Configures timeout (converted to int) and threading settings
             - Activates the selected AI backend instance if specified
+            - Initializes RAG pipeline with input CSV files if available
         """
         self.timeout_seconds = int(args.seconds) if hasattr(args, 'seconds') and args.seconds is not None else DEFAULT_TIMEOUT_SECONDS
         self.file = args.ofile
         self.no_threads = args.nothreads
+        self.input_files = args.ifiles.split(",")
+
         if args.ai_class:
             self.ai_instance = self.ai_instance_map[args.ai_class.lower()]
             self.ai_instance.parse_args(args)
 
+    def _initialize_rag_pipeline(self):
+        """
+        Initialize the RAG pipeline with input CSV files.
+        
+        This method creates a RAG pipeline instance and ingests data from
+        the input CSV files to provide context for AI analysis.
+        Uses Simple RAG by default for maximum compatibility.
+        """
+        try:
+            # Filter for CSV files from input files
+            csv_files = [f for f in self.input_files if f.lower().endswith('.csv')]
+            
+            if not csv_files:
+                print("No CSV files found in input files. RAG pipeline will not be initialized.")
+                return
+            
+            print(f"Initializing RAG pipeline with CSV files: {csv_files}")
+            
+            # Use Simple RAG by default (maximum compatibility)
+            print("🎯 Using Simple RAG (ChromaDB-free) for maximum compatibility...")
+            try:
+                self.rag_pipeline = SbkSimpleRAGPipeline()
+                
+                if self.rag_pipeline.initialize():
+                    # Ingest CSV data
+                    if self.rag_pipeline.ingest_csv_files(csv_files):
+                        stats = self.rag_pipeline.get_collection_stats()
+                        print(f"✅ Simple RAG pipeline initialized successfully with {stats.get('document_count', 0)} documents")
+                        print("💡 Simple RAG provides full functionality without external dependencies")
+                        return
+                    else:
+                        print("❌ Failed to ingest CSV files into Simple RAG pipeline")
+                else:
+                    print("❌ Failed to initialize Simple RAG pipeline")
+                    
+            except Exception as e:
+                print(f"❌ Simple RAG pipeline failed: {str(e)}")
+            
+            # Optional: Try ChromaDB as enhancement (not required)
+            print("\n🔍 Optional: Attempting ChromaDB for enhanced features...")
+            try:
+                self.rag_pipeline = SbkRAGPipeline()
+                
+                if self.rag_pipeline.initialize():
+                    # Ingest CSV data
+                    if self.rag_pipeline.ingest_csv_files(csv_files):
+                        stats = self.rag_pipeline.get_collection_stats()
+                        print(f"🎉 ChromaDB RAG pipeline initialized successfully with {stats.get('document_count', 0)} documents")
+                        print("🚀 Enhanced vector search features available")
+                        return
+                    else:
+                        print("⚠️ Failed to ingest CSV files into ChromaDB RAG pipeline")
+                else:
+                    print("⚠️ Failed to initialize ChromaDB RAG pipeline")
+                    
+            except Exception as e:
+                print(f"⚠️ ChromaDB RAG pipeline failed: {str(e)}")
+                print("   This is normal on some systems (especially Apple Silicon)")
+            
+            # If both failed, disable RAG
+            print("\n❌ Both RAG pipelines failed. RAG functionality will be disabled.")
+            self.rag_pipeline = None
+                
+        except Exception as e:
+            print(f"❌ Error initializing RAG pipeline: {str(e)}")
+            self.rag_pipeline = None
+
     def open(self, args):
+        self._initialize_rag_pipeline()
         if self.ai_instance:
             self.ai_instance.open(args)
+
 
     def close(self, args):
         if self.ai_instance:
             self.ai_instance.close(args)
+        
+        # Clean up RAG pipeline if it exists
+        if self.rag_pipeline:
+            print("Closing RAG pipeline...")
+            if self.rag_pipeline.close(cleanup_local_data=True):
+                print("RAG pipeline closed successfully")
+            else:
+                print("Warning: Failed to close RAG pipeline properly")
 
     def load_workbook(self):
         """
@@ -311,6 +394,10 @@ class SbkAI:
         """
         # Set storage statistics for AI analysis
         self.ai_instance.set_storage_stats(self.get_storage_stats())
+        
+        # Set RAG pipeline if available
+        if self.rag_pipeline:
+            self.ai_instance.set_rag_pipeline(self.rag_pipeline)
 
         def run_analysis(function_name):
             """

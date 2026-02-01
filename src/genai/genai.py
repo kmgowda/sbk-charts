@@ -36,6 +36,7 @@ class SbkGenAI(ABC):
     def __init__(self):
         """Initialize the SbkGenAI instance with default values."""
         self.storage_stats: Optional[List[Any]] = None
+        self.rag_pipeline = None
 
     @final
     def set_storage_stats(self, stats: List[Any]) -> None:
@@ -48,6 +49,83 @@ class SbkGenAI(ABC):
             stats: A list of storage statistics objects containing benchmark data.
         """
         self.storage_stats = stats
+
+    @final
+    def set_rag_pipeline(self, rag_pipeline) -> None:
+        """
+        Set the RAG pipeline for context-enhanced analysis.
+        
+        This method is marked as final to ensure consistent behavior across all subclasses.
+        
+        Args:
+            rag_pipeline: A RAG pipeline instance for retrieving contextual data.
+        """
+        self.rag_pipeline = rag_pipeline
+
+    def _enhance_prompt_with_rag(self, base_prompt: str, query: str = None) -> str:
+        """
+        Enhance a prompt with relevant context from the RAG pipeline.
+        
+        Args:
+            base_prompt: The original prompt to enhance
+            query: Specific query for RAG retrieval (optional)
+            
+        Returns:
+            str: Enhanced prompt with RAG context
+        """
+        if not self.rag_pipeline:
+            return base_prompt
+        
+        try:
+            # Use the query or derive one from the base prompt
+            search_query = query or self._extract_query_from_prompt(base_prompt)
+            
+            # Retrieve relevant context
+            context_list = self.rag_pipeline.retrieve_context(search_query, n_results=3)
+            
+            if context_list:
+                # Format context for the prompt
+                context_text = self.rag_pipeline.format_context_for_prompt(context_list)
+                
+                # Create enhanced prompt
+                enhanced_prompt = f"""{base_prompt}
+
+CONTEXTUAL INFORMATION:
+{context_text}
+
+Please use the above contextual information along with your analysis to provide more accurate and detailed insights."""
+                return enhanced_prompt
+            
+        except Exception as e:
+            # If RAG enhancement fails, return the original prompt
+            print(f"Warning: Failed to enhance prompt with RAG context: {str(e)}")
+        
+        return base_prompt
+
+    def _extract_query_from_prompt(self, prompt: str) -> str:
+        """
+        Extract a meaningful search query from the prompt.
+        
+        Args:
+            prompt: The prompt to extract query from
+            
+        Returns:
+            str: Extracted query string
+        """
+        # Simple keyword extraction - can be enhanced
+        keywords = []
+        
+        # Look for performance-related keywords
+        performance_terms = ['throughput', 'latency', 'performance', 'mb/s', 'iops', 'storage']
+        for term in performance_terms:
+            if term.lower() in prompt.lower():
+                keywords.append(term)
+        
+        # If no specific keywords found, use first 100 characters
+        if not keywords:
+            return prompt[:100].strip()
+        
+        return " ".join(keywords)
 
     def add_args(self, parser):
         pass
@@ -119,7 +197,9 @@ class SbkGenAI(ABC):
             f"{metrics_block}\n\n"
             "Now write the analysis in clear, technical English."
         )
-        return prompt
+        
+        # Enhance with RAG context if available
+        return self._enhance_prompt_with_rag(prompt, "throughput analysis storage performance")
 
     def get_latency_prompt(self):
         """Generate a prompt for latency analysis.
@@ -129,7 +209,7 @@ class SbkGenAI(ABC):
         if not self.storage_stats:
             raise RuntimeError("Storage stats not available")
 
-            # Define the key latency metrics we want to analyze
+        # Define the key latency metrics we want to analyze
         latency_metrics = [
             constants.AVG_LATENCY,
             constants.MIN_LATENCY,
@@ -212,7 +292,8 @@ class SbkGenAI(ABC):
             "evaluating these systems. Focus on the most significant findings and their implications."
         )
 
-        return prompt
+        # Enhance with RAG context if available
+        return self._enhance_prompt_with_rag(prompt, "latency analysis storage performance percentiles")
 
 
     def get_total_mb_prompt(self):
@@ -244,7 +325,9 @@ class SbkGenAI(ABC):
             "4. Recommendations for optimizing data processing based on the patterns observed\n\n"
             "Keep the analysis concise, technical, and focused on actionable insights."
         )
-        return prompt
+        
+        # Enhance with RAG context if available
+        return self._enhance_prompt_with_rag(prompt, "total MB data processing analysis")
 
     def get_percentile_histogram_prompt(self):
 
@@ -320,7 +403,9 @@ class SbkGenAI(ABC):
             "Note: The values represent the number of operations that completed within each latency percentile. "
             "Higher counts in higher percentiles may indicate performance issues."
         )
-        return prompt
+        
+        # Enhance with RAG context if available
+        return self._enhance_prompt_with_rag(prompt, "percentile histogram distribution analysis")
 
 
     @abstractmethod
@@ -353,4 +438,8 @@ class SbkGenAI(ABC):
 
     @abstractmethod
     def get_percentile_histogram_analysis(self) -> Tuple[bool, str]:
+        pass
+
+    @abstractmethod
+    def get_response(self, query)-> Tuple[bool, str]:
         pass
