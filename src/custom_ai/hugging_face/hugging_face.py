@@ -30,7 +30,7 @@ import  os
 from huggingface_hub import InferenceClient
 from src.genai.genai import SbkGenAI
 
-HF_MODEL_ID = "google/gemma-2-2b-it"
+HF_MODEL_ID = "meta-llama/Llama-3.1-8B-Instruct"
 
 
 def _call_llm_for_analysis(model_id, prompt):
