@@ -62,7 +62,7 @@ def _call_llm_for_analysis(model_id, prompt):
 
     completion = client.chat_completion(  # ← key change
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=1800,
+        max_tokens=4000,
         temperature=0.4,
         top_p=0.9,
     )

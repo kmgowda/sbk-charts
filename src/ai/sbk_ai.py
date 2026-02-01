@@ -418,7 +418,7 @@ class SbkAI:
                 ret = method()
                 return function_name,ret
             except Exception as e:
-                print(f"Error in {function_name}: {str(e)}")
+                print(f"Exception in {function_name}: {str(e)}")
                 return function_name, (False, str(e))
         
         # List of AI analysis methods to run in parallel
