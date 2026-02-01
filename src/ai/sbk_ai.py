@@ -248,32 +248,8 @@ class SbkAI:
                     
             except Exception as e:
                 print(f"❌ Simple RAG pipeline failed: {str(e)}")
-            
-            # Optional: Try ChromaDB as enhancement (not required)
-            print("\n🔍 Optional: Attempting ChromaDB for enhanced features...")
-            try:
-                self.rag_pipeline = SbkRAGPipeline()
-                
-                if self.rag_pipeline.initialize():
-                    # Ingest CSV data
-                    if self.rag_pipeline.ingest_csv_files(csv_files):
-                        stats = self.rag_pipeline.get_collection_stats()
-                        print(f"🎉 ChromaDB RAG pipeline initialized successfully with {stats.get('document_count', 0)} documents")
-                        print("🚀 Enhanced vector search features available")
-                        return
-                    else:
-                        print("⚠️ Failed to ingest CSV files into ChromaDB RAG pipeline")
-                else:
-                    print("⚠️ Failed to initialize ChromaDB RAG pipeline")
-                    
-            except Exception as e:
-                print(f"⚠️ ChromaDB RAG pipeline failed: {str(e)}")
-                print("   This is normal on some systems (especially Apple Silicon)")
-            
-            # If both failed, disable RAG
-            print("\n❌ Both RAG pipelines failed. RAG functionality will be disabled.")
-            self.rag_pipeline = None
-                
+                self.rag_pipeline = None
+
         except Exception as e:
             print(f"❌ Error initializing RAG pipeline: {str(e)}")
             self.rag_pipeline = None
