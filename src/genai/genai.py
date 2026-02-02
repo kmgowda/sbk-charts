@@ -81,15 +81,14 @@ class SbkGenAI(ABC):
             search_query = query or self._extract_query_from_prompt(base_prompt)
             
             # Retrieve relevant context
-            context_list = self.rag_pipeline.retrieve_context(search_query, n_results=3)
-            
+            context_list = self.rag_pipeline.retrieve_context(search_query, n_results=1000)
             if context_list:
                 # Format context for the prompt
                 context_text = self.rag_pipeline.format_context_for_prompt(context_list)
                 storage_systems = self.rag_pipeline.get_storage_systems()
                 storage_info = f"\n\nAvailable Storage Systems: {', '.join(storage_systems)}"
                 enhanced_prompt = f"""{base_prompt}
-
+                
 CONTEXTUAL INFORMATION:
 {context_text}{storage_info}
 

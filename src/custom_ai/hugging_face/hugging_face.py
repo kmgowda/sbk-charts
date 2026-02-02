@@ -176,16 +176,67 @@ class HuggingFace(SbkGenAI):
             
             # Create a prompt for the custom query
             if is_comparison:
-                prompt = f"""You are a storage performance engineer specializing in comparative analysis. Please analyze the following query about storage system performance:
+                # Special handling for "which storage system is doing better" type questions
+                query_lower = query.lower()
+                if 'doing better' in query_lower or 'better' in query_lower:
+                    prompt = f"""You are a storage performance engineer specializing in comparative analysis. Please analyze the following query about storage system performance:
+
+Query: {query}
+
+Please provide a detailed comparative analysis focusing on READ PERFORMANCE and THROUGHPUT:
+
+Primary Analysis Requirements:
+1. Focus on READ THROUGHPUT performance as the primary comparison metric
+2. Identify which storage system has better read throughput (higher MB/s is better)
+3. Compare read performance across all storage systems that have read operations
+4. If a storage system only has write operations, clearly state this limitation
+5. Provide specific throughput numbers and performance rankings
+
+Analysis Structure:
+1. **Read Throughput Comparison**: Compare storage systems with read operations
+   - List storage systems in order of read throughput performance (best to worst)
+   - Provide actual throughput values (MB/s) for each system
+   - Highlight the best performing system for read operations
+
+2. **Performance Classification**: 
+   - Categorize systems as high/medium/low performance based on throughput
+   - Explain what makes a system "better" in terms of read performance
+
+3. **Workload Considerations**:
+   - Note which systems have read-only, write-only, or mixed workloads
+   - Explain how workload type affects the comparison
+
+4. **Clear Recommendation**:
+   - State clearly: "Storage system X is doing better in terms of read throughput"
+   - Provide the specific performance difference
+
+Important Guidelines:
+- Higher throughput (MB/s) = Better performance for read operations
+- Focus on READ performance unless the query specifically asks about write performance
+- Use the contextual benchmark data to provide specific, data-driven insights
+- If comparing systems with different workload types, explain the limitations
+
+Use the contextual information from the benchmark data to provide specific, data-driven insights and recommendations."""
+                else:
+                    prompt = f"""You are a storage performance engineer specializing in comparative analysis. Please analyze the following query about storage system performance:
 
 Query: {query}
 
 Please provide a detailed comparative analysis that:
 1. Identifies the specific storage systems being compared
-2. Analyzes performance metrics (throughput, latency, IOPS, etc.)
-3. Provides clear recommendations based on the data
-4. Explains the technical reasons for performance differences
-5. Considers the context and use case
+2. Analyzes performance metrics (throughput, latency, IOPS, etc.) for each system
+3. Considers the workload types (read-only, write-only, mixed) and their impact on performance
+4. Takes into account time units and action types (reading, writing, read_write) when making comparisons
+5. Provides clear recommendations based on the data and specific use cases
+6. Explains the technical reasons for performance differences
+7. Highlights which storage system performs better for specific workloads
+
+Important comparison guidelines:
+- Compare systems with similar workload types (read-only vs read-only, write-only vs write-only, mixed vs mixed)
+- Consider time units when comparing latency (MS vs US)
+- Account for the fact that some systems may only have write operations or only read operations
+- Use the contextual information from benchmark data to provide specific, data-driven insights
+- If comparing systems with different workload characteristics, explain the limitations of the comparison
 
 Use the contextual information from the benchmark data to provide specific, data-driven insights and recommendations."""
             else:
@@ -216,15 +267,24 @@ Please provide a detailed technical analysis that addresses the query comprehens
         comparison_indicators = [
             'better', 'worse', 'compare', 'comparison', 'versus', 'vs', 'against',
             'which', 'what', 'best', 'worst', 'faster', 'slower', 'higher', 'lower',
-            'perform', 'performance', 'recommend', 'choose', 'select', 'winner'
+            'perform', 'performance', 'recommend', 'choose', 'select', 'winner',
+            'outperform', 'superior', 'inferior', 'preferable'
         ]
         
         storage_indicators = [
-            'storage', 'system', 'device', 'drive', 'ssd', 'hdd', 'nvme', 'filesystem'
+            'storage', 'system', 'device', 'drive', 'ssd', 'hdd', 'nvme', 'filesystem',
+            'minio', 's3', 'gcs', 'azure', 'blob', 'bucket'
+        ]
+        
+        action_indicators = [
+            'reading', 'writing', 'read', 'write', 'read_write', 'readwrite', 'mixed',
+            'throughput', 'latency', 'iops', 'mb/s', 'bandwidth'
         ]
         
         query_lower = query.lower()
         has_comparison = any(indicator in query_lower for indicator in comparison_indicators)
         has_storage = any(indicator in query_lower for indicator in storage_indicators)
+        has_action = any(indicator in query_lower for indicator in action_indicators)
         
-        return has_comparison and has_storage
+        # Consider it a comparison query if it has comparison indicators AND either storage or action indicators
+        return has_comparison and (has_storage or has_action)

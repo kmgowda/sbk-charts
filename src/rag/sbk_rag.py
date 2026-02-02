@@ -217,7 +217,7 @@ class SbkRAGPipeline:
         
         return " | ".join(text_parts)
     
-    def retrieve_context(self, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
+    def retrieve_context(self, query: str, n_results: int = 1000) -> List[Dict[str, Any]]:
         """
         Retrieve relevant context from the ingested data based on a query.
         
@@ -257,7 +257,7 @@ class SbkRAGPipeline:
             logger.error(f"Error retrieving context: {str(e)}")
             return []
     
-    def format_context_for_prompt(self, context_list: List[Dict[str, Any]], max_context_length: int = 2000) -> str:
+    def format_context_for_prompt(self, context_list: List[Dict[str, Any]], max_context_length: int = 10000000) -> str:
         """
         Format retrieved context into a string suitable for AI prompts.
         

@@ -278,7 +278,7 @@ class Ollama(SbkGenAI):
 
 Query: {query}
 
-Please provide a detailed technical analysis that addresses the query comprehensively. Use the contextual information provided to give specific and accurate insights."""
+Please provide a short technical analysis that addresses the query comprehensively. Use the contextual information provided to give specific and accurate insights."""
             
             # Enhance with RAG context
             enhanced_prompt = self._enhance_prompt_with_rag(prompt, query)

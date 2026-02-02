@@ -155,6 +155,7 @@ class SbkAI:
         self.web = None
         self.timeout_seconds = DEFAULT_TIMEOUT_SECONDS
         self.no_threads = False
+        self.chat_mode = False
         self.rag_pipeline = None
 
     def add_args(self, parser):
@@ -209,7 +210,6 @@ class SbkAI:
         self.timeout_seconds = int(args.seconds) if hasattr(args, 'seconds') and args.seconds is not None else DEFAULT_TIMEOUT_SECONDS
         self.file = args.ofile
         self.no_threads = args.nothreads
-        self.input_files = args.ifiles.split(",")
         self.chat_mode = args.chat
 
         if args.ai_class:
@@ -218,36 +218,25 @@ class SbkAI:
 
     def _initialize_rag_pipeline(self):
         """
-        Initialize the RAG pipeline with input CSV files.
+        Initialize the RAG pipeline with storage statistics.
         
         This method creates a RAG pipeline instance and ingests data from
-        the input CSV files to provide context for AI analysis.
+        the storage statistics to provide context for AI analysis.
         Uses Simple RAG by default for maximum compatibility.
         """
         try:
-            # Filter for CSV files from input files
-            csv_files = [f for f in self.input_files if f.lower().endswith('.csv')]
-            
-            if not csv_files:
-                print("No CSV files found in input files. RAG pipeline will not be initialized.")
-                return
-            
-            print(f"Initializing RAG pipeline with CSV files: {csv_files}")
-            
-            # Use Simple RAG by default (maximum compatibility)
             print("🎯 Using Simple RAG (ChromaDB-free) for maximum compatibility...")
             try:
                 self.rag_pipeline = SbkSimpleRAGPipeline()
-                
                 if self.rag_pipeline.initialize():
-                    # Ingest CSV data
-                    if self.rag_pipeline.ingest_csv_files(csv_files):
+                    # Ingest storage statistics data
+                    if self.rag_pipeline.ingest_storage_stats(self.get_storage_stats()):
                         stats = self.rag_pipeline.get_collection_stats()
-                        print(f"✅ Simple RAG pipeline initialized successfully with {stats.get('document_count', 0)} documents")
+                        print(f"✅ Simple RAG pipeline initialized successfully with {stats.get('document_count', 0)} data points")
                         print("💡 Simple RAG provides full functionality without external dependencies")
                         return
                     else:
-                        print("❌ Failed to ingest CSV files into Simple RAG pipeline")
+                        print("❌ Failed to ingest storage statistics into Simple RAG pipeline")
                 else:
                     print("❌ Failed to initialize Simple RAG pipeline")
                     
@@ -260,6 +249,7 @@ class SbkAI:
             self.rag_pipeline = None
 
     def open(self, args):
+        self.load_workbook()
         self._initialize_rag_pipeline()
         if self.ai_instance:
             self.ai_instance.open(args)
@@ -310,6 +300,7 @@ class SbkAI:
             This operation will overwrite any existing data in the output file.
         """
         self.wb.save(self.file)
+
 
     def get_storage_stats(self):
         """
@@ -677,7 +668,6 @@ class SbkAI:
         if not self.ai_instance:
             print("AI is not enabled!. you can use the subcommands ["+" ".join(self.classes.keys())+"] to enable it.")
         else:
-            self.load_workbook()
             if self.add_ai_analysis():
                 print(f"File updated with graphs and AI documentation: {self.file}")
             self.save_workbook()
@@ -729,6 +719,7 @@ class SbkAI:
             while True:
                 try:
                     # Get user input
+                    print("Ctrl-D to Exit ! Or Continue to Chat")
                     query = input("You: ").strip()
                     
                     if not query:
