@@ -63,7 +63,7 @@ def _call_llm_for_analysis(model_id, prompt):
 
     completion = client.chat_completion(  # ← key change
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=4000,
+        max_tokens=5000,
         temperature=0.4,
         top_p=0.9,
     )
@@ -172,10 +172,8 @@ class HuggingFace(SbkGenAI):
         try:
             # Create a prompt for the custom query
             prompt = f"""You are a storage performance engineer. Please analyze the following query based on the provided context:
-
-        Query: {query}
-
-        Please provide a short technical analysis that addresses the query comprehensively. Use the contextual information provided to give specific and accurate insights."""
+                Query: {query}
+                provide a short technical analysis that addresses the query comprehensively."""
 
             # Enhance with RAG context
             enhanced_prompt = self._enhance_prompt_with_rag(prompt, query)

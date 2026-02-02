@@ -249,8 +249,6 @@ class SbkAI:
             self.rag_pipeline = None
 
     def open(self, args):
-        self.load_workbook()
-        self._initialize_rag_pipeline()
         if self.ai_instance:
             self.ai_instance.open(args)
 
@@ -366,10 +364,7 @@ class SbkAI:
         """
         # Set storage statistics for AI analysis
         self.ai_instance.set_storage_stats(self.get_storage_stats())
-        
-        # Set RAG pipeline if available
-        if self.rag_pipeline:
-            self.ai_instance.set_rag_pipeline(self.rag_pipeline)
+
 
         def run_analysis(function_name):
             """
@@ -668,6 +663,7 @@ class SbkAI:
         if not self.ai_instance:
             print("AI is not enabled!. you can use the subcommands ["+" ".join(self.classes.keys())+"] to enable it.")
         else:
+            self.load_workbook()
             if self.add_ai_analysis():
                 print(f"File updated with graphs and AI documentation: {self.file}")
             self.save_workbook()
@@ -691,13 +687,26 @@ class SbkAI:
             - Prints AI responses to stdout
             - Handles keyboard interrupts gracefully
         """
+
+        if not self.chat_mode:
+            return
+
         if not self.ai_instance:
             print("Error: No AI instance configured. Please specify an AI backend using the available subcommands.")
             print(f"Available AI backends: {', '.join(self.classes.keys())}")
             return
 
-        if not self.chat_mode:
+        storage_stats = self.get_storage_stats()
+
+        if not storage_stats:
+            print(f"Error: Storage stats are not available; check if the workbook {self.file} loaded properly or not!")
             return
+
+        self._initialize_rag_pipeline()
+
+        # Set RAG pipeline if available
+        if self.rag_pipeline:
+            self.ai_instance.set_rag_pipeline(self.rag_pipeline)
 
         print("\n=== SBK AI Chat Mode ===")
         print("Type your queries and press Enter to get AI responses.")
@@ -736,10 +745,10 @@ class SbkAI:
                     
                     # Monitor the thread and print status every 5 seconds
                     while response_thread.is_alive():
-                        print("\r🤔 AI is thinking...", end="", flush=True)
+                        print("\r🤔  AI is thinking...", end="", flush=True)
                         response_thread.join(timeout=5.0)
                         if response_thread.is_alive():
-                            print("\r🤔 AI is thinking... (still processing)", end="", flush=True)
+                            print("\r🤔  AI is thinking... (still processing)", end="", flush=True)
                     
                     print("\r", end="")  # Clear the thinking message
                     
