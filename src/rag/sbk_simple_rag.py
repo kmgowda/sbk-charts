@@ -60,6 +60,7 @@ class SbkSimpleRAGPipeline:
         self.documents = []
         self.metadata = []
         self.is_initialized = False
+        self.storage_systems = set()  # Store unique storage system names
     
     def initialize(self) -> bool:
         """
@@ -115,7 +116,12 @@ class SbkSimpleRAGPipeline:
             self.documents = all_documents
             self.metadata = all_metadatas
             
+            # Extract storage system names from metadata
+            self._extract_storage_systems()
+            
             logger.info(f"Successfully ingested {len(all_documents)} data points from {len(csv_files)} files")
+            if self.storage_systems:
+                logger.info(f"Detected storage systems: {', '.join(sorted(self.storage_systems))}")
             return True
             
         except Exception as e:
@@ -135,7 +141,7 @@ class SbkSimpleRAGPipeline:
         try:
             # Read CSV file
             df = pd.read_csv(file_path)
-            
+
             documents = []
             metadatas = []
             ids = []
@@ -270,6 +276,10 @@ class SbkSimpleRAGPipeline:
             if term in query:
                 keywords.append(term)
         
+        # Check for comparison queries and add storage system names
+        if self._is_comparison_query(query):
+            keywords.extend(self.storage_systems)
+        
         return list(set(keywords))  # Remove duplicates
     
     def format_context_for_prompt(self, context_list: List[Dict[str, Any]], max_context_length: int = 2000) -> str:
@@ -366,3 +376,115 @@ class SbkSimpleRAGPipeline:
         except Exception as e:
             logger.error(f"Error closing Simple RAG pipeline: {str(e)}")
             return False
+    
+    def _extract_storage_systems(self):
+        """
+        Extract unique storage system names from the metadata.
+        
+        This method looks for common storage system identifier columns
+        like 'STORAGE', 'storage_name', 'system', etc. in the metadata.
+        """
+        storage_columns = ['storage', 'storage_name', 'system', 'storage_system', 'device']
+        
+        for metadata in self.metadata:
+            for col in metadata:
+                # Check if this column matches any storage column (case-insensitive)
+                if col.lower() in [sc.lower() for sc in storage_columns]:
+                    storage_name = str(metadata[col]).strip()
+                    if storage_name and storage_name.lower() != 'nan':
+                        self.storage_systems.add(storage_name)
+        
+        # Debug: Print all metadata keys to help identify storage columns
+        if self.metadata and not self.storage_systems:
+            logger.error("No storage systems found. Available metadata columns:")
+            if self.metadata:
+                for key in self.metadata[0].keys():
+                    logger.info(f"  - {key}")
+    
+    def _is_comparison_query(self, query: str) -> bool:
+        """
+        Check if the query is asking for a comparison between storage systems.
+        
+        Args:
+            query: The query string
+            
+        Returns:
+            bool: True if this is a comparison query
+        """
+        comparison_indicators = [
+            'better', 'worse', 'compare', 'comparison', 'versus', 'vs', 'against',
+            'which', 'what', 'best', 'worst', 'faster', 'slower', 'higher', 'lower',
+            'perform', 'performance', 'recommend', 'choose', 'select'
+        ]
+        
+        query_lower = query.lower()
+        return any(indicator in query_lower for indicator in comparison_indicators)
+    
+    def get_storage_systems(self) -> List[str]:
+        """
+        Get the list of storage systems found in the CSV files.
+        
+        Returns:
+            List[str]: Sorted list of unique storage system names
+        """
+        return sorted(list(self.storage_systems))
+    
+    def debug_storage_extraction(self):
+        """
+        Debug method to print information about storage system extraction.
+        """
+        print(f"Total metadata entries: {len(self.metadata)}")
+        print(f"Found storage systems: {self.get_storage_systems()}")
+        
+        if self.metadata:
+            print(f"Available metadata columns: {list(self.metadata[0].keys())}")
+            
+            # Show sample storage values if available
+            storage_columns = ['storage', 'storage_name', 'system', 'storage_system', 'device']
+            for metadata in self.metadata[:3]:  # Check first 3 entries
+                for col in metadata:
+                    if col.lower() in [sc.lower() for sc in storage_columns]:
+                        print(f"Sample {col}: {metadata[col]}")
+                        break
+    
+    def format_context_for_prompt(self, context_list: List[Dict[str, Any]], max_context_length: int = 2000) -> str:
+        """
+        Format retrieved context into a string suitable for AI prompts.
+        
+        This enhanced version includes storage system information when relevant.
+        
+        Args:
+            context_list: List of context items from retrieve_context
+            max_context_length: Maximum length of formatted context
+            
+        Returns:
+            str: Formatted context string
+        """
+        if not context_list:
+            context_parts = ["No relevant context found."]
+            
+            # If we have storage systems but no specific context, mention them
+            if self.storage_systems:
+                context_parts.append(f"Available storage systems in the dataset: {', '.join(self.get_storage_systems())}")
+            
+            return "\n".join(context_parts)
+        
+        context_parts = ["Relevant context from benchmark data:"]
+        
+        # Add storage systems information if this might be a comparison query
+        if self.storage_systems:
+            context_parts.append(f"Available storage systems: {', '.join(self.get_storage_systems())}")
+        
+        for i, item in enumerate(context_list):
+            context_text = f"{i+1}. {item['text']}"
+            context_parts.append(context_text)
+            
+            # Check if we've exceeded the maximum length
+            current_length = len("\n".join(context_parts))
+            if current_length > max_context_length:
+                # Truncate and break
+                context_parts = context_parts[:-1]  # Remove the last addition
+                context_parts.append(f"... (truncated, showing first {i} items)")
+                break
+        
+        return "\n".join(context_parts)

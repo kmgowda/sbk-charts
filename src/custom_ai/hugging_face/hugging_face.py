@@ -171,8 +171,25 @@ class HuggingFace(SbkGenAI):
         """
         try:
 
+            # Check if this is a storage comparison query
+            is_comparison = self._is_storage_comparison_query(query)
+            
             # Create a prompt for the custom query
-            prompt = f"""You are a storage performance engineer. Please analyze the following query based on the provided context:
+            if is_comparison:
+                prompt = f"""You are a storage performance engineer specializing in comparative analysis. Please analyze the following query about storage system performance:
+
+Query: {query}
+
+Please provide a detailed comparative analysis that:
+1. Identifies the specific storage systems being compared
+2. Analyzes performance metrics (throughput, latency, IOPS, etc.)
+3. Provides clear recommendations based on the data
+4. Explains the technical reasons for performance differences
+5. Considers the context and use case
+
+Use the contextual information from the benchmark data to provide specific, data-driven insights and recommendations."""
+            else:
+                prompt = f"""You are a storage performance engineer. Please analyze the following query based on the provided context:
 
 Query: {query}
 
@@ -185,3 +202,29 @@ Please provide a detailed technical analysis that addresses the query comprehens
             
         except Exception as e:
             return False, f"Failed to generate response for query: {str(e)}"
+    
+    def _is_storage_comparison_query(self, query: str) -> bool:
+        """
+        Check if the query is asking for a storage system comparison.
+        
+        Args:
+            query: The query string
+            
+        Returns:
+            bool: True if this is a storage comparison query
+        """
+        comparison_indicators = [
+            'better', 'worse', 'compare', 'comparison', 'versus', 'vs', 'against',
+            'which', 'what', 'best', 'worst', 'faster', 'slower', 'higher', 'lower',
+            'perform', 'performance', 'recommend', 'choose', 'select', 'winner'
+        ]
+        
+        storage_indicators = [
+            'storage', 'system', 'device', 'drive', 'ssd', 'hdd', 'nvme', 'filesystem'
+        ]
+        
+        query_lower = query.lower()
+        has_comparison = any(indicator in query_lower for indicator in comparison_indicators)
+        has_storage = any(indicator in query_lower for indicator in storage_indicators)
+        
+        return has_comparison and has_storage

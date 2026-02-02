@@ -86,14 +86,14 @@ class SbkGenAI(ABC):
             if context_list:
                 # Format context for the prompt
                 context_text = self.rag_pipeline.format_context_for_prompt(context_list)
-                
-                # Create enhanced prompt
+                storage_systems = self.rag_pipeline.get_storage_systems()
+                storage_info = f"\n\nAvailable Storage Systems: {', '.join(storage_systems)}"
                 enhanced_prompt = f"""{base_prompt}
 
 CONTEXTUAL INFORMATION:
-{context_text}
+{context_text}{storage_info}
 
-Please use the above contextual information along with your analysis to provide more accurate and detailed insights."""
+Please use the above contextual information along with your analysis to provide more accurate and detailed insights. When comparing storage systems, reference the specific performance data provided."""
                 return enhanced_prompt
             
         except Exception as e:

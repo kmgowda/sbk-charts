@@ -712,6 +712,17 @@ class SbkAI:
         print("\n=== SBK AI Chat Mode ===")
         print("Type your queries and press Enter to get AI responses.")
         print("Press Control+D to exit chat mode.")
+        
+        # Show available storage systems if RAG is initialized
+        if self.rag_pipeline and hasattr(self.rag_pipeline, 'get_storage_systems'):
+            storage_systems = self.rag_pipeline.get_storage_systems()
+            if storage_systems:
+                print(f"\n💡 Available storage systems for comparison: {', '.join(storage_systems)}")
+                print("You can ask questions like:")
+                print("- 'Which storage system performs better?'")
+                print("- 'Compare throughput between storage systems'")
+                print("- 'What is the best storage system for high IOPS?'")
+        
         print("========================\n")
         
         try:
@@ -771,8 +782,11 @@ class SbkAI:
         try:
             # Check if AI instance has get_response method
             if hasattr(self.ai_instance, 'get_response'):
-                response = self.ai_instance.get_response(query)
-                print(f"\nAI: {response}\n")
+                ret, response = self.ai_instance.get_response(query)
+                if not ret:
+                    print("Error in AI response : ", response)
+                else:
+                    print(f"\n{response}\n")
             else:
                 print("\nAI: This AI backend doesn't support chat queries.\n")
         except Exception as e:
