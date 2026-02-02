@@ -197,8 +197,7 @@ Please use the above contextual information along with your analysis to provide 
             "Now write the analysis in clear, technical English."
         )
         
-        # Enhance with RAG context if available
-        return self._enhance_prompt_with_rag(prompt, "throughput analysis storage performance")
+        return prompt
 
     def get_latency_prompt(self):
         """Generate a prompt for latency analysis.
@@ -290,9 +289,8 @@ Please use the above contextual information along with your analysis to provide 
             "Provide a clear, concise technical analysis that would be useful for a storage engineer "
             "evaluating these systems. Focus on the most significant findings and their implications."
         )
-
-        # Enhance with RAG context if available
-        return self._enhance_prompt_with_rag(prompt, "latency analysis storage performance percentiles")
+        
+        return prompt
 
 
     def get_total_mb_prompt(self):
@@ -325,8 +323,7 @@ Please use the above contextual information along with your analysis to provide 
             "Keep the analysis concise, technical, and focused on actionable insights."
         )
         
-        # Enhance with RAG context if available
-        return self._enhance_prompt_with_rag(prompt, "total MB data processing analysis")
+        return prompt
 
     def get_percentile_histogram_prompt(self):
 
@@ -403,8 +400,7 @@ Please use the above contextual information along with your analysis to provide 
             "Higher counts in higher percentiles may indicate performance issues."
         )
         
-        # Enhance with RAG context if available
-        return self._enhance_prompt_with_rag(prompt, "percentile histogram distribution analysis")
+        return prompt
 
 
     @abstractmethod
