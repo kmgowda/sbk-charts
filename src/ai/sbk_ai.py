@@ -709,8 +709,8 @@ class SbkAI:
             self.ai_instance.set_rag_pipeline(self.rag_pipeline)
 
         print("\n=== SBK AI Chat Mode ===")
-        print("Type your queries and press Enter to get AI responses.")
-        print("Press Control+D to exit chat mode.")
+        print("Type your queries and press Enter twice to finish, or press Ctrl+D to exit.")
+        print("Multiline input is supported - just press Enter twice when done typing.")
         
         # Show available storage systems if RAG is initialized
         if self.rag_pipeline and hasattr(self.rag_pipeline, 'get_storage_systems'):
@@ -721,15 +721,34 @@ class SbkAI:
                 print("- 'Which storage system performs better?'")
                 print("- 'Compare throughput between storage systems'")
                 print("- 'What is the best storage system for high IOPS?'")
+                print("- For complex queries, you can type multiple lines and press Enter twice when done.")
         
         print("========================\n")
         
         try:
             while True:
                 try:
-                    # Get user input
-                    print("Ctrl-D to Exit ! Or Continue to Chat")
-                    query = input("You: ").strip()
+                    # Get user input (multiline support)
+                    print("\nYou: ")
+                    query_lines = []
+                    while True:
+                        try:
+                            line = input()
+                            if line.strip() == "" and len(query_lines) > 0:
+                                # Empty line after some content means end of input
+                                break
+                            query_lines.append(line)
+                        except EOFError:
+                            # Ctrl-D pressed
+                            if len(query_lines) == 0:
+                                # Exit chat mode
+                                print("\n👋  Exiting chat mode...")
+                                return
+                            else:
+                                # End current query
+                                break
+                    
+                    query = "\n".join(query_lines).strip()
                     
                     if not query:
                         print("Please enter a valid query.")
