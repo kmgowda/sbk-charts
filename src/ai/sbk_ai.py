@@ -28,6 +28,8 @@ Key Features:
 """
 import time
 from typing import final
+import threading
+import sys
 
 from openpyxl import load_workbook
 
@@ -173,6 +175,8 @@ class SbkAI:
                             default=self.timeout_seconds)
         parser.add_argument("-nothreads", "--nothreads", help="Disable parallel threads (default: threads enabled)", 
                             action="store_true", default=False)
+        parser.add_argument("-chat", "--chat", help="Start interactive chat mode with AI", 
+                            action="store_true", default=False)
         self.subparsers = parser.add_subparsers(dest="ai_class", help="Available GenAI commands", required=False)
         parser.set_defaults(ai_class=None)
         for name, cls in self.classes.items():
@@ -206,6 +210,7 @@ class SbkAI:
         self.file = args.ofile
         self.no_threads = args.nothreads
         self.input_files = args.ifiles.split(",")
+        self.chat_mode = args.chat
 
         if args.ai_class:
             self.ai_instance = self.ai_instance_map[args.ai_class.lower()]
@@ -676,4 +681,100 @@ class SbkAI:
             if self.add_ai_analysis():
                 print(f"File updated with graphs and AI documentation: {self.file}")
             self.save_workbook()
+
+    def chat(self):
+        """
+        Start interactive chat mode with the AI instance.
+        
+        This method implements an interactive chat loop where users can:
+        - Input queries in natural language
+        - Get AI responses in a separate thread
+        - Monitor the thread and print responses every 5 seconds
+        - Exit with Control+D (EOF)
+        
+        The chat mode requires an AI instance to be configured. If no AI instance
+        is available, it will display an error message and return.
+        
+        Side Effects:
+            - Starts interactive command-line interface
+            - Creates and manages threads for AI responses
+            - Prints AI responses to stdout
+            - Handles keyboard interrupts gracefully
+        """
+        if not self.ai_instance:
+            print("Error: No AI instance configured. Please specify an AI backend using the available subcommands.")
+            print(f"Available AI backends: {', '.join(self.classes.keys())}")
+            return
+
+        if not self.chat_mode:
+            return
+
+        print("\n=== SBK AI Chat Mode ===")
+        print("Type your queries and press Enter to get AI responses.")
+        print("Press Control+D to exit chat mode.")
+        print("========================\n")
+        
+        try:
+            while True:
+                try:
+                    # Get user input
+                    query = input("You: ").strip()
+                    
+                    if not query:
+                        print("Please enter a valid query.")
+                        continue
+                    
+                    # Start AI response in separate thread
+                    response_thread = threading.Thread(
+                        target=self._get_ai_response,
+                        args=(query,),
+                        daemon=True
+                    )
+                    response_thread.start()
+                    
+                    # Monitor the thread and print status every 5 seconds
+                    while response_thread.is_alive():
+                        print("\r🤔 AI is thinking...", end="", flush=True)
+                        response_thread.join(timeout=5.0)
+                        if response_thread.is_alive():
+                            print("\r🤔 AI is thinking... (still processing)", end="", flush=True)
+                    
+                    print("\r", end="")  # Clear the thinking message
+                    
+                except EOFError:
+                    # Control+D pressed
+                    print("\n\nGoodbye! Exiting chat mode.")
+                    break
+                except KeyboardInterrupt:
+                    print("\n\nChat interrupted. Use Control+D to exit.")
+                    continue
+                    
+        except Exception as e:
+            print(f"Error in chat mode: {str(e)}")
+            traceback.print_exc()
+    
+    def _get_ai_response(self, query):
+        """
+        Get AI response for a given query and print it.
+        
+        This method runs in a separate thread to avoid blocking the main
+        chat interface while waiting for AI responses.
+        
+        Args:
+            query (str): The user's query to process
+            
+        Side Effects:
+            - Calls the AI instance's get_response method
+            - Prints the AI response to stdout
+            - Handles any exceptions that occur during AI processing
+        """
+        try:
+            # Check if AI instance has get_response method
+            if hasattr(self.ai_instance, 'get_response'):
+                response = self.ai_instance.get_response(query)
+                print(f"\nAI: {response}\n")
+            else:
+                print("\nAI: This AI backend doesn't support chat queries.\n")
+        except Exception as e:
+            print(f"\nAI Error: Failed to get response - {str(e)}\n")
 
