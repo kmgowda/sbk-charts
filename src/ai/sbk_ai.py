@@ -44,7 +44,7 @@ import textwrap
 from src.stat.storage import StorageStat
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
-from src.rag.sbk_simple_rag import SbkSimpleRAGPipeline
+from src.rag.sbk_rag import SbkSimpleRAGPipeline
 
 # Log the full exception for debugging
 import traceback
