@@ -41,7 +41,7 @@ def get_sbk_parser():
         -o, --ofile: Output XLSX file path (default: 'out.xlsx')
     """
     parser = argparse.ArgumentParser(
-        description='SBK Charts - Storage Benchmark Visualization Tool',
+        description='SBK Charts - Storage Benchmark Visualization and AI analytics Tool',
         epilog='Please report issues at https://github.com/kmgowda/sbk-charts'
     )
     parser.add_argument(
