@@ -236,16 +236,6 @@ The Anthropic backend integrates seamlessly with the SBK Charts framework:
 3. **Use separate keys**: Different keys for development and production
 4. **Monitor usage**: Check your Anthropic dashboard for unexpected usage
 
-## Comparison with Other Backends
-
-| Feature | Anthropic | Hugging Face | LM Studio | Ollama |
-|---------|-----------|--------------|-----------|---------|
-| Setup complexity | Low | Low | Medium | Medium |
-| Internet required | Yes | Yes | No | No |
-| Cost | Pay per use | Pay per use | Free | Free |
-| Quality | Excellent | Good | Varies | Varies |
-| Speed | Fast | Fast | Depends | Depends |
-| Privacy | Cloud | Cloud | Local | Local |
 
 ## Support and Resources
 
