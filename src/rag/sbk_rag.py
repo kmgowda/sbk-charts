@@ -304,7 +304,7 @@ class SbkSimpleRAGPipeline:
             elif 'percentile' in metric_name_lower:
                 text_parts.append("Write_Latency_Performance: important_metric")
         
-        # Latency classification
+        # Latency classification with semantic mapping to percentiles
         if 'percentile' in metric_name_lower:
             if avg_val < 1:
                 text_parts.append("Performance: low_latency")
@@ -315,6 +315,30 @@ class SbkSimpleRAGPipeline:
             else:
                 text_parts.append("Performance: high_latency")
                 text_parts.append("Performance_Indicator: poor")
+            
+            # Add semantic mapping tags for latency-percentile equivalence
+            text_parts.append("Semantic_Type: latency_metric")
+            text_parts.append("Semantic_Equivalent: percentile_analysis")
+            text_parts.append("Performance_Dimension: response_time")
+        
+        # Additional semantic mapping for latency-related terms that might not be explicitly labeled as percentile
+        elif any(latency_indicator in metric_name_lower for latency_indicator in ['latency', 'delay', 'response', 'time']):
+            if avg_val < 1:
+                text_parts.append("Performance: low_latency")
+                text_parts.append("Performance_Indicator: excellent")
+                text_parts.append("Latency_Class: sub_millisecond")
+            elif avg_val < 10:
+                text_parts.append("Performance: medium_latency") 
+                text_parts.append("Performance_Indicator: good")
+            else:
+                text_parts.append("Performance: high_latency")
+                text_parts.append("Performance_Indicator: poor")
+            
+            # Add semantic mapping tags for latency metrics
+            text_parts.append("Semantic_Type: latency_metric")
+            text_parts.append("Semantic_Equivalent: percentile_analysis")
+            text_parts.append("Performance_Dimension: response_time")
+            text_parts.append("Related_Concept: percentile_distribution")
         
         # Add comparison importance flags for actual throughput metrics
         if 'read' in action_lower and is_throughput_metric and not is_request_metric:
@@ -372,6 +396,30 @@ class SbkSimpleRAGPipeline:
                     if 'storage_comparison_key: read_throughput' in doc_lower:
                         score += 7
                     
+                    # Enhanced scoring for latency/percentile semantic equivalence
+                    # If query is about latency, boost percentile metrics and vice versa
+                    if any(latency_term in query_lower for latency_term in ['latency', 'delay', 'response_time', 'response time', 'latencies']):
+                        # Query is about latency - boost percentile metrics
+                        if 'percentile' in doc_lower or 'p90' in doc_lower or 'p95' in doc_lower or 'p99' in doc_lower:
+                            score += 8
+                        if 'tail_latency' in doc_lower or 'tail latency' in doc_lower:
+                            score += 6
+                        if 'performance: low_latency' in doc_lower:
+                            score += 5
+                        if 'performance_Indicator: excellent' in doc_lower and 'percentile' in doc_lower:
+                            score += 4
+                    
+                    if any(percentile_term in query_lower for percentile_term in ['percentile', 'percentile_count', 'p50', 'p90', 'p95', 'p99', 'tail_latency']):
+                        # Query is about percentiles - boost latency-related metrics
+                        if 'latency' in doc_lower or 'delay' in doc_lower:
+                            score += 8
+                        if 'response_time' in doc_lower or 'response time' in doc_lower:
+                            score += 6
+                        if 'performance: low_latency' in doc_lower:
+                            score += 5
+                        if 'performance: medium_latency' in doc_lower:
+                            score += 3
+                    
                     # Penalize request-based metrics for throughput comparisons
                     if 'request' in doc_lower and ('throughput' in doc_lower or 'mb/s' in doc_lower):
                         score -= 5
@@ -425,6 +473,7 @@ class SbkSimpleRAGPipeline:
     def _extract_keywords(self, query: str) -> List[str]:
         """
         Extract meaningful keywords from a query with enhanced storage comparison support.
+        Treats latency and percentile queries as semantically equivalent.
         
         Args:
             query: The query string
@@ -451,6 +500,28 @@ class SbkSimpleRAGPipeline:
             if term in query_lower:
                 keywords.append(term)
         
+        # Latency-Percentile Semantic Mapping: Treat latency and percentile queries as equivalent
+        latency_terms = ['latency', 'delay', 'response_time', 'response time', 'latencies']
+        percentile_terms = ['percentile', 'percentile_count', 'p50', 'p90', 'p95', 'p99', 'tail_latency', 'tail latency']
+        
+        # If query mentions latency terms, add percentile terms for semantic equivalence
+        has_latency_terms = any(term in query_lower for term in latency_terms)
+        has_percentile_terms = any(term in query_lower for term in percentile_terms)
+        
+        if has_latency_terms and not has_percentile_terms:
+            # Query is about latency - add percentile terms for comprehensive search
+            keywords.extend(percentile_terms)
+            logger.debug(f"Latency query detected - adding percentile terms: {percentile_terms}")
+        elif has_percentile_terms and not has_latency_terms:
+            # Query is about percentiles - add latency terms for comprehensive search
+            keywords.extend(latency_terms)
+            logger.debug(f"Percentile query detected - adding latency terms: {latency_terms}")
+        elif has_latency_terms and has_percentile_terms:
+            # Query has both - ensure all related terms are included
+            all_latency_percentile_terms = latency_terms + percentile_terms + ['tail', 'distribution', 'variation']
+            keywords.extend(all_latency_percentile_terms)
+            logger.debug(f"Latency and percentile query detected - adding comprehensive terms")
+        
         # Add action-specific keywords
         action_keywords = ['reading', 'writing', 'read_write', 'readwrite', 'mixed']
         for action in action_keywords:
@@ -474,6 +545,13 @@ class SbkSimpleRAGPipeline:
             # If no specific action mentioned, assume read performance is important
             if not any(action in query_lower for action in ['write', 'writing', 'write_only']):
                 keywords.extend(['reading', 'read_workload', 'read_performance'])
+            
+            # For performance comparison queries, also add latency/percentile semantic mapping
+            if has_latency_terms or has_percentile_terms:
+                # Ensure all latency and percentile terms are included for performance comparison
+                all_latency_percentile_terms = latency_terms + percentile_terms
+                keywords.extend(all_latency_percentile_terms)
+                logger.debug(f"Performance comparison with latency/percentile - adding comprehensive terms")
         
         # Check for comparison queries and add storage system names
         if self._is_comparison_query(query):
