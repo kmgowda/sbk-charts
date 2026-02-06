@@ -9,16 +9,23 @@ This module provides integration with Google's Gemini AI models for generating A
 - Configurable model parameters (temperature, max tokens)
 - Automatic error handling and retry logic
 - RAG-enhanced context for custom queries
+- Uses official Google AI SDK for reliable API communication
 
 ## Requirements
 
-- `requests` package (already included in requirements.txt)
+- `google-genai` Python package (included in requirements.txt)
 - Valid Google AI API key
 - Internet connection to Google's API endpoints
 
 ## Installation
 
-No additional packages needed - uses the existing `requests` library for direct REST API calls.
+The module uses the official `google-genai` Python SDK. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+The `google-genai` package will be installed automatically.
 
 ## Configuration
 
@@ -58,7 +65,7 @@ else:
 ### Command Line Usage
 
 ```bash
-# Use default model (gemini-1.5-flash)
+# Use default model (gemini-2.5-flash)
 python sbk_charts.py --ai-backend gemini
 
 # Specify different model
@@ -70,15 +77,16 @@ python sbk_charts.py --ai-backend gemini --gemini-temperature 0.7 --gemini-max-t
 
 ## Supported Models
 
-- `gemini-1.5-flash` (default) - Fast and efficient for most use cases
+- `gemini-2.5-flash` (default) - Latest fast and efficient model
 - `gemini-1.5-pro` - More capable for complex analysis
+- `gemini-1.5-flash` - Fast and efficient for most use cases
 - `gemini-1.0-pro` - Legacy model support
 
 ## Configuration Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--gemini-model` | Gemini model to use | `gemini-1.5-flash` |
+| `--gemini-model` | Gemini model to use | `gemini-2.5-flash` |
 | `--gemini-temperature` | Sampling temperature (0.0-1.0) | `0.4` |
 | `--gemini-max-tokens` | Maximum tokens to generate | `2048` |
 
@@ -121,7 +129,24 @@ if success:
     print(response)
 ```
 
-## Troubleshooting
+## Implementation Details
+
+### API Communication
+
+The module uses the official `google-genai` Python SDK for communication with Google's Gemini API:
+
+- **Client Management**: Creates and manages `GenerativeServiceClient` instances
+- **Request Building**: Uses structured `GenerateContentRequest` objects
+- **Response Parsing**: Extracts text content from structured API responses
+- **Error Handling**: Comprehensive exception handling for API failures
+
+### Key Components
+
+1. **Gemini Class**: Main implementation extending `SbkGenAI`
+2. **Client Initialization**: Automatic client setup with API key
+3. **Content Generation**: Structured request/response handling
+4. **Configuration Management**: Dynamic parameter updates
+
 
 ### Common Issues
 
@@ -129,6 +154,7 @@ if success:
 2. **Network Issues**: Check internet connectivity to Google's API endpoints
 3. **Model Unavailable**: Verify the specified model is available in your region
 4. **Quota Exceeded**: Check your Google AI API quota and usage limits
+5. **SDK Installation**: Ensure `google-genai` package is properly installed
 
 ### Debug Mode
 

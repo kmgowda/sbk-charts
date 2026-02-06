@@ -22,7 +22,3 @@ Usage:
     # Generate analysis
     success, analysis = gemini.get_throughput_analysis()
 """
-
-from .gemini import Gemini
-
-__all__ = ['Gemini']
