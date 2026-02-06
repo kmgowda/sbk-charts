@@ -23,11 +23,11 @@ Key Features:
 Requirements:
 - Valid Google AI API key
 - Internet connection to Google's API endpoints
+- google-genai Python package
 """
 
 import os
-import json
-import requests
+import google.ai.generativelanguage as genai
 from typing import Tuple
 from src.genai.genai import SbkGenAI
 
@@ -40,107 +40,19 @@ DEFAULT_TEMPERATURE = 0.4
 def _test_api_access(api_key):
     """Test basic API access to help debug issues."""
     try:
-        # Test with the correct endpoint that lists models
-        test_url = "https://generativelanguage.googleapis.com/v1/models"
-        headers = {"x-goog-api-key": api_key}
+        # Create client with the API key
+        client = genai.GenerativeServiceClient(client_options={"api_key": api_key})
         
-        response = requests.get(test_url, headers=headers, timeout=10)
+        # List available models using the SDK
+        request = genai.ListModelsRequest()
+        response = client.list_models(request)
         
-        if response.status_code == 200:
-            models = response.json().get('models', [])
-            model_names = [model.get('name', 'Unknown') for model in models]
-            print(f"DEBUG: Full models response: {response.json()}")
-            return True, f"Available models: {model_names}"
-        else:
-            return False, f"API access failed: {response.status_code} - {response.text[:200]}"
+        model_names = [model.name for model in response.models]
+        print(f"DEBUG: Available models: {model_names}")
+        return True, f"Available models: {model_names}"
             
     except Exception as e:
         return False, f"API test exception: {str(e)}"
-
-
-def _call_gemini_for_analysis(model_id, prompt):
-    """Send a prompt to the configured Gemini model and return the reply.
-
-    Parameters
-    - prompt (str): the textual prompt to send to the model. Prompts are
-      expected to be short technical instructions and metric tables.
-
-    Returns
-    - tuple: (True, <analysis string>) on success
-            (False, <error message>) if no API key is configured or
-            if another precondition prevents calling the API.
-
-    Notes
-    - Uses direct REST API calls to Google's Gemini API
-    - Returns a two-element tuple following the project's existing
-      convention for success/failure and message payloads.
-    """
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        return [False, (
-            "Gemini analysis is not available (missing GEMINI_API_KEY environment variable). "
-            "Configure to API key to enable Gemini-based analysis."
-        )]
-
-
-
-    try:
-        # Use the most basic working API format
-        url = f"https://generativelanguage.googleapis.com/v1/models/{model_id}:generateContent"
-        
-        # Most basic payload format - fix field names
-        payload = {
-            "contents": [{
-                "parts": [{
-                    "text": prompt
-                }]
-            }],
-            "generationConfig": {
-                "temperature": DEFAULT_TEMPERATURE,
-                "maxOutputTokens": DEFAULT_MAX_TOKENS,
-            }
-        }
-        
-        # Set headers
-        headers = {
-            "Content-Type": "application/json",
-            "x-goog-api-key": api_key
-        }
-        
-
-        
-        # Make the REST API call
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
-
-        
-        if response.status_code == 200:
-            result = response.json()
-
-            # Try multiple response formats
-            if 'candidates' in result and result['candidates']:
-                candidate = result['candidates'][0]
-                if 'content' in candidate and 'parts' in candidate['content']:
-                    text = candidate['content']['parts'][0]['text']
-                    return (True, text.strip())
-                elif 'output' in candidate:
-                    text = candidate['output']
-                    return (True, text.strip())
-            elif 'choices' in result and result['choices']:
-                choice = result['choices'][0]
-                if 'message' in choice and 'content' in choice['message']:
-                    text = choice['message']['content']
-                    return (True, text.strip())
-            else:
-                print(f"DEBUG: No recognized response format in: {result}")
-                return (False, "No content in response")
-        else:
-            error_msg = f"API Error {response.status_code}: {response.text}"
-            print(f"DEBUG: Error response: {response.text}")
-            return (False, error_msg)
-            
-    except Exception as e:
-        error_msg = f"Error calling Gemini API: {str(e)}"
-        return (False, error_msg)
 
 
 class Gemini(SbkGenAI):
@@ -173,6 +85,14 @@ class Gemini(SbkGenAI):
         self.model = DEFAULT_MODEL
         self.max_tokens = DEFAULT_MAX_TOKENS
         self.temperature = DEFAULT_TEMPERATURE
+        self._client = None
+        
+        # Initialize the Google AI SDK client if API key is available
+        if self.api_key:
+            try:
+                self._client = genai.GenerativeServiceClient(client_options={"api_key": self.api_key})
+            except Exception as e:
+                print(f"Warning: Failed to initialize Gemini client: {str(e)}")
 
     def add_args(self, parser):
         """Add command-line arguments for Gemini configuration.
@@ -207,6 +127,13 @@ class Gemini(SbkGenAI):
         self.model = args.gemini_model
         self.max_tokens = args.gemini_max_tokens
         self.temperature = args.gemini_temperature
+        
+        # Reinitialize the client instance with new parameters
+        if self.api_key:
+            try:
+                self._client = genai.GenerativeServiceClient(client_options={"api_key": self.api_key})
+            except Exception as e:
+                print(f"Warning: Failed to reinitialize Gemini client: {str(e)}")
 
     def get_model_description(self) -> Tuple[bool, str]:
         """Get a description of the current Gemini configuration.
@@ -224,6 +151,64 @@ class Gemini(SbkGenAI):
                 f" Max Tokens: {self.max_tokens}")
         return True, desc
 
+    def _call_gemini_for_analysis(self, model_id, prompt):
+        """Send a prompt to the configured Gemini model and return the reply.
+
+        Parameters
+        - prompt (str): the textual prompt to send to the model. Prompts are
+          expected to be short technical instructions and metric tables.
+
+        Returns
+        - tuple: (True, <analysis string>) on success
+                (False, <error message>) if no API key is configured or
+                if another precondition prevents calling the API.
+
+        Notes
+        - Uses google-genai SDK for communication with Gemini API
+        - Returns a two-element tuple following the project's existing
+          convention for success/failure and message payloads.
+        """
+        if not self.api_key:
+            return [False, (
+                "Gemini analysis is not available (missing GEMINI_API_KEY environment variable). "
+                "Configure to API key to enable Gemini-based analysis."
+            )]
+
+        try:
+            # Use the existing client instance or create a new one if needed
+            if self._client is None:
+                self._client = genai.GenerativeServiceClient(client_options={"api_key": self.api_key})
+            
+            # Create the content request
+            content = genai.Content(
+                parts=[genai.Part(text=prompt)]
+            )
+            
+            # Create the generation request
+            request = genai.GenerateContentRequest(
+                model=f"models/{model_id}",
+                contents=[content],
+                generation_config=genai.GenerationConfig(
+                    temperature=self.temperature,
+                    max_output_tokens=self.max_tokens,
+                )
+            )
+            
+            # Generate content
+            response = self._client.generate_content(request)
+            
+            # Extract the text from the response
+            if response.candidates and response.candidates[0].content:
+                text_parts = [part.text for part in response.candidates[0].content.parts if part.text]
+                if text_parts:
+                    return (True, "".join(text_parts).strip())
+            
+            return (False, "No content in response")
+                
+        except Exception as e:
+            error_msg = f"Error calling Gemini API: {str(e)}"
+            return (False, error_msg)
+
     def get_throughput_analysis(self) -> Tuple[bool, str]:
         """Generate throughput analysis using Gemini.
         
@@ -233,7 +218,7 @@ class Gemini(SbkGenAI):
         """
         try:
             prompt = self.get_throughput_prompt()
-            return _call_gemini_for_analysis(self.model, prompt)
+            return self._call_gemini_for_analysis(self.model, prompt)
         except Exception as e:
             return False, f"Failed to generate throughput analysis: {str(e)}"
 
@@ -246,7 +231,7 @@ class Gemini(SbkGenAI):
         """
         try:
             prompt = self.get_latency_prompt()
-            return _call_gemini_for_analysis(self.model, prompt)
+            return self._call_gemini_for_analysis(self.model, prompt)
         except Exception as e:
             return False, f"Failed to generate latency analysis: {str(e)}"
 
@@ -259,7 +244,7 @@ class Gemini(SbkGenAI):
         """
         try:
             prompt = self.get_total_mb_prompt()
-            return _call_gemini_for_analysis(self.model, prompt)
+            return self._call_gemini_for_analysis(self.model, prompt)
         except Exception as e:
             return False, f"Failed to generate total MB analysis: {str(e)}"
 
@@ -272,7 +257,7 @@ class Gemini(SbkGenAI):
         """
         try:
             prompt = self.get_percentile_histogram_prompt()
-            return _call_gemini_for_analysis(self.model, prompt)
+            return self._call_gemini_for_analysis(self.model, prompt)
         except Exception as e:
             return False, f"Failed to generate percentile histogram analysis: {str(e)}"
 
@@ -297,7 +282,7 @@ class Gemini(SbkGenAI):
             # Enhance with RAG context
             enhanced_prompt = self._enhance_prompt_with_rag(prompt, query)
 
-            return _call_gemini_for_analysis(self.model, enhanced_prompt)
+            return self._call_gemini_for_analysis(self.model, enhanced_prompt)
         except Exception as e:
             return False, f"Failed to generate response for query: {str(e)}"
 

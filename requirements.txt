@@ -16,4 +16,5 @@ accelerate>=0.20.0  # Required for model parallelism and memory optimization
 sentence-transformers~=3.0.1  # For text embeddings in RAG (if needed)
 # Note: ChromaDB and onnxruntime are optional - system will use Simple RAG if not available
 anthropic~=0.77.1
-# Google Gemini integration uses direct REST API calls - no additional package needed
+# Google Gemini integration uses google-genai Python package
+google-genai~=1.62.0
