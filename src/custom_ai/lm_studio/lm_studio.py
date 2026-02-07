@@ -25,12 +25,11 @@ Requirements:
 - Network access to the LM Studio server (default: localhost:1234)
 """
 
-from openai import OpenAI
+import lmstudio
 from src.genai.genai import SbkGenAI
 
 # Default LM Studio configuration
-BASE_URL = "http://localhost:1234/v1"
-API_KEY = "lm-studio"
+BASE_URL = "http://localhost:1234/api/v0"
 
 
 class LmStudio(SbkGenAI):
@@ -41,8 +40,8 @@ class LmStudio(SbkGenAI):
     the LM Studio server and formats the benchmark data for analysis.
     
     Configuration:
-    - Server URL: Configurable, defaults to http://localhost:1234/v1
-    - Model: Can be specified via command line (default: openai/gpt-oss-20b)
+    - Server URL: Configurable, defaults to http://localhost:1234/api/v0
+    - Model: Can be specified via command line (default: LM Studio's loaded model)
     - Temperature: Controls randomness (default: 0.4)
     - Max Tokens: Limits response length (default: 1800)
     
@@ -52,23 +51,10 @@ class LmStudio(SbkGenAI):
     def __init__(self):
         super().__init__()
         self.url = BASE_URL
-        self.model = "openai/gpt-oss-20b"
+        self.model = ""  # Will use LM Studio's default loaded model
         self.temperature = 0.4
         self.max_tokens = 1800
-        self.client = None
-
-    def _connect(self) -> bool:
-        """Establish connection to the LM Studio server.
-
-        Returns:
-            bool: True if connection was successful, False otherwise
-        """
-        try:
-            self.client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
-            return True
-        except Exception as e:
-            print(f"Failed to connect to LM Studio: {str(e)}")
-            return False
+        self.llm_model = None
 
     def add_args(self, parser):
         """Add command-line arguments for LM Studio configuration."""
@@ -79,8 +65,8 @@ class LmStudio(SbkGenAI):
         )
         parser.add_argument(
             "--lm-model",
-            help=f"Model name or path to use (default: {self.model}, uses LM Studio's selected model)",
-            default="openai/gpt-oss-20b"
+            help="Model name or path to use (default: LM Studio's loaded model)",
+            default=""
         )
         parser.add_argument(
             "--lm-temperature",
@@ -101,6 +87,24 @@ class LmStudio(SbkGenAI):
         self.model = args.lm_model
         self.temperature = args.lm_temperature
         self.max_tokens = args.lm_max_tokens
+
+    def open(self, args) -> None:
+        # Get the model handle (use default or specified model)
+        if self.model:
+            self.llm_model = lmstudio.llm(self.model)
+        else:
+            self.llm_model = lmstudio.llm()
+
+    def close(self, args) -> None:
+        """Close the LM Studio model and clean up resources."""
+        try:
+            # LM Studio's LLM object doesn't have a close method
+            # Just clear the reference
+            self.llm_model = None
+        except Exception as e:
+            print(f"Warning: Error closing LM Studio model: {str(e)}")
+            self.llm_model = None
+
 
     def get_model_description(self) -> tuple[bool, str]:
         """Get a description of the current LM Studio configuration.
@@ -124,33 +128,27 @@ class LmStudio(SbkGenAI):
             tuple: (success, response) where success is a boolean and
                    response is either the generated text or an error message
         """
-        if not self._connect():
-            return False, "Failed to connect to LM Studio server"
-
         try:
-            # Create a chat completion
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-                stream=False
-            )
 
-            # Extract the generated text
-            generated_text = response.choices[0].message.content.strip()
+            # Create a chat with the prompt
+            chat = lmstudio.Chat()
+            chat.add_user_message(prompt)
+            
+            # Configure inference parameters
+            config = {
+                "temperature": self.temperature,
+                "maxTokens": self.max_tokens
+            }
+            
+            # Generate response
+            response = self.llm_model.respond(chat, config=config)
+            
+            # Extract the generated text from PredictionResult
+            generated_text = response.content.strip()
             return True, generated_text
 
         except Exception as e:
             return False, f"Error in LM Studio analysis: {str(e)}"
-
-        finally:
-            # Clean up the client
-            try:
-                if self.client:
-                    self.client.close()
-            except:
-                pass
 
     def get_throughput_analysis(self) -> tuple[bool, str]:
         """Generate throughput analysis using LM Studio."""
