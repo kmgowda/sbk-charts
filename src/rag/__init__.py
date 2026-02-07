@@ -7,3 +7,10 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 ##
+
+"""
+SBK RAG Module
+
+This module provides RAG (Retrieval-Augmented Generation) capabilities for enhancing
+AI analysis with contextual information from CSV data files.
+"""

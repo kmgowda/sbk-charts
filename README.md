@@ -142,7 +142,7 @@ pip install -e .
 
 # Build the sbk-charts package
 python -m build
-```
+```ch
 
 To deactivate
 

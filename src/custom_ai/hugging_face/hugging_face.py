@@ -27,10 +27,11 @@ Key behavior
 """
 
 import  os
+from typing import Tuple
 from huggingface_hub import InferenceClient
 from src.genai.genai import SbkGenAI
 
-HF_MODEL_ID = "google/gemma-2-2b-it"
+HF_MODEL_ID = "meta-llama/Llama-3.1-8B-Instruct"
 
 
 def _call_llm_for_analysis(model_id, prompt):
@@ -62,7 +63,7 @@ def _call_llm_for_analysis(model_id, prompt):
 
     completion = client.chat_completion(  # ← key change
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=1800,
+        max_tokens=5000,
         temperature=0.4,
         top_p=0.9,
     )
@@ -155,3 +156,30 @@ class HuggingFace(SbkGenAI):
         """
 
         return _call_llm_for_analysis(self.model_id, self.get_percentile_histogram_prompt())
+
+    def get_response(self, query) -> Tuple[bool, str]:
+        """
+        Generate a response for a custom query using RAG-enhanced context.
+
+        Args:
+            query: The query string to analyze
+
+        Returns:
+            Tuple[bool, str]: A tuple containing:
+                - bool: True if analysis was successful, False otherwise
+                - str: The analysis text or error message if analysis failed
+        """
+        try:
+            # Create a prompt for the custom query
+            prompt = f"""You are a storage performance engineer. Please analyze the following query based on the provided context:
+                Query: {query}
+                provide a short technical analysis that addresses the query comprehensively."""
+
+            # Enhance with RAG context
+            enhanced_prompt = self._enhance_prompt_with_rag(prompt, query)
+
+            return  _call_llm_for_analysis(self.model_id, enhanced_prompt)
+
+        except Exception as e:
+            return False, f"Failed to generate response for query: {str(e)}"
+                
