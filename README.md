@@ -21,7 +21,7 @@ The sbk-charts application can be used to visualize these results in a more user
 <SBK directory>./sbk-charts
 ...
 (venv-sbk-charts) kmg@Mac-Studio sbk-charts % sbk-charts -h
-usage: sbk-charts [-h] -i IFILES [-o OFILE] [-secs SECONDS] [-nothreads NOTHREADS] {huggingface,lmstudio,noai,ollama} ...
+usage: sbk-charts [-h] -i IFILES [-o OFILE] [-secs SECONDS] [-nothreads NOTHREADS] [-chat] {huggingface,lmstudio,noai,ollama} ...
 
 SBK Charts - Storage Benchmark Visualization Tool
 
@@ -37,6 +37,7 @@ options:
                         Timeout seconds, default : 120
   -nothreads, --nothreads NOTHREADS
                         No parallel threads, default : False
+  -chat, --chat         Start interactive chat mode with AI
 
 Please report issues at https://github.com/kmgowda/sbk-charts
 
@@ -210,6 +211,69 @@ sbk-charts -i input.csv -o output.xlsx ollama
 ```
 
 For more details, see the documentation in [custom AI models](src/custom_ai/README.md)
+
+## Interactive Chat Mode
+
+SBK Charts provides an interactive chat mode that allows you to query your CSV data using AI-powered analysis with a RAG (Retrieval-Augmented Generation) pipeline.
+
+### Chat Mode Features
+
+- **Natural Language Queries**: Ask questions about your storage benchmark data in plain English
+- **RAG Pipeline**: Uses advanced retrieval to provide context-aware answers based on your CSV data
+- **Multiline Support**: Type complex queries across multiple lines
+- **Interactive Interface**: Real-time conversation with AI about your data
+- **Data Context**: AI has access to all storage statistics from your benchmark results
+
+### Using Chat Mode
+
+To start an interactive chat session:
+
+```bash
+sbk-charts -i input.csv -o output.xlsx -chat huggingface
+```
+
+Or with other AI backends:
+
+```bash
+# Using Ollama
+sbk-charts -i input.csv -o output.xlsx -chat ollama
+
+# Using LM Studio
+sbk-charts -i input.csv -o output.xlsx -chat lmstudio
+```
+
+### Chat Interface
+
+Once in chat mode:
+
+1. **Type your query** and press **Enter twice** to submit
+2. **Multiline queries** are supported - just press Enter twice when done typing
+3. **Press Ctrl+D** to exit chat mode
+4. **AI responses** appear after processing with status indicators
+
+### Example Queries
+
+You can ask questions like:
+
+- "Which storage system performs better for read operations?"
+- "Compare the throughput between FILE and ROCKSDB storage systems"
+- "What is the best storage system for high IOPS workloads?"
+- "Show me the latency analysis for all storage systems"
+- "Which storage has the lowest tail latency?"
+
+### Chat Mode Workflow
+
+1. **Initialization**: The chat mode initializes a RAG pipeline with your storage statistics
+2. **Context Loading**: All performance data from your CSV files is made available to the AI
+3. **Interactive Loop**: Ask questions and receive AI-powered insights
+4. **Smart Responses**: AI uses the RAG pipeline to provide accurate, context-aware answers
+
+### Technical Details
+
+- **RAG Pipeline**: Uses Simple RAG for maximum compatibility without external dependencies
+- **Data Ingestion**: Automatically processes storage statistics from all worksheets
+- **Threaded Processing**: AI responses run in separate threads for non-blocking interaction
+- **Error Handling**: Graceful handling of AI backend errors and timeouts
 
 ## Contributing
 
