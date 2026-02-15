@@ -28,6 +28,8 @@ Key Features:
 """
 import time
 from typing import final
+import threading
+import sys
 
 from openpyxl import load_workbook
 
@@ -42,6 +44,7 @@ import textwrap
 from src.stat.storage import StorageStat
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
+from src.rag.sbk_rag import SbkSimpleRAGPipeline
 
 # Log the full exception for debugging
 import traceback
@@ -146,11 +149,14 @@ class SbkAI:
         self.classes = discover_custom_ai_classes()
         self.ai_instance_map = dict()
         self.subparsers = None
+        self.input_files = None
         self.file =  None
         self.ai_instance = None
         self.web = None
         self.timeout_seconds = DEFAULT_TIMEOUT_SECONDS
         self.no_threads = False
+        self.chat_mode = False
+        self.rag_pipeline = None
 
     def add_args(self, parser):
         """
@@ -168,8 +174,10 @@ class SbkAI:
         """
         parser.add_argument("-secs", "--seconds", help=f"Timeout seconds, default : {self.timeout_seconds}",
                             default=self.timeout_seconds)
-        parser.add_argument("-nothreads", "--nothreads", help=f"No parallel threads, default : {self.no_threads}",
-                            default=self.no_threads)
+        parser.add_argument("-nothreads", "--nothreads", help="Disable parallel threads (default: threads enabled)", 
+                            action="store_true", default=False)
+        parser.add_argument("-chat", "--chat", help="Start interactive chat mode with AI", 
+                            action="store_true", default=False)
         self.subparsers = parser.add_subparsers(dest="ai_class", help="Available GenAI commands", required=False)
         parser.set_defaults(ai_class=None)
         for name, cls in self.classes.items():
@@ -197,21 +205,65 @@ class SbkAI:
             - Sets the output file path
             - Configures timeout (converted to int) and threading settings
             - Activates the selected AI backend instance if specified
+            - Initializes RAG pipeline with input CSV files if available
         """
         self.timeout_seconds = int(args.seconds) if hasattr(args, 'seconds') and args.seconds is not None else DEFAULT_TIMEOUT_SECONDS
         self.file = args.ofile
         self.no_threads = args.nothreads
+        self.chat_mode = args.chat
+
         if args.ai_class:
             self.ai_instance = self.ai_instance_map[args.ai_class.lower()]
             self.ai_instance.parse_args(args)
+
+    def _initialize_rag_pipeline(self):
+        """
+        Initialize the RAG pipeline with storage statistics.
+        
+        This method creates a RAG pipeline instance and ingests data from
+        the storage statistics to provide context for AI analysis.
+        Uses Simple RAG by default for maximum compatibility.
+        """
+        try:
+            print("🎯 Using Simple RAG (ChromaDB-free) for maximum compatibility...")
+            try:
+                self.rag_pipeline = SbkSimpleRAGPipeline()
+                if self.rag_pipeline.initialize():
+                    # Ingest storage statistics data
+                    if self.rag_pipeline.ingest_storage_stats(self.get_storage_stats()):
+                        stats = self.rag_pipeline.get_collection_stats()
+                        print(f"✅ Simple RAG pipeline initialized successfully with {stats.get('document_count', 0)} data points")
+                        print("💡 Simple RAG provides full functionality without external dependencies")
+                        return
+                    else:
+                        print("❌ Failed to ingest storage statistics into Simple RAG pipeline")
+                else:
+                    print("❌ Failed to initialize Simple RAG pipeline")
+                    
+            except Exception as e:
+                print(f"❌ Simple RAG pipeline failed: {str(e)}")
+                self.rag_pipeline = None
+
+        except Exception as e:
+            print(f"❌ Error initializing RAG pipeline: {str(e)}")
+            self.rag_pipeline = None
 
     def open(self, args):
         if self.ai_instance:
             self.ai_instance.open(args)
 
+
     def close(self, args):
         if self.ai_instance:
             self.ai_instance.close(args)
+        
+        # Clean up RAG pipeline if it exists
+        if self.rag_pipeline:
+            print("Closing RAG pipeline...")
+            if self.rag_pipeline.close(cleanup_local_data=True):
+                print("RAG pipeline closed successfully")
+            else:
+                print("Warning: Failed to close RAG pipeline properly")
 
     def load_workbook(self):
         """
@@ -246,6 +298,7 @@ class SbkAI:
             This operation will overwrite any existing data in the output file.
         """
         self.wb.save(self.file)
+
 
     def get_storage_stats(self):
         """
@@ -312,6 +365,7 @@ class SbkAI:
         # Set storage statistics for AI analysis
         self.ai_instance.set_storage_stats(self.get_storage_stats())
 
+
         def run_analysis(function_name):
             """
             Execute a single AI analysis method and handle exceptions.
@@ -331,7 +385,7 @@ class SbkAI:
                 ret = method()
                 return function_name,ret
             except Exception as e:
-                print(f"Error in {function_name}: {str(e)}")
+                print(f"Exception in {function_name}: {str(e)}")
                 return function_name, (False, str(e))
         
         # List of AI analysis methods to run in parallel
@@ -613,4 +667,147 @@ class SbkAI:
             if self.add_ai_analysis():
                 print(f"File updated with graphs and AI documentation: {self.file}")
             self.save_workbook()
+
+    def chat(self):
+        """
+        Start interactive chat mode with the AI instance.
+        
+        This method implements an interactive chat loop where users can:
+        - Input queries in natural language
+        - Get AI responses in a separate thread
+        - Monitor the thread and print responses every 5 seconds
+        - Exit with Control+D (EOF)
+        
+        The chat mode requires an AI instance to be configured. If no AI instance
+        is available, it will display an error message and return.
+        
+        Side Effects:
+            - Starts interactive command-line interface
+            - Creates and manages threads for AI responses
+            - Prints AI responses to stdout
+            - Handles keyboard interrupts gracefully
+        """
+
+        if not self.chat_mode:
+            return
+
+        if not self.ai_instance:
+            print("Error: No AI instance configured. Please specify an AI backend using the available subcommands.")
+            print(f"Available AI backends: {', '.join(self.classes.keys())}")
+            return
+
+        storage_stats = self.get_storage_stats()
+
+        if not storage_stats:
+            print(f"Error: Storage stats are not available; check if the workbook {self.file} loaded properly or not!")
+            return
+
+        self._initialize_rag_pipeline()
+
+        # Set RAG pipeline if available
+        if self.rag_pipeline:
+            self.ai_instance.set_rag_pipeline(self.rag_pipeline)
+
+        print("\n=== SBK AI Chat Mode ===")
+        print("Type your queries and press Enter twice to finish, or press Ctrl+D to exit.")
+        print("Multiline input is supported - just press Enter twice when done typing.")
+        
+        # Show available storage systems if RAG is initialized
+        if self.rag_pipeline and hasattr(self.rag_pipeline, 'get_storage_systems'):
+            storage_systems = self.rag_pipeline.get_storage_systems()
+            if storage_systems:
+                print(f"\n💡 Available storage systems for comparison: {', '.join(storage_systems)}")
+                print("You can ask questions like:")
+                print("- 'Which storage system performs better?'")
+                print("- 'Compare throughput between storage systems'")
+                print("- 'What is the best storage system for high IOPS?'")
+                print("- For complex queries, you can type multiple lines and press Enter twice when done.")
+        
+        print("========================\n")
+        
+        try:
+            while True:
+                try:
+                    # Get user input (multiline support)
+                    print("\nYou: ")
+                    query_lines = []
+                    while True:
+                        try:
+                            line = input()
+                            if line.strip() == "" and len(query_lines) > 0:
+                                # Empty line after some content means end of input
+                                break
+                            query_lines.append(line)
+                        except EOFError:
+                            # Ctrl-D pressed
+                            if len(query_lines) == 0:
+                                # Exit chat mode
+                                print("\n👋  Exiting chat mode...")
+                                return
+                            else:
+                                # End current query
+                                break
+                    
+                    query = "\n".join(query_lines).strip()
+                    
+                    if not query:
+                        print("Please enter a valid query.")
+                        continue
+                    
+                    # Start AI response in separate thread
+                    response_thread = threading.Thread(
+                        target=self._get_ai_response,
+                        args=(query,),
+                        daemon=True
+                    )
+                    response_thread.start()
+                    
+                    # Monitor the thread and print status every 5 seconds
+                    while response_thread.is_alive():
+                        print("\r🤔  AI is thinking...", end="", flush=True)
+                        response_thread.join(timeout=5.0)
+                        if response_thread.is_alive():
+                            print("\r🤔  AI is thinking... (still processing)", end="", flush=True)
+                    
+                    print("\r", end="")  # Clear the thinking message
+                    
+                except EOFError:
+                    # Control+D pressed
+                    print("\n\nGoodbye! Exiting chat mode.")
+                    break
+                except KeyboardInterrupt:
+                    print("\n\nChat interrupted. Use Control+D to exit.")
+                    continue
+                    
+        except Exception as e:
+            print(f"Error in chat mode: {str(e)}")
+            traceback.print_exc()
+    
+    def _get_ai_response(self, query):
+        """
+        Get AI response for a given query and print it.
+        
+        This method runs in a separate thread to avoid blocking the main
+        chat interface while waiting for AI responses.
+        
+        Args:
+            query (str): The user's query to process
+            
+        Side Effects:
+            - Calls the AI instance's get_response method
+            - Prints the AI response to stdout
+            - Handles any exceptions that occur during AI processing
+        """
+        try:
+            # Check if AI instance has get_response method
+            if hasattr(self.ai_instance, 'get_response'):
+                ret, response = self.ai_instance.get_response(query)
+                if not ret:
+                    print("Error in AI response : ", response)
+                else:
+                    print(f"\n{response}\n")
+            else:
+                print("\nAI: This AI backend doesn't support chat queries.\n")
+        except Exception as e:
+            print(f"\nAI Error: Failed to get response - {str(e)}\n")
 

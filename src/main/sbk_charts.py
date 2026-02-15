@@ -72,5 +72,7 @@ def sbk_charts():
     # create AI Summary in excel file
     ch.parse_args(args)
     ch.open(args)
+
     ch.add_performance_details()
+    ch.chat()
     ch.close(args)

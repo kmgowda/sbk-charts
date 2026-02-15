@@ -70,3 +70,15 @@ class NoAI(SbkGenAI):
             Tuple[bool, str]: (False, error_message)
         """
         return False, "Percentile histogram analysis is not available: AI is not enabled."
+
+    def get_response(self, query: str) -> Tuple[bool, str]:
+        """
+        Return an error message for custom query analysis.
+        
+        Args:
+            query: The query string to analyze
+            
+        Returns:
+            Tuple[bool, str]: (False, error_message)
+        """
+        return False, f"Custom query analysis is not available: AI is not enabled. Query was: {query}"
