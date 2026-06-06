@@ -27,7 +27,7 @@ Requirements:
 """
 
 import os
-import google.ai.generativelanguage as genai
+import google.genai as genai
 from typing import Tuple
 from src.genai.genai import SbkGenAI
 
@@ -41,13 +41,12 @@ def _test_api_access(api_key):
     """Test basic API access to help debug issues."""
     try:
         # Create client with the API key
-        client = genai.GenerativeServiceClient(client_options={"api_key": api_key})
+        client = genai.Client(api_key=api_key)
         
         # List available models using the SDK
-        request = genai.ListModelsRequest()
-        response = client.list_models(request)
+        models = client.models.list()
         
-        model_names = [model.name for model in response.models]
+        model_names = [model.name for model in models]
         print(f"DEBUG: Available models: {model_names}")
         return True, f"Available models: {model_names}"
             
@@ -90,7 +89,7 @@ class Gemini(SbkGenAI):
         # Initialize the Google AI SDK client if API key is available
         if self.api_key:
             try:
-                self._client = genai.GenerativeServiceClient(client_options={"api_key": self.api_key})
+                self._client = genai.Client(api_key=self.api_key)
             except Exception as e:
                 print(f"Warning: Failed to initialize Gemini client: {str(e)}")
 
@@ -131,7 +130,7 @@ class Gemini(SbkGenAI):
         # Reinitialize the client instance with new parameters
         if self.api_key:
             try:
-                self._client = genai.GenerativeServiceClient(client_options={"api_key": self.api_key})
+                self._client = genai.Client(api_key=self.api_key)
             except Exception as e:
                 print(f"Warning: Failed to reinitialize Gemini client: {str(e)}")
 
@@ -177,31 +176,21 @@ class Gemini(SbkGenAI):
         try:
             # Use the existing client instance or create a new one if needed
             if self._client is None:
-                self._client = genai.GenerativeServiceClient(client_options={"api_key": self.api_key})
+                self._client = genai.Client(api_key=self.api_key)
             
-            # Create the content request
-            content = genai.Content(
-                parts=[genai.Part(text=prompt)]
-            )
-            
-            # Create the generation request
-            request = genai.GenerateContentRequest(
-                model=f"models/{model_id}",
-                contents=[content],
-                generation_config=genai.GenerationConfig(
+            # Generate content with the configured parameters
+            response = self._client.models.generate_content(
+                model=model_id,
+                contents=prompt,
+                config=genai.GenerateContentConfig(
                     temperature=self.temperature,
                     max_output_tokens=self.max_tokens,
                 )
             )
             
-            # Generate content
-            response = self._client.generate_content(request)
-            
             # Extract the text from the response
-            if response.candidates and response.candidates[0].content:
-                text_parts = [part.text for part in response.candidates[0].content.parts if part.text]
-                if text_parts:
-                    return (True, "".join(text_parts).strip())
+            if response.text:
+                return (True, response.text.strip())
             
             return (False, "No content in response")
                 
@@ -289,7 +278,10 @@ class Gemini(SbkGenAI):
     def close(self, args):
         """Close the Gemini client connection.
         
-        Note: REST API doesn't require explicit connection closing,
-        but this method is provided for interface compatibility.
+        Note: Closes the client to release resources.
         """
-        pass
+        if self._client:
+            try:
+                self._client.close()
+            except Exception as e:
+                print(f"Warning: Failed to close Gemini client: {str(e)}")
