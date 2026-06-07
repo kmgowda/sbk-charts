@@ -181,70 +181,65 @@ class SbkMultiCharts(SbkCharts):
             cell.font = Font(size="18", bold=False, color=DARKRED)
             text += " : " + cell.value
             print(text)
-        
-        row += len(acts) + 2
-        
-        # Add benchmark date/time information for each driver/storage class as columns
-        cell = sheet.cell(row, col)
-        cell.value = "Benchmark Date/Time Information"
-        cell.font = Font(size="20", bold=True, color=DARKBLUE)
-        row += 1
-        
-        # Add header row for the table
-        headers = ["Sheet Name", "Storage", "Start Date/Time", "End Date/Time", "Duration"]
-        for i, header in enumerate(headers):
-            cell = sheet.cell(row, col + i)
-            cell.value = header
-            cell.font = Font(size="14", bold=True, color=DARKRED)
-            sheet.column_dimensions[get_column_letter(col + i)].width = 25
-        row += 1
-        
-        # Get date/time info from each R sheet (all input CSV files)
+        return sheet
+
+    def create_sbk_date_sheet(self):
+        """Create a separate 'Durations' sheet listing benchmark date/time info.
+
+        For each R-sheet in the workbook, emit one row with:
+        R Sheet | Storage | Action | Start Date/Time | End Date/Time | Duration
+
+        The sheet has a header row followed by data rows.
+
+        Returns
+        - openpyxl.worksheet.worksheet.Worksheet: the created sheet, or None if
+          no R-sheets have Date/Time columns.
+        """
+        sheet = self.wb.create_sheet("Durations")
+        # Reasonable column widths so the data is readable on first open
+        for i in range(6):
+            sheet.column_dimensions[get_column_letter(i + 1)].width = 22
+
+        # Header row
+        headers = ["R Sheet", "Storage", "Action", "Start Date/Time", "End Date/Time", "Duration"]
+        for c, h in enumerate(headers, start=1):
+            sheet.cell(row=1, column=c).value = h
+
+        row = 2
         for name in self.wb.sheetnames:
-            if is_r_num_sheet(name):
-                ws = self.wb[name]
-                cols = get_columns_from_worksheet(ws)
-                storage_name = get_storage_name_from_worksheet(ws)
-                
-                # Check if Date and Time columns exist
-                if 'Date' in cols and 'Time' in cols:
-                    date_col = cols['Date']
-                    time_col = cols['Time']
-                    
-                    # Get first and last date/time
-                    first_date = ws.cell(row=2, column=date_col).value
-                    first_time = ws.cell(row=2, column=time_col).value
-                    last_date = ws.cell(row=ws.max_row, column=date_col).value
-                    last_time = ws.cell(row=ws.max_row, column=time_col).value
-                    
-                    # Calculate duration
-                    start_dt = datetime.strptime(f"{first_date} {first_time}", "%Y-%m-%d %H:%M:%S")
-                    end_dt = datetime.strptime(f"{last_date} {last_time}", "%Y-%m-%d %H:%M:%S")
-                    duration = end_dt - start_dt
-                    duration_str = str(duration).split('.')[0]  # Remove microseconds if present
-                    
-                    # Add row to the table
-                    cell = sheet.cell(row, col)
-                    cell.value = name
-                    cell.font = Font(size="12", bold=False, color=BLACK)
-                    
-                    cell = sheet.cell(row, col + 1)
-                    cell.value = storage_name
-                    cell.font = Font(size="12", bold=False, color=BLACK)
-                    
-                    cell = sheet.cell(row, col + 2)
-                    cell.value = f"{first_date} {first_time}"
-                    cell.font = Font(size="12", bold=False, color=BLACK)
-                    
-                    cell = sheet.cell(row, col + 3)
-                    cell.value = f"{last_date} {last_time}"
-                    cell.font = Font(size="12", bold=False, color=BLACK)
-                    
-                    cell = sheet.cell(row, col + 4)
-                    cell.value = duration_str
-                    cell.font = Font(size="12", bold=False, color=BLACK)
-                    
-                    row += 1
+            if not is_r_num_sheet(name):
+                continue
+            ws = self.wb[name]
+            cols = get_columns_from_worksheet(ws)
+            if 'Date' not in cols or 'Time' not in cols:
+                continue
+
+            storage_name = get_storage_name_from_worksheet(ws)
+            action_name = get_action_name_from_worksheet(ws)
+            date_col = cols['Date']
+            time_col = cols['Time']
+
+            first_date = ws.cell(row=2, column=date_col).value
+            first_time = ws.cell(row=2, column=time_col).value
+            last_date = ws.cell(row=ws.max_row, column=date_col).value
+            last_time = ws.cell(row=ws.max_row, column=time_col).value
+
+            start_dt = datetime.strptime(f"{first_date} {first_time}", "%Y-%m-%d %H:%M:%S")
+            end_dt = datetime.strptime(f"{last_date} {last_time}", "%Y-%m-%d %H:%M:%S")
+            duration_str = str(end_dt - start_dt).split('.')[0]
+
+            values = [
+                name,
+                storage_name,
+                action_name,
+                f"{first_date} {first_time}",
+                f"{last_date} {last_time}",
+                duration_str,
+            ]
+            for c, v in enumerate(values, start=1):
+                sheet.cell(row=row, column=c).value = v
+            row += 1
+
         return sheet
 
     def create_all_latency_compare_graphs(self):
@@ -680,6 +675,7 @@ class SbkMultiCharts(SbkCharts):
         """
         if self.check_time_units():
             self.create_summary_sheet()
+            self.create_sbk_date_sheet()
             self.create_multi_throughput_mb_graph()
             self.create_multi_throughput_records_graph()
             self.create_all_latency_compare_graphs()
