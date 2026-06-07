@@ -8,4 +8,4 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 ##
 
-__sbk_version__="3.26.2.1"
+__sbk_version__="4.26.6.1"
