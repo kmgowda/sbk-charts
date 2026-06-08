@@ -33,7 +33,7 @@ from src.sheets.sheets import SbkMultiSheets
 from src.version.sbk_version import __sbk_version__
 from src.parser.sbk_parser import get_sbk_parser
 
-SBK_BANNER_FILE = os.path.join(os.path.curdir, 'src/main', 'banner.txt')
+SBK_BANNER_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'banner.txt')
 
 def sbk_charts():
     """Top-level orchestration for sbk-charts CLI.

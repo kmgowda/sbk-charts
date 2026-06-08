@@ -1126,7 +1126,7 @@ class SbkCharts:
         sheet.add_chart(chart)
         return sheet
 
-    def ensure_sbk_logo(self, img_path='./images/sbk-logo.png', cell='K7', scale=0.5):
+    def ensure_sbk_logo(self, img_path=None, cell='K7', scale=0.5):
         """Insert or verify the presence of the SBK logo in the SBK sheet.
 
         Parameters
@@ -1151,6 +1151,9 @@ class SbkCharts:
             print(f"SBK logo Image already exists in SBK sheet")
             return
 
+        if img_path is None:
+            img_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                    'images', 'sbk-logo.png')
         # Check if image already exists in the sheet
         img_abs_path = os.path.abspath(img_path)
         # Add image if not present

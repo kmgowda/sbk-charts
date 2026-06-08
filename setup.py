@@ -41,9 +41,11 @@ setup(
     # `from src.ai.sbk_ai import SbkAI` work at runtime.
     package_dir={'': '.'},  # Look for packages in the project root (will include 'src' package)
     packages=find_packages(where='.'),
+    include_package_data=True,
     package_data={
-        # Include banner.txt in the 'main' package (located at src/main/banner.txt)
-        'main': ['banner.txt'],
+        # Include banner.txt in src/main/ and the SBK logo in src/images/
+        'src.main': ['banner.txt'],
+        'src.images': ['sbk-logo.png'],
     },
     entry_points={
         'console_scripts': [

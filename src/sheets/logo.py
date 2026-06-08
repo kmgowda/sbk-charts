@@ -12,7 +12,8 @@ import os
 # The logo insertion function works fine only if the package pillow is installed.
 def add_sbk_logo(wb):
     ws = wb.add_worksheet("SBK")
-    img_path = os.path.abspath("./images/sbk-logo.png")
+    img_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            'images', 'sbk-logo.png')
     if os.path.exists(img_path):
         print(f"SBK logo image found: {img_path}")
         try:
