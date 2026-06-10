@@ -9,8 +9,20 @@
 ##
 
 import os
+import re
 from setuptools import setup, find_packages
-from src.version.sbk_version import __sbk_version__
+
+# Read version from src/version/sbk_version.py without importing
+def get_version():
+    version_file = os.path.join(os.path.dirname(__file__), 'src', 'version', 'sbk_version.py')
+    with open(version_file, 'r') as f:
+        content = f.read()
+        match = re.search(r"__sbk_version__\s*=\s*['\"]([^'\"]+)['\"]", content)
+        if match:
+            return match.group(1)
+    raise RuntimeError("Could not find version in src/version/sbk_version.py")
+
+__sbk_version__ = get_version()
 
 
 # Get the absolute path to the package directory
