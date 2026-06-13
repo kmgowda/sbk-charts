@@ -1,5 +1,6 @@
-include README.md LICENSE requirements.txt
+include README.md LICENSE requirements.txt AGENTS.md
 include src/main/banner.txt
 include src/images/sbk-logo.png
 recursive-include samples *
 recursive-include docs *
+recursive-include .devin *

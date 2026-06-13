@@ -398,6 +398,38 @@ should re-read this file and the relevant linked docs.
    my change must preserve (three-stage ordering, R/T addressing,
    prompts-in-framework, frozen `StorageStat`)?
 
-When in doubt, **prefer reading existing code over making assumptions**.
-The 7 existing plugins, in particular, are the canonical reference for
-how a plugin should look.
+---
+
+## 9. Devin Skills for Common Tasks
+
+This repository includes Devin skills (in `.devin/skills/`) that provide
+step-by-step guidance for common development tasks. When working with
+Devin or similar AI agents, these skills can be invoked to get
+contextual guidance:
+
+### Available Skills
+
+- **build-verify** — Build the package and verify all assets (logo, banner.txt)
+  are bundled correctly. Includes end-to-end testing with fresh installs.
+
+- **add-ai-plugin** — Add a new AI backend plugin. Covers directory structure,
+  class naming, CLI argument integration, and testing.
+
+- **add-chart** — Add a new chart type. Covers per-run vs multi-run charts,
+  data series patterns, and integration into the graph generation pipeline.
+
+- **fix-common-issues** — Troubleshoot and fix common issues like import errors,
+  missing plugins, build failures, and runtime problems.
+
+### Using the Skills
+
+If you're using Devin, these skills are automatically discoverable. For other
+AI agents, the skill documentation is available in the `.devin/skills/`
+directory and can be referenced manually.
+
+### Skills in Releases
+
+The `.devin/skills/` directory is included in the source distribution
+(`.tar.gz`) via `MANIFEST.in`, so they are available in GitHub releases.
+They are not included in the wheel (`.whl`) since they are developer-facing
+documentation, not runtime dependencies.
