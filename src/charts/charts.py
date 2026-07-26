@@ -70,10 +70,24 @@ CHART_LINE_WIDTH = 44450
 CHART_MARKER_SIZE = 8
 
 TABLE_BODY_FONT_SIZE = 15
-TABLE_HEADER_FONT_SIZE = 17
-TABLE_HEADER_FILL = "12355B"
+TABLE_HEADER_FONT_SIZE = 19
 TABLE_HEADER_TEXT = "FFFFFF"
-TABLE_ROW_FILLS = ("FFFFFF", "EAF2FF")
+TABLE_HEADER_FILLS = (
+    "12355B",
+    "0F6B78",
+    "5B3A70",
+    "9C4A1A",
+    "2F6B3C",
+    "3949AB",
+)
+TABLE_COLUMN_FILLS = (
+    "EAF2FF",
+    "E8F7F7",
+    "F4ECFA",
+    "FFF1E6",
+    "EDF7ED",
+    "EEF0FF",
+)
 TABLE_GRID_COLOR = "C8D6E8"
 TABLE_MIN_COLUMN_WIDTH = 10
 TABLE_MAX_COLUMN_WIDTH = 34
@@ -393,7 +407,9 @@ class SbkCharts:
                 continue
 
             sheet.freeze_panes = "A2"
-            sheet.auto_filter.ref = sheet.dimensions
+            # Keep table headers clean: filtering dropdowns are intentionally
+            # disabled in generated reports.
+            sheet.auto_filter.ref = None
             sheet.sheet_view.zoomScale = 85
 
             for column_index in range(1, sheet.max_column + 1):
@@ -407,15 +423,18 @@ class SbkCharts:
                     TABLE_MAX_COLUMN_WIDTH,
                 )
 
-            sheet.row_dimensions[1].height = 32
+            sheet.row_dimensions[1].height = 36
             for cell in sheet[1]:
+                header_fill = TABLE_HEADER_FILLS[
+                    (cell.column - 1) % len(TABLE_HEADER_FILLS)
+                ]
                 cell.font = Font(
                     name=cell.font.name or "Calibri",
                     size=TABLE_HEADER_FONT_SIZE,
                     bold=True,
                     color=TABLE_HEADER_TEXT,
                 )
-                cell.fill = PatternFill(fill_type="solid", fgColor=TABLE_HEADER_FILL)
+                cell.fill = PatternFill(fill_type="solid", fgColor=header_fill)
                 cell.alignment = Alignment(
                     horizontal="center",
                     vertical="center",
@@ -425,18 +444,20 @@ class SbkCharts:
 
             for row_index in range(2, sheet.max_row + 1):
                 sheet.row_dimensions[row_index].height = 26
-                row_fill = PatternFill(
-                    fill_type="solid",
-                    fgColor=TABLE_ROW_FILLS[row_index % len(TABLE_ROW_FILLS)],
-                )
                 for cell in sheet[row_index]:
                     if cell.value is None:
                         continue
+                    column_fill = TABLE_COLUMN_FILLS[
+                        (cell.column - 1) % len(TABLE_COLUMN_FILLS)
+                    ]
                     font = copy(cell.font)
                     font.sz = max(font.sz or 11, TABLE_BODY_FONT_SIZE)
                     font.color = "1F2937"
                     cell.font = font
-                    cell.fill = row_fill
+                    cell.fill = PatternFill(
+                        fill_type="solid",
+                        fgColor=column_fill,
+                    )
                     alignment = copy(cell.alignment)
                     alignment.vertical = "center"
                     cell.alignment = alignment
