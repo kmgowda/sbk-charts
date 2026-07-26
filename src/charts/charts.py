@@ -71,14 +71,21 @@ CHART_MARKER_SIZE = 8
 
 TABLE_BODY_FONT_SIZE = 15
 TABLE_HEADER_FONT_SIZE = 19
-TABLE_HEADER_TEXT = "FFFFFF"
 TABLE_HEADER_FILLS = (
+    "D9EAFE",
+    "DAF3F3",
+    "EDE2F4",
+    "FFE4D1",
+    "E2F1E2",
+    "E3E6FF",
+)
+TABLE_HEADER_TEXT_COLORS = (
     "12355B",
-    "0F6B78",
-    "5B3A70",
-    "9C4A1A",
-    "2F6B3C",
-    "3949AB",
+    "0F4C5C",
+    "4A235A",
+    "7A3512",
+    "234D2C",
+    "283593",
 )
 TABLE_COLUMN_FILLS = (
     "EAF2FF",
@@ -90,8 +97,10 @@ TABLE_COLUMN_FILLS = (
 )
 TABLE_GRID_COLOR = "C8D6E8"
 TABLE_MIN_COLUMN_WIDTH = 10
-TABLE_MAX_COLUMN_WIDTH = 34
+TABLE_MAX_COLUMN_WIDTH = 60
 TABLE_COLUMN_SCALE = 1.25
+TABLE_HEADER_WIDTH_SCALE = 1.45
+TABLE_HEADER_WIDTH_PADDING = 4
 
 # Saturated, high-contrast colours make adjacent series easy to distinguish.
 # Dash patterns and marker shapes add non-colour cues for accessibility.
@@ -415,9 +424,17 @@ class SbkCharts:
             for column_index in range(1, sheet.max_column + 1):
                 column_letter = get_column_letter(column_index)
                 current_width = sheet.column_dimensions[column_letter].width or 13
+                header_value = sheet.cell(row=1, column=column_index).value
+                header_width = (
+                    len(str(header_value)) * TABLE_HEADER_WIDTH_SCALE
+                    + TABLE_HEADER_WIDTH_PADDING
+                    if header_value is not None
+                    else TABLE_MIN_COLUMN_WIDTH
+                )
                 sheet.column_dimensions[column_letter].width = min(
                     max(
                         current_width * TABLE_COLUMN_SCALE,
+                        header_width,
                         TABLE_MIN_COLUMN_WIDTH,
                     ),
                     TABLE_MAX_COLUMN_WIDTH,
@@ -428,17 +445,20 @@ class SbkCharts:
                 header_fill = TABLE_HEADER_FILLS[
                     (cell.column - 1) % len(TABLE_HEADER_FILLS)
                 ]
+                header_text_color = TABLE_HEADER_TEXT_COLORS[
+                    (cell.column - 1) % len(TABLE_HEADER_TEXT_COLORS)
+                ]
                 cell.font = Font(
                     name=cell.font.name or "Calibri",
                     size=TABLE_HEADER_FONT_SIZE,
                     bold=True,
-                    color=TABLE_HEADER_TEXT,
+                    color=header_text_color,
                 )
                 cell.fill = PatternFill(fill_type="solid", fgColor=header_fill)
                 cell.alignment = Alignment(
                     horizontal="center",
                     vertical="center",
-                    wrap_text=True,
+                    wrap_text=False,
                 )
                 cell.border = Border(bottom=thin_bottom)
 
