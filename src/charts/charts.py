@@ -49,15 +49,16 @@ from src.version.sbk_version import __sbk_version__
 
 
 # Excel chart dimensions are expressed in centimetres by openpyxl. These
-# dimensions produce a readable 16:9 chart on a dedicated worksheet without
-# requiring users to zoom in.
-DEFAULT_CHART_HEIGHT = 18
-DEFAULT_CHART_WIDTH = 32
+# dimensions produce a large, readable 16:9 chart on a dedicated worksheet.
+DEFAULT_CHART_HEIGHT = 27
+DEFAULT_CHART_WIDTH = 48
 
-CHART_TITLE_FONT_SIZE = 2400
-AXIS_TITLE_FONT_SIZE = 1400
-AXIS_LABEL_FONT_SIZE = 1200
-LEGEND_FONT_SIZE = 1100
+CHART_TITLE_FONT_SIZE = 3000
+AXIS_TITLE_FONT_SIZE = 1800
+AXIS_LABEL_FONT_SIZE = 1500
+LEGEND_FONT_SIZE = 1400
+CHART_LINE_WIDTH = 38100
+CHART_MARKER_SIZE = 7
 
 # A colour-blind-friendly palette based on the Tableau 10 colours. Dash
 # patterns distinguish series when the palette needs to repeat.
@@ -311,7 +312,7 @@ class SbkCharts:
                     series.graphicalProperties.line.solidFill = color
 
                     if isinstance(chart, LineChart):
-                        series.graphicalProperties.line.width = 28575
+                        series.graphicalProperties.line.width = CHART_LINE_WIDTH
                         palette_cycle = index // len(CHART_SERIES_COLORS)
                         series.graphicalProperties.line.prstDash = (
                             CHART_DASH_STYLES[
@@ -320,7 +321,7 @@ class SbkCharts:
                         )
                         if series_count <= 6:
                             series.marker.symbol = "circle"
-                            series.marker.size = 5
+                            series.marker.size = CHART_MARKER_SIZE
                             series.marker.graphicalProperties.solidFill = color
                             series.marker.graphicalProperties.line.solidFill = color
                     elif isinstance(chart, BarChart):
@@ -330,7 +331,7 @@ class SbkCharts:
                     chart.type = "col"
                     chart.grouping = "clustered"
                     chart.overlap = 0
-                    chart.gapWidth = 70
+                    chart.gapWidth = 55
                     chart.varyColors = False
 
     @final
