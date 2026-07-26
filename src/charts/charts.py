@@ -32,14 +32,49 @@ from typing import final
 
 from openpyxl import load_workbook
 from openpyxl.chart import LineChart, BarChart, Reference, Series
+from openpyxl.chart.text import RichText
 from openpyxl.drawing.image import Image
-from openpyxl.drawing.text import CharacterProperties, ParagraphProperties
+from openpyxl.drawing.text import (
+    CharacterProperties,
+    Paragraph,
+    ParagraphProperties,
+    RichTextProperties,
+)
 from openpyxl_image_loader import SheetImageLoader
 
 import src.sheets.constants as sheets_constants
 from src.charts import constants
 from src.charts.utils import get_columns_from_worksheet, get_time_unit_from_worksheet, get_storage_name_from_worksheet
 from src.version.sbk_version import __sbk_version__
+
+
+# Excel chart dimensions are expressed in centimetres by openpyxl. These
+# dimensions produce a readable 16:9 chart on a dedicated worksheet without
+# requiring users to zoom in.
+DEFAULT_CHART_HEIGHT = 18
+DEFAULT_CHART_WIDTH = 32
+
+CHART_TITLE_FONT_SIZE = 2400
+AXIS_TITLE_FONT_SIZE = 1400
+AXIS_LABEL_FONT_SIZE = 1200
+LEGEND_FONT_SIZE = 1100
+
+# A colour-blind-friendly palette based on the Tableau 10 colours. Dash
+# patterns distinguish series when the palette needs to repeat.
+CHART_SERIES_COLORS = (
+    "4E79A7",
+    "F28E2B",
+    "E15759",
+    "76B7B2",
+    "59A14F",
+    "EDC948",
+    "B07AA1",
+    "FF9DA7",
+    "9C755F",
+    "BAB0AC",
+)
+CHART_DASH_STYLES = ("solid", "dash", "sysDot", "dashDot")
+
 
 class SbkCharts:
     """Create and manage Excel charts for SBK results.
@@ -185,30 +220,128 @@ class SbkCharts:
         Returns
         - None (modifies chart object in-place)
         """
-        # Set the title of the chart with font size
-        # Set chart title
+        # Use one clean built-in theme as a base. Explicit font and series
+        # settings below keep the charts readable in Excel-compatible viewers
+        # that only partially support built-in chart styles.
+        chart.style = 10
+        chart.roundedCorners = False
+        chart.display_blanks = "gap"
+
         chart.title = title
-        chart.title.tx.rich.p[0].pPr.defRPr = CharacterProperties(sz=3600, b=True)  # 36pt, bold
+        chart.title.tx.rich.p[0].pPr.defRPr = CharacterProperties(
+            sz=CHART_TITLE_FONT_SIZE,
+            b=True,
+            solidFill="1F2937",
+        )
         
-        # Set x-axis title
         chart.x_axis.title = x_title
         if not hasattr(chart.x_axis.title.tx.rich.p[0], 'pPr'):
             chart.x_axis.title.tx.rich.p[0].pPr = ParagraphProperties()
-        chart.x_axis.title.tx.rich.p[0].pPr.defRPr = CharacterProperties(sz=1800)  # 18pt
+        chart.x_axis.title.tx.rich.p[0].pPr.defRPr = CharacterProperties(
+            sz=AXIS_TITLE_FONT_SIZE,
+            b=True,
+            solidFill="374151",
+        )
         
-        # Set y-axis title
         chart.y_axis.title = y_title
         if not hasattr(chart.y_axis.title.tx.rich.p[0], 'pPr'):
             chart.y_axis.title.tx.rich.p[0].pPr = ParagraphProperties()
-        chart.y_axis.title.tx.rich.p[0].pPr.defRPr = CharacterProperties(sz=1800)  # 18pt
+        chart.y_axis.title.tx.rich.p[0].pPr.defRPr = CharacterProperties(
+            sz=AXIS_TITLE_FONT_SIZE,
+            b=True,
+            solidFill="374151",
+        )
 
         chart.height = height
         chart.width = width
+        chart.anchor = "B2"
         chart.x_axis.delete = False
         chart.y_axis.delete = False
+        chart.x_axis.tickLblPos = "low"
+        chart.y_axis.tickLblPos = "nextTo"
+        chart.x_axis.majorTickMark = "out"
+        chart.y_axis.majorTickMark = "out"
+        chart.x_axis.txPr = self.__text_properties(AXIS_LABEL_FONT_SIZE)
+        chart.y_axis.txPr = self.__text_properties(AXIS_LABEL_FONT_SIZE)
+
+        if chart.legend is not None:
+            chart.legend.position = "b"
+            chart.legend.overlay = False
+            chart.legend.txPr = self.__text_properties(LEGEND_FONT_SIZE)
+
+    @staticmethod
+    def __text_properties(font_size):
+        """Create reusable DrawingML text properties for chart labels."""
+        character_properties = CharacterProperties(
+            lang="en-US",
+            sz=font_size,
+            solidFill="374151",
+        )
+        return RichText(
+            bodyPr=RichTextProperties(),
+            p=[
+                Paragraph(
+                    pPr=ParagraphProperties(defRPr=character_properties),
+                    endParaRPr=character_properties,
+                )
+            ],
+        )
 
     @final
-    def create_line_chart(self, title, x_title, y_title, height, width):
+    def apply_chart_theme(self):
+        """Finalize chart layout and series styling across the workbook.
+
+        Chart factories run before data series are attached. This final pass
+        can therefore adapt legend placement and line/marker styling to the
+        actual number of series in every chart.
+        """
+        for sheet in self.wb.worksheets:
+            if sheet._charts:
+                sheet.sheet_view.showGridLines = False
+                sheet.sheet_view.zoomScale = 80
+            for chart in sheet._charts:
+                series_count = len(chart.series)
+                if chart.legend is not None:
+                    chart.legend.position = "r" if series_count > 6 else "b"
+                    chart.legend.overlay = False
+                    chart.legend.txPr = self.__text_properties(LEGEND_FONT_SIZE)
+
+                for index, series in enumerate(chart.series):
+                    color = CHART_SERIES_COLORS[index % len(CHART_SERIES_COLORS)]
+                    series.graphicalProperties.line.solidFill = color
+
+                    if isinstance(chart, LineChart):
+                        series.graphicalProperties.line.width = 28575
+                        palette_cycle = index // len(CHART_SERIES_COLORS)
+                        series.graphicalProperties.line.prstDash = (
+                            CHART_DASH_STYLES[
+                                palette_cycle % len(CHART_DASH_STYLES)
+                            ]
+                        )
+                        if series_count <= 6:
+                            series.marker.symbol = "circle"
+                            series.marker.size = 5
+                            series.marker.graphicalProperties.solidFill = color
+                            series.marker.graphicalProperties.line.solidFill = color
+                    elif isinstance(chart, BarChart):
+                        series.graphicalProperties.solidFill = color
+
+                if isinstance(chart, BarChart):
+                    chart.type = "col"
+                    chart.grouping = "clustered"
+                    chart.overlap = 0
+                    chart.gapWidth = 70
+                    chart.varyColors = False
+
+    @final
+    def create_line_chart(
+        self,
+        title,
+        x_title,
+        y_title,
+        height=DEFAULT_CHART_HEIGHT,
+        width=DEFAULT_CHART_WIDTH,
+    ):
         """Factory for LineChart with common attributes applied.
 
         Parameters
@@ -226,7 +359,14 @@ class SbkCharts:
         return chart
 
     @final
-    def create_bar_chart(self, title, x_title, y_title, height, width):
+    def create_bar_chart(
+        self,
+        title,
+        x_title,
+        y_title,
+        height=DEFAULT_CHART_HEIGHT,
+        width=DEFAULT_CHART_WIDTH,
+    ):
         """Factory for BarChart with common attributes applied.
 
         Returns a BarChart object with titles and dimensions set.
@@ -240,7 +380,11 @@ class SbkCharts:
 
         The y-axis title will include the currently configured time unit.
         """
-        return self.create_line_chart(title, "Intervals", "Latency time in " + self.time_unit, 25, 50)
+        return self.create_line_chart(
+            title,
+            "Intervals",
+            "Latency time in " + self.time_unit,
+        )
 
     def get_latency_series(self, ws, ws_name):
         """Build Series objects for all latency columns in the worksheet.
@@ -1038,7 +1182,11 @@ class SbkCharts:
         latency_cols = self.get_latency_percentile_columns(ws)
         sheets = []
         for i, percentile_names in enumerate(self.slc_percentile_names):
-            chart = self.create_line_chart(title, "Percentiles", "Latency time in " + self.time_unit, 25, 50)
+            chart = self.create_line_chart(
+                title,
+                "Percentiles",
+                "Latency time in " + self.time_unit,
+            )
             latency_series = self.get_latency_percentile_series(ws, prefix, percentile_names)
             for x in latency_series:
                 chart.append(latency_series[x])
@@ -1064,7 +1212,7 @@ class SbkCharts:
         """
         title = "Total Percentiles Histogram"
         latency_cols = self.get_latency_percentile_count_columns(ws)
-        chart = self.create_bar_chart(title, "Percentiles", "Count ", 25, 50)
+        chart = self.create_bar_chart(title, "Percentiles", "Count")
         latency_series = self.get_latency_percentile_count_series(ws, prefix, self.percentile_count_names)
         for x in latency_series:
             chart.append(latency_series[x])
@@ -1091,8 +1239,11 @@ class SbkCharts:
         Returns
         - Worksheet: the newly created worksheet with the chart
         """
-        chart = self.create_line_chart("Throughput Variations in Mega Bytes / Seconds",
-                                       "Intervals", "Throughput in MB/Sec", 25, 50)
+        chart = self.create_line_chart(
+            "Throughput Variations in Mega Bytes / Seconds",
+            "Intervals",
+            "Throughput in MB/Sec",
+        )
         # adding data
         chart.append(self.get_throughput_write_request_mb_series(ws, prefix))
         chart.append(self.get_throughput_read_request_mb_series(ws, prefix))
@@ -1115,8 +1266,11 @@ class SbkCharts:
         Returns
         - Worksheet: the newly created worksheet with the chart
         """
-        chart = self.create_line_chart("Throughput Variations in Records / Seconds",
-                                       "Intervals", "Throughput in Records/Sec", 25, 50)
+        chart = self.create_line_chart(
+            "Throughput Variations in Records / Seconds",
+            "Intervals",
+            "Throughput in Records/Sec",
+        )
         # adding data
         chart.append(self.get_throughput_write_request_records_series(ws, prefix))
         chart.append(self.get_throughput_read_request_records_series(ws, prefix))
@@ -1196,5 +1350,6 @@ class SbkCharts:
         self.create_latency_compare_graphs(r_ws, r_prefix)
         self.create_latency_graphs(r_ws, r_prefix)
         self.create_total_latency_percentile_graphs(t_ws, t_prefix)
+        self.apply_chart_theme()
         self.wb.save(self.file)
         print("file : %s updated with graphs" % self.file)

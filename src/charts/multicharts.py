@@ -262,8 +262,6 @@ class SbkMultiCharts(SbkCharts):
                         if x in g:
                             charts[i].append(latency_series[x])
         for i, ch in enumerate(charts):
-            ch.width = 70
-            ch.height = 70
             sheets[i].add_chart(ch)
         return sheets
 
@@ -324,7 +322,11 @@ class SbkMultiCharts(SbkCharts):
         title = "Total Percentiles"
         sheets = []
         for i, names_list in enumerate(self.slc_percentile_names):
-            chart = self.create_line_chart(title, "Percentiles", "Latency time in " + self.time_unit, 25, 50)
+            chart = self.create_line_chart(
+                title,
+                "Percentiles",
+                "Latency time in " + self.time_unit,
+            )
             x_labels = False
             for name in self.wb.sheetnames:
                 if is_t_num_sheet(name):
@@ -351,7 +353,7 @@ class SbkMultiCharts(SbkCharts):
         - Worksheet: the worksheet with the aggregated histogram chart.
         """
         title = "Total Percentiles Histogram"
-        chart = self.create_bar_chart(title, "Percentiles", "Count", 25, 50)
+        chart = self.create_bar_chart(title, "Percentiles", "Count")
         x_labels = False
         for name in self.wb.sheetnames:
             if is_t_num_sheet(name):
@@ -377,8 +379,11 @@ class SbkMultiCharts(SbkCharts):
         Returns
         - Worksheet with the combined MB/sec chart.
         """
-        chart = self.create_line_chart("Throughput Variations in Mega Bytes / Seconds",
-                                       "Intervals", "Throughput in MB/Sec", 25, 50)
+        chart = self.create_line_chart(
+            "Throughput Variations in Mega Bytes / Seconds",
+            "Intervals",
+            "Throughput in MB/Sec",
+        )
         for name in self.wb.sheetnames:
             if is_r_num_sheet(name):
                 ws = self.wb[name]
@@ -397,8 +402,11 @@ class SbkMultiCharts(SbkCharts):
         Returns
         - Worksheet with the combined records/sec chart.
         """
-        chart = self.create_line_chart("Throughput Variations in Records / Seconds",
-                                       "Intervals", "Throughput in Records/Sec", 25, 50)
+        chart = self.create_line_chart(
+            "Throughput Variations in Records / Seconds",
+            "Intervals",
+            "Throughput in Records/Sec",
+        )
         for name in self.wb.sheetnames:
             if is_r_num_sheet(name):
                 ws = self.wb[name]
@@ -417,8 +425,11 @@ class SbkMultiCharts(SbkCharts):
         Returns
         - Worksheet with combined record-count variations.
         """
-        chart = self.create_line_chart("Write and Read Records Variations",
-                                       "Intervals", "Write and Read Records", 25, 50)
+        chart = self.create_line_chart(
+            "Write and Read Records Variations",
+            "Intervals",
+            "Write and Read Records",
+        )
         for name in self.wb.sheetnames:
             if is_r_num_sheet(name):
                 ws = self.wb[name]
@@ -440,8 +451,11 @@ class SbkMultiCharts(SbkCharts):
         Returns
         - Worksheet with combined MB variations.
         """
-        chart = self.create_line_chart("Write and Read MBs Variations",
-                                       "Intervals", "Write and Read MBs", 25, 50)
+        chart = self.create_line_chart(
+            "Write and Read MBs Variations",
+            "Intervals",
+            "Write and Read MBs",
+        )
         for name in self.wb.sheetnames:
             if is_r_num_sheet(name):
                 ws = self.wb[name]
@@ -469,7 +483,11 @@ class SbkMultiCharts(SbkCharts):
                 ws = self.wb[name]
                 if chart is None:
                     action = get_action_name_from_worksheet(ws)
-                    chart = self.create_bar_chart("Total Mega Bytes " + action, action, "MB", 25, 50)
+                    chart = self.create_bar_chart(
+                        "Total Mega Bytes " + action,
+                        action,
+                        "MB",
+                    )
                 prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_write_request_mb_series(ws, prefix))
                 chart.append(self.get_read_request_mb_series(ws, prefix))
@@ -490,8 +508,11 @@ class SbkMultiCharts(SbkCharts):
         Returns
         - Worksheet with combined timeout event variations.
         """
-        chart = self.create_line_chart("Write and Read Timeout Events Variations",
-                                       "Intervals", "Write and Read Timeout Events", 25, 50)
+        chart = self.create_line_chart(
+            "Write and Read Timeout Events Variations",
+            "Intervals",
+            "Write and Read Timeout Events",
+        )
         for name in self.wb.sheetnames:
             if is_r_num_sheet(name):
                 ws = self.wb[name]
@@ -509,8 +530,11 @@ class SbkMultiCharts(SbkCharts):
         Returns
         - Worksheet with combined timeout-events/sec variations.
         """
-        chart = self.create_line_chart("Write and Read Timeout Events / Sec Variations",
-                                       "Intervals", "Write and Read Timeout Events / Sec", 25, 50)
+        chart = self.create_line_chart(
+            "Write and Read Timeout Events / Sec Variations",
+            "Intervals",
+            "Write and Read Timeout Events / Sec",
+        )
         for name in self.wb.sheetnames:
             if is_r_num_sheet(name):
                 ws = self.wb[name]
@@ -534,8 +558,11 @@ class SbkMultiCharts(SbkCharts):
                 ws = self.wb[name]
                 if chart is None:
                     action = get_action_name_from_worksheet(ws)
-                    chart = self.create_bar_chart("Total Throughput Variations in Mega Bytes / Seconds",
-                                                  action, "Total Throughput in MB/Sec", 25, 50)
+                    chart = self.create_bar_chart(
+                        "Total Throughput Variations in Mega Bytes / Seconds",
+                        action,
+                        "Total Throughput in MB/Sec",
+                    )
                 prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_throughput_write_request_mb_series(ws, prefix))
                 chart.append(self.get_throughput_read_request_mb_series(ws, prefix))
@@ -559,8 +586,11 @@ class SbkMultiCharts(SbkCharts):
                 ws = self.wb[name]
                 if chart is None:
                     action = get_action_name_from_worksheet(ws)
-                    chart = self.create_bar_chart("Total Throughput Variations in Records / Seconds",
-                                                  action, "Total Throughput in Records/Sec", 25, 50)
+                    chart = self.create_bar_chart(
+                        "Total Throughput Variations in Records / Seconds",
+                        action,
+                        "Total Throughput in Records/Sec",
+                    )
                 prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_throughput_write_request_records_series(ws, prefix))
                 chart.append(self.get_throughput_read_request_records_series(ws, prefix))
@@ -584,8 +614,11 @@ class SbkMultiCharts(SbkCharts):
                 ws = self.wb[name]
                 if chart is None:
                     action = get_action_name_from_worksheet(ws)
-                    chart = self.create_bar_chart("Total Average Latency Comparison",
-                                                  action, "Total Average Latency", 25, 50)
+                    chart = self.create_bar_chart(
+                        "Total Average Latency Comparison",
+                        action,
+                        "Total Average Latency",
+                    )
                 prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_avg_latency_series(ws, prefix))
         if chart is not None:
@@ -607,8 +640,11 @@ class SbkMultiCharts(SbkCharts):
                 ws = self.wb[name]
                 if chart is None:
                     action = get_action_name_from_worksheet(ws)
-                    chart = self.create_bar_chart("Total Min Latency Comparison",
-                                                  action, "Total Min Latency", 25, 50)
+                    chart = self.create_bar_chart(
+                        "Total Min Latency Comparison",
+                        action,
+                        "Total Min Latency",
+                    )
                 prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_min_latency_series(ws, prefix))
         if chart is not None:
@@ -630,8 +666,11 @@ class SbkMultiCharts(SbkCharts):
                 ws = self.wb[name]
                 if chart is None:
                     action = get_action_name_from_worksheet(ws)
-                    chart = self.create_bar_chart("Total Max Latency Comparison",
-                                                  action, "Total Max Latency", 25, 50)
+                    chart = self.create_bar_chart(
+                        "Total Max Latency Comparison",
+                        action,
+                        "Total Max Latency",
+                    )
                 prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_max_latency_series(ws, prefix))
         if chart is not None:
@@ -653,8 +692,11 @@ class SbkMultiCharts(SbkCharts):
                 ws = self.wb[name]
                 if chart is None:
                     action = get_action_name_from_worksheet(ws)
-                    chart = self.create_bar_chart("Total Write and Read Timeout Events Comparison",
-                                                  action, "Write and Read Timeout Events", 25, 50)
+                    chart = self.create_bar_chart(
+                        "Total Write and Read Timeout Events Comparison",
+                        action,
+                        "Write and Read Timeout Events",
+                    )
                 prefix = name + "-" + get_storage_name_from_worksheet(ws)
                 chart.append(self.get_write_timeout_events_series(ws, prefix))
                 chart.append(self.get_read_timeout_events_series(ws, prefix))
@@ -694,5 +736,6 @@ class SbkMultiCharts(SbkCharts):
             self.create_total_avg_latency_compare_graph()
             self.create_total_max_latency_compare_graph()
             self.create_total_write_read_timeout_events_compare_graph()
+            self.apply_chart_theme()
             self.wb.save(self.file)
             print("file : %s updated with graphs" % self.file)
