@@ -718,24 +718,33 @@ class SbkMultiCharts(SbkCharts):
         if self.check_time_units():
             self.create_summary_sheet()
             self.create_sbk_date_sheet()
+
+            # Broad workload comparisons come first.
             self.create_multi_throughput_mb_graph()
             self.create_multi_throughput_records_graph()
-            self.create_all_latency_compare_graphs()
-            self.create_multi_latency_compare_graphs()
-            self.create_multi_latency_graphs()
             self.create_multi_write_read_records_graph()
             self.create_multi_write_read_mb_graph()
             self.create_multi_write_read_timeout_events_graph()
             self.create_multi_write_read_timeout_events_per_sec_graph()
+
+            # Grouped latency and percentile views precede total summaries.
+            self.create_all_latency_compare_graphs()
             self.create_total_multi_latency_percentile_graphs()
             self.create_total_multi_latency_percentile_count_graphs()
             self.create_total_mb_compare_graph()
             self.create_total_throughput_mb_compare_graph()
             self.create_total_throughput_records_compare_graph()
+
+            # Remaining total comparisons come before fine-grained views.
             self.create_total_min_latency_compare_graph()
             self.create_total_avg_latency_compare_graph()
             self.create_total_max_latency_compare_graph()
             self.create_total_write_read_timeout_events_compare_graph()
+
+            # Per-run groups and individual latency/percentile comparisons
+            # intentionally appear last.
+            self.create_multi_latency_compare_graphs()
+            self.create_multi_latency_graphs()
             self.apply_table_theme()
             self.apply_chart_theme()
             self.wb.save(self.file)
