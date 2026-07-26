@@ -727,7 +727,7 @@ class SbkMultiCharts(SbkCharts):
 
             # Grouped latency and percentile views precede total summaries.
             self.create_all_latency_compare_graphs()
-            
+
             # Total percentile histogram
             self.create_total_multi_latency_percentile_count_graphs()
 
