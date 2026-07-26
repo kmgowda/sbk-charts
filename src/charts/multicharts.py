@@ -724,22 +724,29 @@ class SbkMultiCharts(SbkCharts):
             self.create_multi_throughput_records_graph()
             self.create_multi_write_read_records_graph()
             self.create_multi_write_read_mb_graph()
-            self.create_multi_write_read_timeout_events_graph()
-            self.create_multi_write_read_timeout_events_per_sec_graph()
 
             # Grouped latency and percentile views precede total summaries.
             self.create_all_latency_compare_graphs()
-            self.create_total_multi_latency_percentile_graphs()
+            
+            # Total percentile histogram
             self.create_total_multi_latency_percentile_count_graphs()
+
             self.create_total_mb_compare_graph()
             self.create_total_throughput_mb_compare_graph()
             self.create_total_throughput_records_compare_graph()
+
+            # Write/Read timeout events
+            self.create_multi_write_read_timeout_events_graph()
+            self.create_multi_write_read_timeout_events_per_sec_graph()
 
             # Remaining total comparisons come before fine-grained views.
             self.create_total_min_latency_compare_graph()
             self.create_total_avg_latency_compare_graph()
             self.create_total_max_latency_compare_graph()
             self.create_total_write_read_timeout_events_compare_graph()
+
+            self.create_total_multi_latency_percentile_graphs()
+
 
             # Per-run groups and individual latency/percentile comparisons
             # intentionally appear last.
