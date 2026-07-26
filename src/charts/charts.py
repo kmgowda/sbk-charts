@@ -28,6 +28,7 @@ underlying benchmark data.
 # Storage Benchmark Kit - Charts Module
 import os
 from collections import OrderedDict
+from copy import copy
 from typing import final
 
 from openpyxl import load_workbook
@@ -40,11 +41,19 @@ from openpyxl.drawing.text import (
     ParagraphProperties,
     RichTextProperties,
 )
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 from openpyxl_image_loader import SheetImageLoader
 
 import src.sheets.constants as sheets_constants
 from src.charts import constants
-from src.charts.utils import get_columns_from_worksheet, get_time_unit_from_worksheet, get_storage_name_from_worksheet
+from src.charts.utils import (
+    get_columns_from_worksheet,
+    get_storage_name_from_worksheet,
+    get_time_unit_from_worksheet,
+    is_r_num_sheet,
+    is_t_num_sheet,
+)
 from src.version.sbk_version import __sbk_version__
 
 
@@ -53,28 +62,49 @@ from src.version.sbk_version import __sbk_version__
 DEFAULT_CHART_HEIGHT = 27
 DEFAULT_CHART_WIDTH = 48
 
-CHART_TITLE_FONT_SIZE = 3000
-AXIS_TITLE_FONT_SIZE = 1800
-AXIS_LABEL_FONT_SIZE = 1500
-LEGEND_FONT_SIZE = 1400
-CHART_LINE_WIDTH = 38100
-CHART_MARKER_SIZE = 7
+CHART_TITLE_FONT_SIZE = 3400
+AXIS_TITLE_FONT_SIZE = 2200
+AXIS_LABEL_FONT_SIZE = 1800
+LEGEND_FONT_SIZE = 1600
+CHART_LINE_WIDTH = 44450
+CHART_MARKER_SIZE = 8
 
-# A colour-blind-friendly palette based on the Tableau 10 colours. Dash
-# patterns distinguish series when the palette needs to repeat.
+TABLE_BODY_FONT_SIZE = 15
+TABLE_HEADER_FONT_SIZE = 17
+TABLE_HEADER_FILL = "12355B"
+TABLE_HEADER_TEXT = "FFFFFF"
+TABLE_ROW_FILLS = ("FFFFFF", "EAF2FF")
+TABLE_GRID_COLOR = "C8D6E8"
+TABLE_MIN_COLUMN_WIDTH = 10
+TABLE_MAX_COLUMN_WIDTH = 34
+TABLE_COLUMN_SCALE = 1.25
+
+# Saturated, high-contrast colours make adjacent series easy to distinguish.
+# Dash patterns and marker shapes add non-colour cues for accessibility.
 CHART_SERIES_COLORS = (
-    "4E79A7",
-    "F28E2B",
-    "E15759",
-    "76B7B2",
-    "59A14F",
-    "EDC948",
-    "B07AA1",
-    "FF9DA7",
-    "9C755F",
-    "BAB0AC",
+    "0066CC",
+    "FF7A00",
+    "009E60",
+    "D81B60",
+    "6A1B9A",
+    "00A6D6",
+    "C62828",
+    "7CB342",
+    "8D5A00",
+    "3949AB",
 )
 CHART_DASH_STYLES = ("solid", "dash", "sysDot", "dashDot")
+CHART_MARKER_SYMBOLS = (
+    "circle",
+    "square",
+    "diamond",
+    "triangle",
+    "x",
+    "plus",
+    "star",
+    "dot",
+    "dash",
+)
 
 
 class SbkCharts:
@@ -319,8 +349,10 @@ class SbkCharts:
                                 palette_cycle % len(CHART_DASH_STYLES)
                             ]
                         )
-                        if series_count <= 6:
-                            series.marker.symbol = "circle"
+                        if series_count <= len(CHART_SERIES_COLORS):
+                            series.marker.symbol = CHART_MARKER_SYMBOLS[
+                                index % len(CHART_MARKER_SYMBOLS)
+                            ]
                             series.marker.size = CHART_MARKER_SIZE
                             series.marker.graphicalProperties.solidFill = color
                             series.marker.graphicalProperties.line.solidFill = color
@@ -333,6 +365,82 @@ class SbkCharts:
                     chart.overlap = 0
                     chart.gapWidth = 55
                     chart.varyColors = False
+
+    @final
+    def apply_table_theme(self):
+        """Increase workbook table readability and apply consistent styling."""
+        thin_bottom = Side(style="thin", color=TABLE_GRID_COLOR)
+
+        for sheet in self.wb.worksheets:
+            # Preserve intentionally large/custom Summary typography while
+            # ensuring every populated workbook cell has a readable minimum.
+            for row in sheet.iter_rows():
+                for cell in row:
+                    if cell.value is None:
+                        continue
+                    current_size = cell.font.sz or 11
+                    if current_size < TABLE_BODY_FONT_SIZE:
+                        font = copy(cell.font)
+                        font.sz = TABLE_BODY_FONT_SIZE
+                        cell.font = font
+
+            is_table = (
+                is_r_num_sheet(sheet.title)
+                or is_t_num_sheet(sheet.title)
+                or sheet.title == "Durations"
+            )
+            if not is_table:
+                continue
+
+            sheet.freeze_panes = "A2"
+            sheet.auto_filter.ref = sheet.dimensions
+            sheet.sheet_view.zoomScale = 85
+
+            for column_index in range(1, sheet.max_column + 1):
+                column_letter = get_column_letter(column_index)
+                current_width = sheet.column_dimensions[column_letter].width or 13
+                sheet.column_dimensions[column_letter].width = min(
+                    max(
+                        current_width * TABLE_COLUMN_SCALE,
+                        TABLE_MIN_COLUMN_WIDTH,
+                    ),
+                    TABLE_MAX_COLUMN_WIDTH,
+                )
+
+            sheet.row_dimensions[1].height = 32
+            for cell in sheet[1]:
+                cell.font = Font(
+                    name=cell.font.name or "Calibri",
+                    size=TABLE_HEADER_FONT_SIZE,
+                    bold=True,
+                    color=TABLE_HEADER_TEXT,
+                )
+                cell.fill = PatternFill(fill_type="solid", fgColor=TABLE_HEADER_FILL)
+                cell.alignment = Alignment(
+                    horizontal="center",
+                    vertical="center",
+                    wrap_text=True,
+                )
+                cell.border = Border(bottom=thin_bottom)
+
+            for row_index in range(2, sheet.max_row + 1):
+                sheet.row_dimensions[row_index].height = 26
+                row_fill = PatternFill(
+                    fill_type="solid",
+                    fgColor=TABLE_ROW_FILLS[row_index % len(TABLE_ROW_FILLS)],
+                )
+                for cell in sheet[row_index]:
+                    if cell.value is None:
+                        continue
+                    font = copy(cell.font)
+                    font.sz = max(font.sz or 11, TABLE_BODY_FONT_SIZE)
+                    font.color = "1F2937"
+                    cell.font = font
+                    cell.fill = row_fill
+                    alignment = copy(cell.alignment)
+                    alignment.vertical = "center"
+                    cell.alignment = alignment
+                    cell.border = Border(bottom=thin_bottom)
 
     @final
     def create_line_chart(
@@ -1351,6 +1459,7 @@ class SbkCharts:
         self.create_latency_compare_graphs(r_ws, r_prefix)
         self.create_latency_graphs(r_ws, r_prefix)
         self.create_total_latency_percentile_graphs(t_ws, t_prefix)
+        self.apply_table_theme()
         self.apply_chart_theme()
         self.wb.save(self.file)
         print("file : %s updated with graphs" % self.file)

@@ -736,6 +736,7 @@ class SbkMultiCharts(SbkCharts):
             self.create_total_avg_latency_compare_graph()
             self.create_total_max_latency_compare_graph()
             self.create_total_write_read_timeout_events_compare_graph()
+            self.apply_table_theme()
             self.apply_chart_theme()
             self.wb.save(self.file)
             print("file : %s updated with graphs" % self.file)
