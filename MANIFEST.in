@@ -1,4 +1,5 @@
 include README.md LICENSE requirements.txt AGENTS.md
+include sbk-charts sbk-charts.ps1 sbk-charts.bat
 include src/main/banner.txt
 include src/images/sbk-logo.png
 recursive-include samples *

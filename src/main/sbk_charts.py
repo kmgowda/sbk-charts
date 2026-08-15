@@ -76,3 +76,8 @@ def sbk_charts():
     ch.add_performance_details()
     ch.chat()
     ch.close(args)
+
+
+if __name__ == "__main__":
+    sys.argv[0] = "sbk-charts"
+    sbk_charts()
