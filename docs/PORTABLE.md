@@ -57,7 +57,7 @@ Install the reviewed build-tool versions into a Python 3.10+ environment that
 already has sbk-charts installed, then run:
 
 ```bash
-python -m pip install "pyinstaller==6.22.0" "pyinstaller-hooks-contrib==2026.6"
+python -m pip install -r requirements-portable.txt
 python scripts/build_portable.py
 ```
 
@@ -66,6 +66,11 @@ only for the operating system and processor architecture on which it ran. The
 builder runs the frozen executable with `--help` before creating the archive.
 For a release-sized Linux build, install the CPU-only PyTorch wheel before
 installing sbk-charts, matching `.github/workflows/portable.yml`.
+
+Portable target names, native runners, archive formats, bundled paths, hashing,
+and application metadata are declared once in `sbk-charts.ini`. Build-tool pins
+are declared in `requirements-portable.txt`. The release workflow and builder
+consume those files instead of maintaining independent copies.
 
 ## Operational notes
 

@@ -22,6 +22,7 @@ stdout.
 
 import os
 import sys
+from pathlib import Path
 
 # Add the project root to the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -78,5 +79,5 @@ def sbk_charts():
 
 
 if __name__ == "__main__":
-    sys.argv[0] = "sbk-charts"
+    sys.argv[0] = Path(__file__).stem.replace("_", "-")
     sbk_charts()

@@ -6,18 +6,68 @@ $ErrorActionPreference = "Stop"
 $ApplicationArguments = @($args)
 
 $ProjectRoot = $PSScriptRoot
-$AppModule = "src.main.sbk_charts"
-$MinimumPython = "3.10"
+$PolicyFile = Join-Path $ProjectRoot "sbk-charts.ini"
+
+function Read-ProjectPolicy {
+    param([string] $Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Runtime policy not found: $Path"
+    }
+    $Values = @{}
+    $Section = ""
+    foreach ($RawLine in Get-Content -LiteralPath $Path) {
+        $Line = $RawLine.Trim()
+        if (-not $Line -or $Line.StartsWith("#") -or $Line.StartsWith(";")) {
+            continue
+        }
+        if ($Line -match '^\[(.+)\]$') {
+            $Section = $Matches[1]
+            continue
+        }
+        if ($Line -match '^([^=]+)=(.*)$') {
+            $Key = $Matches[1].Trim()
+            $Values["$Section.$Key"] = $Matches[2].Trim()
+        }
+    }
+    return $Values
+}
+
+function Get-RequiredPolicyValue {
+    param(
+        [hashtable] $Policy,
+        [string] $Key
+    )
+    $Value = [string] $Policy[$Key]
+    if (-not $Value) {
+        throw "Runtime policy value is missing: $Key"
+    }
+    return $Value
+}
+
+$Policy = Read-ProjectPolicy $PolicyFile
+$AppName = Get-RequiredPolicyValue $Policy "application.name"
+$DistributionName = Get-RequiredPolicyValue $Policy "application.distribution_name"
+$AppModule = Get-RequiredPolicyValue $Policy "application.module"
+$MinimumPython = Get-RequiredPolicyValue $Policy "runtime.minimum_python"
+$DefaultCondaEnvironment = Get-RequiredPolicyValue $Policy "runtime.default_conda_environment"
+$VirtualEnvironmentNames = @(
+    (Get-RequiredPolicyValue $Policy "runtime.virtual_environment_names").Split(',') |
+        ForEach-Object { $_.Trim() } | Where-Object { $_ }
+)
+$WindowsPythonLaunchers = @(
+    (Get-RequiredPolicyValue $Policy "runtime.windows_python_launchers").Split(',') |
+        ForEach-Object { $_.Trim() } | Where-Object { $_ }
+)
 $CondaEnvironmentName = if ($env:SBK_CHARTS_CONDA_ENV) {
     $env:SBK_CHARTS_CONDA_ENV
 } else {
-    "sbk-charts"
+    $DefaultCondaEnvironment
 }
-$DefaultVenv = Join-Path $ProjectRoot "venv-sbk-charts"
+$DefaultVenv = Join-Path $ProjectRoot $VirtualEnvironmentNames[0]
 
 function Write-LauncherMessage {
     param([string] $Message)
-    [Console]::Error.WriteLine("sbk-charts: $Message")
+    [Console]::Error.WriteLine("${AppName}: $Message")
 }
 
 function Test-SupportedPython {
@@ -31,7 +81,7 @@ function Test-SupportedPython {
 
 function Test-EnvironmentReady {
     param([string] $PythonPath)
-    & $PythonPath -c "from importlib.metadata import version; version('sbk-charts'); import src.main.sbk_charts" 2>$null
+    & $PythonPath -c "import importlib, sys; from importlib.metadata import version; version(sys.argv[1]); importlib.import_module(sys.argv[2])" $DistributionName $AppModule 2>$null
     if ($LASTEXITCODE -ne 0) {
         return $false
     }
@@ -49,7 +99,7 @@ function Install-Project {
         return $true
     }
 
-    Write-LauncherMessage "Installing sbk-charts into $EnvironmentLabel"
+    Write-LauncherMessage "Installing $AppName into $EnvironmentLabel"
     & $PythonPath -m pip install --editable $ProjectRoot
     if ($LASTEXITCODE -ne 0) {
         return $false
@@ -109,11 +159,9 @@ foreach ($EnvironmentPrefix in $EnvironmentCandidates) {
 if (-not $env:SBK_CHARTS_VENV) {
     Use-EnvironmentPrefix $env:CONDA_PREFIX "Conda environment" $ApplicationArguments
 
-    $ProjectEnvironmentCandidates = @(
-        $DefaultVenv,
-        (Join-Path $ProjectRoot ".venv"),
-        (Join-Path $ProjectRoot "sbk-charts-venv")
-    )
+    $ProjectEnvironmentCandidates = @($VirtualEnvironmentNames | ForEach-Object {
+        Join-Path $ProjectRoot $_
+    })
     foreach ($EnvironmentPrefix in $ProjectEnvironmentCandidates) {
         Use-EnvironmentPrefix $EnvironmentPrefix "virtual environment" $ApplicationArguments `
             -PythonRelativePath "Scripts\python.exe"
@@ -132,11 +180,10 @@ if ($CondaCommand) {
 }
 
 $VenvPath = if ($env:SBK_CHARTS_VENV) { $env:SBK_CHARTS_VENV } else { $DefaultVenv }
-$PythonLaunchers = @(
-    @{ Command = "py"; Prefix = @("-3.10") },
-    @{ Command = "python"; Prefix = @() },
-    @{ Command = "python3"; Prefix = @() }
-)
+$PythonLaunchers = @($WindowsPythonLaunchers | ForEach-Object {
+    $Prefix = if ($_ -eq "py") { @("-$MinimumPython") } else { @() }
+    @{ Command = $_; Prefix = $Prefix }
+})
 $SupportedLauncher = $null
 
 foreach ($Launcher in $PythonLaunchers) {

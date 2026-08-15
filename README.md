@@ -52,6 +52,11 @@ The launcher requires Python 3.10 or newer. It performs the following steps:
 The first bootstrap requires access to the configured Python package index.
 Set `SBK_CHARTS_VENV` to choose a different virtual-environment directory or
 `SBK_CHARTS_CONDA_ENV` to choose a different Conda environment name.
+The launchers read their Python version, environment names, application module,
+and interpreter search order from [`sbk-charts.ini`](sbk-charts.ini), which is
+the source of truth for runtime and distribution policy.
+Maintainers can find the ownership rules in
+[`docs/POLICY.md`](docs/POLICY.md).
 
 ### Standalone portable distributions
 
