@@ -53,6 +53,17 @@ The first bootstrap requires access to the configured Python package index.
 Set `SBK_CHARTS_VENV` to choose a different virtual-environment directory or
 `SBK_CHARTS_CONDA_ENV` to choose a different Conda environment name.
 
+### Standalone portable distributions
+
+GitHub releases can also provide native, self-contained archives for Linux
+x86-64, macOS Apple silicon, and Windows x86-64. These archives bundle Python
+and all sbk-charts dependencies, so Python, pip, venv, and Conda are not
+required on the destination host. Each archive includes a file manifest and an
+external SHA-256 checksum.
+
+See [Portable sbk-charts distributions](docs/PORTABLE.md) for download,
+verification, execution, local-build, and platform-support details.
+
 ## Running SBK Charts:
 
 ```
