@@ -136,7 +136,7 @@ you can see the sample [fil read in csv](./samples/charts/sbk-file-read.csv) and
 ## Python Virtual Environment Setup
 
 ### Prerequisites
-- Python 3.8 or higher
+- Python 3.10 or higher
 - pip (Python package installer)
 
 ### Setup Instructions

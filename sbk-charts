@@ -20,8 +20,12 @@ fail() {
 }
 
 python_is_supported() {
-    "$1" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' \
-        >/dev/null 2>&1
+    "$1" -c 'import sys; required = tuple(map(int, sys.argv[1].split("."))); raise SystemExit(0 if sys.version_info >= required else 1)' \
+        "$MINIMUM_PYTHON" >/dev/null 2>&1
+}
+
+last_output_line() {
+    awk 'END { sub(/^[[:space:]]+/, ""); sub(/[[:space:]]+$/, ""); print }'
 }
 
 environment_is_ready() {
@@ -92,7 +96,8 @@ conda_command=""
 named_conda_environment_exists=0
 if command -v conda >/dev/null 2>&1; then
     conda_command="$(command -v conda)"
-    conda_prefix="$("$conda_command" run --name "$CONDA_ENV_NAME" python -c 'import sys; print(sys.prefix)' 2>/dev/null || true)"
+    conda_output="$("$conda_command" run --name "$CONDA_ENV_NAME" python -c 'import sys; print(sys.prefix)' 2>/dev/null || true)"
+    conda_prefix="$(printf '%s\n' "$conda_output" | last_output_line)"
     if [ -n "$conda_prefix" ]; then
         named_conda_environment_exists=1
         try_conda_prefix "$conda_prefix" "$@"
@@ -135,7 +140,9 @@ if [ -n "$conda_command" ]; then
         "$conda_command" create --yes --name "$CONDA_ENV_NAME" "python>=$MINIMUM_PYTHON" pip \
             || fail "Conda could not create environment $CONDA_ENV_NAME"
     fi
-    conda_prefix="$("$conda_command" run --name "$CONDA_ENV_NAME" python -c 'import sys; print(sys.prefix)')"
+    conda_output="$("$conda_command" run --name "$CONDA_ENV_NAME" python -c 'import sys; print(sys.prefix)')" \
+        || fail "Conda could not resolve environment $CONDA_ENV_NAME"
+    conda_prefix="$(printf '%s\n' "$conda_output" | last_output_line)"
     try_conda_prefix "$conda_prefix" "$@"
 fi
 

@@ -25,7 +25,7 @@ function Test-SupportedPython {
     if (-not (Test-Path -LiteralPath $PythonPath -PathType Leaf)) {
         return $false
     }
-    & $PythonPath -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" 2>$null
+    & $PythonPath -c "import sys; required=tuple(map(int, sys.argv[1].split('.'))); raise SystemExit(0 if sys.version_info >= required else 1)" $MinimumPython 2>$null
     return $LASTEXITCODE -eq 0
 }
 
@@ -66,7 +66,7 @@ function Start-Application {
     exit $LASTEXITCODE
 }
 
-function Try-EnvironmentPrefix {
+function Use-EnvironmentPrefix {
     param(
         [string] $EnvironmentPrefix,
         [string] $EnvironmentKind,
@@ -102,12 +102,12 @@ foreach ($EnvironmentPrefix in $EnvironmentCandidates) {
         continue
     }
     $SeenCandidates[$CandidateKey] = $true
-    Try-EnvironmentPrefix $EnvironmentPrefix "virtual environment" $ApplicationArguments `
+    Use-EnvironmentPrefix $EnvironmentPrefix "virtual environment" $ApplicationArguments `
         -PythonRelativePath "Scripts\python.exe"
 }
 
 if (-not $env:SBK_CHARTS_VENV) {
-    Try-EnvironmentPrefix $env:CONDA_PREFIX "Conda environment" $ApplicationArguments
+    Use-EnvironmentPrefix $env:CONDA_PREFIX "Conda environment" $ApplicationArguments
 
     $ProjectEnvironmentCandidates = @(
         $DefaultVenv,
@@ -115,7 +115,7 @@ if (-not $env:SBK_CHARTS_VENV) {
         (Join-Path $ProjectRoot "sbk-charts-venv")
     )
     foreach ($EnvironmentPrefix in $ProjectEnvironmentCandidates) {
-        Try-EnvironmentPrefix $EnvironmentPrefix "virtual environment" $ApplicationArguments `
+        Use-EnvironmentPrefix $EnvironmentPrefix "virtual environment" $ApplicationArguments `
             -PythonRelativePath "Scripts\python.exe"
     }
 }
@@ -127,7 +127,7 @@ if ($CondaCommand) {
     if ($LASTEXITCODE -eq 0 -and $CondaPrefixOutput) {
         $NamedCondaEnvironmentExists = $true
         $CondaPrefix = [string](@($CondaPrefixOutput) | Select-Object -Last 1)
-        Try-EnvironmentPrefix $CondaPrefix.Trim() "Conda environment" $ApplicationArguments
+        Use-EnvironmentPrefix $CondaPrefix.Trim() "Conda environment" $ApplicationArguments
     }
 }
 
@@ -146,7 +146,8 @@ foreach ($Launcher in $PythonLaunchers) {
     }
     $ProbeArguments = @($Launcher.Prefix) + @(
         "-c",
-        "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)"
+        "import sys; required=tuple(map(int, sys.argv[1].split('.'))); raise SystemExit(0 if sys.version_info >= required else 1)",
+        $MinimumPython
     )
     & $Command.Source @ProbeArguments 2>$null
     if ($LASTEXITCODE -eq 0) {
@@ -182,7 +183,7 @@ if ($CondaCommand) {
     }
     $CondaPrefixOutput = & $CondaCommand.Source run --name $CondaEnvironmentName python -c "import sys; print(sys.prefix)"
     $CondaPrefix = [string](@($CondaPrefixOutput) | Select-Object -Last 1)
-    Try-EnvironmentPrefix $CondaPrefix.Trim() "Conda environment" $ApplicationArguments
+    Use-EnvironmentPrefix $CondaPrefix.Trim() "Conda environment" $ApplicationArguments
 }
 
 if (-not $SupportedLauncher) {
