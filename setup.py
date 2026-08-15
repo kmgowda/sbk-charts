@@ -10,8 +10,8 @@
 
 import importlib.util
 import os
-import re
 import sys
+from pathlib import Path
 from setuptools import setup, find_packages
 
 project_root = os.path.abspath(os.path.dirname(__file__))
@@ -25,14 +25,8 @@ policy_spec.loader.exec_module(policy_reader)
 load_policy = policy_reader.load_policy
 
 # Read the configured version module without importing application dependencies.
-def get_version():
-    version_file = os.path.join(os.path.dirname(__file__), *project_policy.application.version_file.split('/'))
-    with open(version_file, 'r') as f:
-        content = f.read()
-        match = re.search(r"__sbk_version__\s*=\s*['\"]([^'\"]+)['\"]", content)
-        if match:
-            return match.group(1)
-    raise RuntimeError("Could not find version in src/version/sbk_version.py")
+def get_version() -> str:
+    return policy_reader.application_version(project_policy, Path(project_root))
 
 project_policy = load_policy()
 __sbk_version__ = get_version()

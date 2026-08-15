@@ -5,19 +5,20 @@ import tarfile
 import tempfile
 import unittest
 import zipfile
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
 from scripts import build_portable, sbk_charts_portable_entry
-from scripts.project_policy import POLICY_FILE, github_matrix, load_policy
+from scripts.project_policy import POLICY_FILE, application_version, github_matrix, load_policy
 
 
 class PortableReleaseTest(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.commands: list[list[str]] = []
         self.policy = load_policy()
 
-    def fake_run(self, command, **_kwargs):
+    def fake_run(self, command: list[str], **_kwargs: object) -> subprocess.CompletedProcess:
         self.commands.append(command)
         if "PyInstaller" in command:
             application_name = self.policy.application.name
@@ -111,6 +112,21 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertEqual(len(self.policy.portable.targets), len(matrix["include"]))
         self.assertEqual(set(self.policy.portable.targets), {item["target"] for item in matrix["include"]})
         self.assertTrue(all(item["python"] == self.policy.portable.build_python for item in matrix["include"]))
+
+    def test_version_resolution_uses_the_selected_policy_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            version_path = root / "custom" / "version.py"
+            version_path.parent.mkdir()
+            version_path.write_text('__sbk_version__ = "9.8.7.6"\n', encoding="utf-8")
+            application = replace(self.policy.application, version_file="custom/version.py")
+            selected_policy = replace(self.policy, application=application)
+
+            self.assertEqual("9.8.7.6", application_version(selected_policy, root))
+
+            version_path.write_text("VERSION_MISSING = True\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, str(version_path)):
+                application_version(selected_policy, root)
 
     def test_launchers_and_ci_consume_runtime_policy(self):
         bash_launcher = (build_portable.ROOT / "sbk-charts").read_text(encoding="utf-8")

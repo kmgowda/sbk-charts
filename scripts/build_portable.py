@@ -15,18 +15,10 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from scripts.project_policy import ProjectPolicy, load_policy
+from scripts.project_policy import ProjectPolicy, application_version, load_policy
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = load_policy()
-
-
-def application_version() -> str:
-    """Read the sbk-charts version without importing application dependencies."""
-    namespace: dict[str, object] = {}
-    version_file = ROOT / POLICY.application.version_file
-    exec(version_file.read_text(encoding="utf-8"), namespace)
-    return str(namespace["__sbk_version__"])
 
 
 def current_platform(policy: ProjectPolicy = POLICY) -> str:
@@ -75,7 +67,7 @@ def copy_bundle_paths(bundle: Path, policy: ProjectPolicy) -> None:
 
 def build_bundle(output_directory: Path, policy: ProjectPolicy = POLICY) -> Path:
     """Build, smoke-test, manifest, archive, and checksum a portable bundle."""
-    version = application_version()
+    version = application_version(policy)
     target = current_platform(policy)
     application_name = policy.application.name
     bundle_name = f"{application_name}-{version}-{target}"

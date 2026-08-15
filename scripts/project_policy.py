@@ -6,11 +6,13 @@ from __future__ import annotations
 import argparse
 import configparser
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_FILE = ROOT / "sbk-charts.ini"
+VERSION_PATTERN = re.compile(r"__sbk_version__\s*=\s*['\"]([^'\"]+)['\"]")
 
 
 def _items(value: str) -> tuple[str, ...]:
@@ -125,6 +127,15 @@ def load_policy(path: Path = POLICY_FILE) -> ProjectPolicy:
         portable=portable,
         package_data=package_data,
     )
+
+
+def application_version(policy: ProjectPolicy, root: Path = ROOT) -> str:
+    """Read the configured version file without importing application code."""
+    version_file = root / policy.application.version_file
+    match = VERSION_PATTERN.search(version_file.read_text(encoding="utf-8"))
+    if match:
+        return match.group(1)
+    raise RuntimeError(f"Could not find __sbk_version__ in {version_file}")
 
 
 def github_matrix(policy: ProjectPolicy) -> dict[str, list[dict[str, str]]]:
