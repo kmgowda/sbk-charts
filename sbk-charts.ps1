@@ -70,12 +70,13 @@ function Try-EnvironmentPrefix {
     param(
         [string] $EnvironmentPrefix,
         [string] $EnvironmentKind,
-        [string[]] $Arguments
+        [string[]] $Arguments,
+        [string] $PythonRelativePath = "python.exe"
     )
     if (-not $EnvironmentPrefix) {
         return
     }
-    $PythonPath = Join-Path $EnvironmentPrefix "python.exe"
+    $PythonPath = Join-Path $EnvironmentPrefix $PythonRelativePath
     if (-not (Test-SupportedPython $PythonPath)) {
         return
     }
@@ -101,7 +102,8 @@ foreach ($EnvironmentPrefix in $EnvironmentCandidates) {
         continue
     }
     $SeenCandidates[$CandidateKey] = $true
-    Try-EnvironmentPrefix $EnvironmentPrefix "virtual environment" $ApplicationArguments
+    Try-EnvironmentPrefix $EnvironmentPrefix "virtual environment" $ApplicationArguments `
+        -PythonRelativePath "Scripts\python.exe"
 }
 
 if (-not $env:SBK_CHARTS_VENV) {
@@ -113,7 +115,8 @@ if (-not $env:SBK_CHARTS_VENV) {
         (Join-Path $ProjectRoot "sbk-charts-venv")
     )
     foreach ($EnvironmentPrefix in $ProjectEnvironmentCandidates) {
-        Try-EnvironmentPrefix $EnvironmentPrefix "virtual environment" $ApplicationArguments
+        Try-EnvironmentPrefix $EnvironmentPrefix "virtual environment" $ApplicationArguments `
+            -PythonRelativePath "Scripts\python.exe"
     }
 }
 
@@ -123,7 +126,7 @@ if ($CondaCommand) {
     $CondaPrefixOutput = & $CondaCommand.Source run --name $CondaEnvironmentName python -c "import sys; print(sys.prefix)" 2>$null
     if ($LASTEXITCODE -eq 0 -and $CondaPrefixOutput) {
         $NamedCondaEnvironmentExists = $true
-        $CondaPrefix = [string]($CondaPrefixOutput | Select-Object -Last 1)
+        $CondaPrefix = [string](@($CondaPrefixOutput) | Select-Object -Last 1)
         Try-EnvironmentPrefix $CondaPrefix.Trim() "Conda environment" $ApplicationArguments
     }
 }
@@ -178,7 +181,7 @@ if ($CondaCommand) {
         throw "Conda could not prepare environment $CondaEnvironmentName"
     }
     $CondaPrefixOutput = & $CondaCommand.Source run --name $CondaEnvironmentName python -c "import sys; print(sys.prefix)"
-    $CondaPrefix = [string]($CondaPrefixOutput | Select-Object -Last 1)
+    $CondaPrefix = [string](@($CondaPrefixOutput) | Select-Object -Last 1)
     Try-EnvironmentPrefix $CondaPrefix.Trim() "Conda environment" $ApplicationArguments
 }
 
