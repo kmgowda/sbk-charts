@@ -15,6 +15,55 @@ The sbk-charts application can be used to visualize these results in a more user
 
 **sbk-charts uses AI to generate descriptive summaries about throughput and latency analysis**
 
+## Self-bootstrapping `sbk-charts` launcher
+
+The repository includes cross-platform `sbk-charts` launchers that prepare
+their own Python environment and forward every command-line argument to the
+existing sbk-charts application.
+
+Linux and macOS:
+
+```bash
+./sbk-charts -i samples/charts/sbk-file-read.csv -o out.xlsx
+```
+
+Windows Command Prompt:
+
+```bat
+sbk-charts.bat -i samples\charts\sbk-file-read.csv -o out.xlsx
+```
+
+Windows PowerShell:
+
+```powershell
+.\sbk-charts.ps1 -i samples\charts\sbk-file-read.csv -o out.xlsx
+```
+
+The launcher requires Python 3.10 or newer. It performs the following steps:
+
+1. Reuses `SBK_CHARTS_VENV`, an active virtual environment, an active Conda
+   environment, or a project-local environment when one is already usable.
+2. Reuses the named Conda environment `sbk-charts` when it already exists.
+3. Creates `venv-sbk-charts` with an available Python 3.10+ interpreter.
+4. Falls back to creating a Conda environment when venv setup fails.
+5. Installs the project in editable mode on first use and forwards all supplied
+   arguments unchanged.
+
+The first bootstrap requires access to the configured Python package index.
+Set `SBK_CHARTS_VENV` to choose a different virtual-environment directory or
+`SBK_CHARTS_CONDA_ENV` to choose a different Conda environment name.
+
+### Standalone portable distributions
+
+GitHub releases can also provide native, self-contained archives for Linux
+x86-64, macOS Apple silicon, and Windows x86-64. These archives bundle Python
+and all sbk-charts dependencies, so Python, pip, venv, and Conda are not
+required on the destination host. Each archive includes a file manifest and an
+external SHA-256 checksum.
+
+See [Portable sbk-charts distributions](docs/PORTABLE.md) for download,
+verification, execution, local-build, and platform-support details.
+
 ## Running SBK Charts:
 
 ```
@@ -98,7 +147,7 @@ you can see the sample [fil read in csv](./samples/charts/sbk-file-read.csv) and
 ## Python Virtual Environment Setup
 
 ### Prerequisites
-- Python 3.8 or higher
+- Python 3.10 or higher
 - pip (Python package installer)
 
 ### Setup Instructions
@@ -341,4 +390,3 @@ Mont - 6 (Jun)
 Minor Number - 0
 
 ---
-

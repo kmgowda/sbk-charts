@@ -34,6 +34,36 @@ jobs:
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    - name: Test portable build support
+      run: python -m unittest discover -s tests -p "test_portable.py"
 #    - name: Test with pytest
 #      run: |
 #        pytest
+
+  windows-launchers:
+    name: Windows launcher smoke tests
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
+        cache: pip
+    - name: Prepare reusable virtual environment
+      shell: pwsh
+      run: |
+        python -m venv venv-sbk-charts
+        .\venv-sbk-charts\Scripts\python.exe -m pip install --upgrade pip
+        .\venv-sbk-charts\Scripts\python.exe -m pip install --editable .
+    - name: Test PowerShell launcher with existing venv
+      shell: pwsh
+      env:
+        SBK_CHARTS_VENV: ${{ github.workspace }}\venv-sbk-charts
+      run: .\sbk-charts.ps1 -h
+    - name: Test Command Prompt launcher with existing venv
+      shell: cmd
+      env:
+        SBK_CHARTS_VENV: ${{ github.workspace }}\venv-sbk-charts
+      run: sbk-charts.bat -h

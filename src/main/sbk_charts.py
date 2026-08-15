@@ -23,15 +23,14 @@ stdout.
 import os
 import sys
 
-from src.charts.multicharts import SbkMultiCharts
-
 # Add the project root to the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.ai.sbk_ai import SbkAI
+from src.charts.multicharts import SbkMultiCharts
+from src.parser.sbk_parser import get_sbk_parser
 from src.sheets.sheets import SbkMultiSheets
 from src.version.sbk_version import __sbk_version__
-from src.parser.sbk_parser import get_sbk_parser
 
 SBK_BANNER_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'banner.txt')
 
@@ -76,3 +75,8 @@ def sbk_charts():
     ch.add_performance_details()
     ch.chat()
     ch.close(args)
+
+
+if __name__ == "__main__":
+    sys.argv[0] = "sbk-charts"
+    sbk_charts()
