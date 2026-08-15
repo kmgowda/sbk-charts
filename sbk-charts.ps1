@@ -31,7 +31,7 @@ function Test-SupportedPython {
 
 function Test-EnvironmentReady {
     param([string] $PythonPath)
-    & $PythonPath -c 'from importlib.metadata import version; version("sbk-charts"); import src.main.sbk_charts' 2>$null
+    & $PythonPath -c "from importlib.metadata import version; version('sbk-charts'); import src.main.sbk_charts" 2>$null
     if ($LASTEXITCODE -ne 0) {
         return $false
     }
