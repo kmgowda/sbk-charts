@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 import subprocess
 import sys
 import tarfile
@@ -183,7 +184,7 @@ class PortableReleaseTest(unittest.TestCase):
             self.assertEqual("9.8.7.6", application_version(selected_policy, root))
 
             version_path.write_text("VERSION_MISSING = True\n", encoding="utf-8")
-            with self.assertRaisesRegex(RuntimeError, str(version_path)):
+            with self.assertRaisesRegex(RuntimeError, re.escape(str(version_path))):
                 application_version(selected_policy, root)
 
     def test_version_resolution_ignores_non_module_assignments_and_text(self):
