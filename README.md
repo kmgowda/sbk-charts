@@ -63,9 +63,9 @@ Windows Command Prompt:
 sbk-charts.bat -i samples\charts\sbk-file-read.csv -o out.xlsx
 ```
 
-On first use, the source launcher finds Python 3.10 or newer, prepares an environment, installs the project, and starts the application. Later runs prefer the last environment that passed runtime and dependency validation. The launcher prints the operating system, exact Python executable, Python version, and whether it selected a virtual environment or Conda.
+On first use, the source launcher reuses a valid existing environment when possible. Otherwise it downloads a pinned, checksum-verified `uv`, installs the project-managed Python 3.12.10, and creates a locked environment under `.sbk-runtime/`. This works even when Python, venv, and Conda are absent. The first bootstrap needs HTTPS access to GitHub Releases and the Python package index.
 
-The first bootstrap needs access to the Python package index. If Python virtual-environment setup fails, for example because a platform-specific PyTorch wheel is unavailable, the launcher tries Conda when Conda is installed.
+Later runs validate and reuse the saved environment without downloading anything. The launcher prints the operating system, exact Python executable, Python version, and whether it selected a managed, virtual, or Conda environment. Core chart generation installs only core packages. Selecting an AI backend creates or reuses that backend's dependency profile, so PyTorch and cloud SDKs are not required for normal chart generation.
 
 ## Command-line syntax
 
@@ -230,6 +230,8 @@ The default retrieval implementation is local and does not require ChromaDB. It 
 
 The Linux/macOS and Windows launchers read shared settings from [`sbk-charts.ini`](sbk-charts.ini).
 
+Managed source bootstrap supports glibc Linux on x86-64 and ARM64, macOS on Intel and Apple silicon, and Windows on x86-64 and ARM64. Other targets can still use an existing supported Python/Conda environment or a matching portable release.
+
 ```mermaid
 flowchart TD
     A[Start launcher] --> B{Explicit SBK_CHARTS_VENV set?}
@@ -240,11 +242,12 @@ flowchart TD
     D -- Yes --> H
     D -- No --> E
     E -- Yes --> H
-    E -- No --> F{Can a virtual environment be created?}
-    F -- Yes --> H
-    F -- No --> G{Can a Conda environment be created?}
-    G -- Yes --> H
-    G -- No --> I[Exit with an explanation]
+    E -- No --> F{Managed target supported?}
+    F -- Yes --> G[Verify uv and install exact Python plus locked profile]
+    G --> H
+    F -- No --> I{Can legacy venv or Conda be prepared?}
+    I -- Yes --> H
+    I -- No --> L[Use a supported portable release]
     H --> J[Remember environment and report runtime]
     J --> K[Run sbk-charts]
 ```
@@ -256,8 +259,10 @@ Useful overrides:
 | `SBK_CHARTS_VENV` | Use a specific virtual-environment directory. |
 | `SBK_CHARTS_CONDA_ENV` | Use a different Conda environment name. |
 | `SBK_CHARTS_STATE_FILE` | Store the last-validated-environment record elsewhere. |
+| `SBK_CHARTS_RUNTIME_ROOT` | Store managed tools, Python, caches, and environments elsewhere. |
+| `SBK_CHARTS_UV` | Use a pre-downloaded `uv` executable. Mainly useful for offline provisioning and tests. |
 
-The default state file is `.sbk-charts-runtime` in the project root. Delete that small file if you deliberately want the launcher to forget its last validated choice.
+The default state file is `.sbk-charts-runtime` in the project root. It records environment kind, prefix, dependency profile, and fingerprint. Delete that small file if you deliberately want the launcher to forget its last validated choice. Managed files remain under `.sbk-runtime/` and can still be found by fingerprint.
 
 ## Manual development setup
 
@@ -267,7 +272,8 @@ Use this when you want direct control instead of launcher-managed setup:
 python3 -m venv venv-sbk-charts
 source venv-sbk-charts/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e .
+python -m pip install -e . -r requirements-dev.txt
+# Optional: python -m pip install -e ".[gemini]"
 ./sbk-charts -h
 ```
 
@@ -276,7 +282,7 @@ On Windows PowerShell, activate with:
 ```powershell
 .\venv-sbk-charts\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -e .
+python -m pip install -e . -r requirements-dev.txt
 ```
 
 Conda is also supported:
@@ -301,21 +307,19 @@ Read [Portable distributions](docs/PORTABLE.md) for supported targets, checksum 
 
 ## Troubleshooting
 
-### A backend is missing from help
+### A selected backend reports a missing package
 
-Plugin discovery skips a backend when importing its Python module fails. Run:
+Help is generated from a lightweight registry and does not import optional SDKs. The launcher normally selects the matching locked profile automatically. To diagnose a manually managed environment, run:
 
 ```bash
 # Activate the selected environment first, then use its Python executable.
 python -c \
-  "from src.ai.discover import discover_custom_ai_classes; print(discover_custom_ai_classes())"
+  "from src.ai.registry import load_backend_class; print(load_backend_class('gemini'))"
 ```
-
-The import message printed before the dictionary identifies the missing package or failing module.
 
 ### The launcher keeps selecting the wrong environment
 
-Use `SBK_CHARTS_VENV` for a specific virtual environment, `SBK_CHARTS_CONDA_ENV` for a specific Conda name, or remove `.sbk-charts-runtime` to clear the remembered choice. A remembered environment is reused only while its Python and installed sbk-charts version remain valid.
+Use `SBK_CHARTS_VENV` for a specific virtual environment, `SBK_CHARTS_CONDA_ENV` for a specific Conda name, or remove `.sbk-charts-runtime` to clear the remembered choice. A managed environment is reused only when its target, exact Python, selected dependency profile, lock fingerprint, application import, and package check remain valid.
 
 ### Chart generation stops after printing the time unit
 
@@ -329,9 +333,9 @@ Increase the budget, use a faster model, or run sequentially for resource-heavy 
 ./sbk-charts -i input.csv -o report.xlsx -secs 600 -nothreads ollama
 ```
 
-### PyTorch cannot be installed in a virtual environment
+### PyTorch cannot be installed
 
-PyTorch wheels vary by Python version, operating system, and processor. The self-bootstrap launcher tries Conda after virtual-environment installation fails. You can also use a supported Python version explicitly through `SBK_CHARTS_VENV`, or use a portable build for your platform.
+PyTorch wheels vary by operating system and processor. The `pytorchllm` profile is isolated from the core chart environment. If its locked wheel is unavailable for your target, use Conda through `SBK_CHARTS_CONDA_ENV`, provide a compatible explicit environment through `SBK_CHARTS_VENV`, or use a supported portable build.
 
 ## Documentation map
 

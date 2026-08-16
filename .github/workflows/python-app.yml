@@ -41,8 +41,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install flake8 pytest
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        python -m pip install -r requirements.txt -r requirements-dev.txt
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
@@ -85,3 +84,75 @@ jobs:
       env:
         SBK_CHARTS_VENV: ${{ github.workspace }}\venv-sbk-charts
       run: sbk-charts.bat -h
+
+  managed-bootstrap-unix:
+    name: Managed bootstrap (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - name: Linux x86-64
+          runner: ubuntu-24.04
+        - name: macOS Apple silicon
+          runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      with:
+        persist-credentials: false
+    - name: Create managed environment
+      shell: bash
+      run: |
+        ./sbk-charts -h > first-help.txt
+        grep -q "Environment: managed" first-help.txt
+        grep -q "^kind=managed$" .sbk-charts-runtime
+        grep -q "^profile=core$" .sbk-charts-runtime
+    - name: Reuse managed environment without network
+      shell: bash
+      env:
+        UV_OFFLINE: "true"
+        HTTPS_PROXY: http://127.0.0.1:1
+        HTTP_PROXY: http://127.0.0.1:1
+      run: |
+        ./sbk-charts -h > second-help.txt 2> second-runtime.txt
+        grep -q "Environment: managed" second-help.txt
+        grep -q "Reusing managed environment" second-runtime.txt
+
+  managed-bootstrap-windows:
+    name: Managed bootstrap (Windows x86-64)
+    runs-on: windows-2022
+    timeout-minutes: 15
+
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      with:
+        persist-credentials: false
+    - name: Create managed environment
+      shell: pwsh
+      run: |
+        .\sbk-charts.ps1 -h | Tee-Object -FilePath first-help.txt
+        if (-not (Select-String -Quiet -Path first-help.txt -Pattern "Environment: managed")) {
+          throw "Managed environment details were not reported"
+        }
+        if (-not (Select-String -Quiet -Path .sbk-charts-runtime -Pattern "^kind=managed$")) {
+          throw "Managed environment was not remembered"
+        }
+        if (-not (Select-String -Quiet -Path .sbk-charts-runtime -Pattern "^profile=core$")) {
+          throw "Core dependency profile was not remembered"
+        }
+    - name: Reuse managed environment without network through CMD shim
+      shell: pwsh
+      run: |
+        $env:UV_OFFLINE = "true"
+        $env:HTTPS_PROXY = "http://127.0.0.1:1"
+        $env:HTTP_PROXY = "http://127.0.0.1:1"
+        cmd /c "sbk-charts.bat -h 1>second-help.txt 2>second-runtime.txt"
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        if (-not (Select-String -Quiet -Path second-help.txt -Pattern "Environment: managed")) {
+          throw "Managed environment details were not reported during reuse"
+        }
+        if (-not (Select-String -Quiet -Path second-runtime.txt -Pattern "Reusing managed environment")) {
+          throw "Managed environment was not reused offline"
+        }

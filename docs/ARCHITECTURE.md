@@ -62,7 +62,7 @@ sequenceDiagram
     participant Plugin as Selected AI plugin
 
     User->>Main: input CSV paths and output XLSX path
-    Main->>AI: discover plugins and add CLI subcommands
+    Main->>AI: register lightweight backend subcommands
     Main->>Sheets: create_sheets
     Sheets->>Book: write R1 T1 R2 T2 sheets
     Main->>Charts: create_graphs
@@ -96,7 +96,7 @@ The stage order is an architectural invariant. Chart code expects R/T sheets to 
 | `src/charts/` | Data lookup, tables, all charts, Summary sheet | `SbkCharts`, `SbkMultiCharts` |
 | `src/stat/` | Immutable AI-facing data transfer object | `StorageStat` |
 | `src/genai/` | Backend interface and shared prompts | `SbkGenAI` |
-| `src/ai/` | Discovery, execution, timeout, Excel AI layout, chat | `SbkAI` |
+| `src/ai/` | Lazy registry, execution, timeout, Excel AI layout, chat | `SbkAI`, `BACKENDS` |
 | `src/rag/` | Retrieval for chat and prompt grounding | `SbkSimpleRAGPipeline`, optional `SbkRAGPipeline` |
 | `src/custom_ai/` | Provider and local-model adapters | Seven `SbkGenAI` subclasses |
 | `src/version/` | Canonical release version | `__sbk_version__` |
@@ -118,15 +118,15 @@ The stage order is an architectural invariant. Chart code expects R/T sheets to 
 - `-nothreads`;
 - `-chat`.
 
-It then discovers backend classes and creates one argparse subcommand for each class. Every plugin owns its own `add_args()` and `parse_args()` methods. A new backend therefore does not require an edit to the base parser.
+It reads a static lightweight registry and creates one argparse subcommand per backend without importing provider SDKs. A new backend requires a registry descriptor whose flags match the implementation's `parse_args()` contract.
 
 ```mermaid
 flowchart TD
     A[get_sbk_parser] --> B[Base input and output options]
     B --> C[SbkAI.add_args]
-    D[discover_custom_ai_classes] --> C
+    D[Static BACKENDS registry] --> C
     C --> E[Global AI options]
-    C --> F[One subparser per plugin class]
+    C --> F[One subparser per backend descriptor]
     F --> G[Plugin-specific options]
     G --> H[argparse Namespace]
 ```
@@ -247,9 +247,9 @@ Metadata columns such as ID, Header, Type, Storage, Action, and Latency Time Uni
 
 ## 10. AI plugin system
 
-### 10.1 Discovery
+### 10.1 Lazy registry
 
-`discover_custom_ai_classes()` recursively imports modules below `src.custom_ai`. It selects concrete classes that directly or indirectly inherit `SbkGenAI`. The lowercase class name becomes the command:
+`src/ai/registry.py` declares the stable command name, implementation module, class, and CLI argument builder for each backend. It does not import optional provider modules. `load_backend_class()` imports only the command selected by the user:
 
 ```text
 Gemini      -> gemini
@@ -258,7 +258,7 @@ LmStudio    -> lmstudio
 PyTorchLLM  -> pytorchllm
 ```
 
-If a plugin import raises an exception, discovery prints the error and continues. This protects unrelated backends, but it means the failing backend disappears from help output.
+This keeps `sbk-charts -h` and core chart generation independent of optional SDKs. A missing package produces an error only when its backend is selected. `src/ai/discover.py` remains a developer diagnostic, not the runtime command registry.
 
 ### 10.2 Interface
 
@@ -355,7 +355,7 @@ There are three source launchers:
 - `sbk-charts.ps1` for PowerShell;
 - `sbk-charts.bat`, which delegates to PowerShell for Command Prompt users.
 
-They use native shell logic to read `sbk-charts.ini` because Python may not exist yet. After choosing Python, they use `scripts/project_policy.py` for shared validation, runtime reporting, and remembered-environment state.
+They use native shell logic to read `sbk-charts.ini` because Python may not exist yet. A supported launcher can download a pinned, SHA-256-verified `uv`, use it to install an exact project-managed Python, and build an environment from a hashed lock. After choosing Python, the launcher uses `scripts/project_policy.py` for shared validation, runtime reporting, and remembered-environment state.
 
 When `SBK_CHARTS_VENV` is not set, the selection order is:
 
@@ -363,20 +363,27 @@ When `SBK_CHARTS_VENV` is not set, the selection order is:
 2. active virtual or Conda environment;
 3. known project-local virtual environments;
 4. the configured existing Conda environment;
-5. a newly created virtual environment;
-6. a newly created Conda environment.
+5. the fingerprinted project-managed environment;
+6. creation of the project-managed Python and locked environment;
+7. legacy creation of a virtual or Conda environment on unsupported managed targets.
 
 When `SBK_CHARTS_VENV` is set, the launcher tries that explicit path first and skips remembered, active, and project-local candidates. If it cannot use the explicit venv, it continues with the named Conda and environment-creation paths.
 
-An environment is reusable only when it has a supported Python, the installed distribution version matches the source version, the application module imports, and the dependency check succeeds. The selected validated venv or Conda runtime is written atomically to `.sbk-charts-runtime` immediately before the application process starts.
+An environment is reusable only when it has a supported Python, the installed distribution version matches the source version, the application and selected backend import, and the dependency check succeeds. A managed environment also must match the fingerprint of target, exact Python, selected profile, and lock contents. Creation is serialized by a bootstrap lock and published by directory rename only after self-validation. The successful runtime is written atomically to `.sbk-charts-runtime` immediately before the application starts.
+
+The static backend registry lets `--help` and core chart generation run without importing optional provider SDKs. Selecting a backend changes the dependency profile and imports only that implementation. Exact, hashed environments live in `requirements-lock/`; human-maintained inputs live in `requirements.txt` and `requirements-ai/`.
+
+Managed source targets cover glibc Linux x86-64/ARM64, macOS Intel/Apple silicon, and Windows x86-64/ARM64. Portable release targets are a smaller independent list.
 
 ## 14. Runtime and artifact policy
 
 `sbk-charts.ini` is the shared source of truth for values used by launchers, packaging, CI, and portable builds:
 
 - application and distribution identity;
-- Python minimum and interpreter search order;
+- Python minimum, exact managed Python, and interpreter search order;
 - environment names and runtime state filename;
+- pinned runtime manager downloads and checksums;
+- AI dependency-profile inputs and exact lock directory;
 - entry point, requirements file, version file, and package data;
 - portable targets, runners, formats, manifest, checksum, and bundle paths.
 
@@ -437,7 +444,7 @@ Preserve these rules unless a reviewed design explicitly changes them:
 4. Compared R sheets use one latency time unit.
 5. Exact CSV headers come from `src/charts/constants.py`.
 6. Shared analysis prompts live in `SbkGenAI`, not provider plugins.
-7. Plugin discovery failures do not stop unrelated plugins.
+7. Optional backend imports are lazy and do not stop help or unrelated backends.
 8. AI methods return `(bool, text)` and failures remain visible in the workbook.
 9. `StorageStat` is constructed completely and then treated as read-only.
 10. Summary layout changes account for both chart and AI writers.
@@ -451,7 +458,7 @@ Preserve these rules unless a reviewed design explicitly changes them:
 | Add a chart | `src/charts/multicharts.py` | `charts.py`, `constants.py`, `utils.py` |
 | Change workbook styling | `src/charts/charts.py` | Summary styling in `multicharts.py` and `sbk_ai.py` |
 | Change CSV split behavior | `src/sheets/sheets.py` | `sheets/constants.py`, every R/T caller |
-| Add an AI backend | `src/custom_ai/<name>/` | `genai.py`, `discover.py`, plugin spec |
+| Add an AI backend | plugin, registry, optional requirements and lock | `genai.py`, plugin spec |
 | Change all AI prompts | `src/genai/genai.py` | every backend's response limits |
 | Change AI scheduling | `src/ai/sbk_ai.py` | timeout and thread-safety behavior |
 | Change chat retrieval | `src/rag/sbk_rag.py` | `genai.py`, `sbk_ai.py` |

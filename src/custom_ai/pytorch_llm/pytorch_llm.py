@@ -250,7 +250,8 @@ class PyTorchLLM(SbkGenAI):
     def parse_args(self, args) -> None:
         """Parse command-line arguments."""
         self.model_name = args.pt_model
-        self.device = args.pt_device
+        if args.pt_device != "auto":
+            self.device = args.pt_device
         self.max_length = args.pt_max_length
         self.temperature = args.pt_temperature
         self.top_p = args.pt_top_p

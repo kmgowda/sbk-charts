@@ -24,7 +24,7 @@ The main pipeline is fixed:
 CSV files -> R/T sheets -> Summary and charts -> optional AI text -> optional chat
 ```
 
-The source launchers can create or reuse a virtual or Conda environment. Portable releases bundle Python and dependencies.
+On supported targets, source launchers can install an exact managed Python and locked dependency profile without preinstalled Python, venv, or Conda. They also reuse valid virtual and Conda environments. Portable releases bundle Python and dependencies.
 
 ## 2. Read the right document
 
@@ -48,7 +48,7 @@ The source launchers can create or reuse a virtual or Conda environment. Portabl
 | `src/charts/` | Summary, charts, themes, CSV header constants | Adding or changing workbook visuals |
 | `src/stat/` | Frozen `StorageStat` | Changing the AI-facing statistics shape |
 | `src/genai/` | Shared AI interface and prompts | Changing every backend's analysis contract or prompt |
-| `src/ai/` | Plugin discovery, scheduling, Excel AI text, chat | Changing AI execution or layout |
+| `src/ai/` | Lazy backend registry, scheduling, Excel AI text, chat | Changing AI execution or layout |
 | `src/rag/` | Retrieval and grounding | Changing chat context selection |
 | `src/custom_ai/<name>/` | One AI adapter | Adding or fixing one backend |
 | `src/version/` | Canonical version | Cutting an approved release |
@@ -79,7 +79,7 @@ The simplest source setup is:
 python3 -m venv venv-sbk-charts
 source venv-sbk-charts/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e .
+python -m pip install -e . -r requirements-dev.txt
 ```
 
 You can also let `./sbk-charts` bootstrap the environment. Reusing its managed interpreter keeps verification consistent:
@@ -88,7 +88,7 @@ You can also let `./sbk-charts` bootstrap the environment. Reusing its managed i
 venv-sbk-charts/bin/python -m unittest discover -s tests -v
 ```
 
-Do not add a runtime dependency without adding it to `requirements.txt`. Keep portable-only build tools in `requirements-portable.txt`.
+Put core runtime dependencies in `requirements.txt`, managed build backends in `requirements-bootstrap.txt`, backend-only dependencies in `requirements-ai/<backend>.txt`, contributor tools in `requirements-dev.txt`, and portable build tools in `requirements-portable.txt`. Regenerate affected exact hashed files in `requirements-lock/` whenever a runtime input changes.
 
 ## 6. Definition of done
 
@@ -208,14 +208,14 @@ Every production backend should:
 - document authentication, model, threading, and resource needs;
 - clean up sessions or model resources in `close()` when necessary.
 
-If a backend disappears from `-h`, run:
+If a selected backend fails to import, run:
 
 ```bash
 venv-sbk-charts/bin/python -c \
-  "from src.ai.discover import discover_custom_ai_classes; print(discover_custom_ai_classes())"
+  "from src.ai.registry import load_backend_class; print(load_backend_class('<backend>'))"
 ```
 
-Then import the missing module directly for a traceback.
+Help is registry-driven and should not import optional SDKs. Import the selected module directly for a traceback.
 
 ## 10. Chart rules
 
@@ -261,6 +261,7 @@ Never commit:
 
 - `out.xlsx` or other generated reports;
 - `venv-sbk-charts/`, `.venv/`, or Conda environments;
+- `.sbk-runtime/` managed Python, tools, environments, and caches;
 - `dist/`, `build/`, wheels, source archives, or portable archives;
 - downloaded model files or caches;
 - `.sbk-charts-runtime`;
@@ -285,7 +286,7 @@ Do not claim Windows, macOS, GPU, provider API, or portable-runtime testing if i
 | Add or reorder charts | `src/charts/multicharts.py` | Workbook order and chart recipe |
 | Fix CSV conversion | `src/sheets/` | Architecture section 6 |
 | Add an AI backend | `src/custom_ai/` | Plugin specification and plugin recipe |
-| Fix missing backend imports | plugin and `requirements.txt` | Discovery section and troubleshooting recipe |
+| Fix backend imports | plugin, registry, optional requirements and lock | AI section and troubleshooting recipe |
 | Change AI text layout | `src/ai/sbk_ai.py` | Summary two-writer rule |
 | Change prompt content | `src/genai/genai.py` | Canonical-prompt rule |
 | Improve chat grounding | `src/rag/sbk_rag.py` | Architecture section 12 |

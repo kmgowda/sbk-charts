@@ -36,15 +36,24 @@ APP_NAME="$(policy_value application name)"
 DISTRIBUTION_NAME="$(policy_value application distribution_name)"
 APP_MODULE="$(policy_value application module)"
 MINIMUM_PYTHON="$(policy_value runtime minimum_python)"
+MANAGED_PYTHON="$(policy_value runtime managed_python)"
 DEFAULT_CONDA_ENV="$(policy_value runtime default_conda_environment)"
 RUNTIME_STATE_NAME="$(policy_value runtime runtime_state_file)"
 VIRTUAL_ENVIRONMENT_NAMES="$(policy_value runtime virtual_environment_names)"
+MANAGED_RUNTIME_NAME="$(policy_value runtime managed_runtime_directory)"
+LOCK_DIRECTORY_NAME="$(policy_value runtime lock_directory)"
 UNIX_PYTHON_COMMANDS="$(policy_value runtime unix_python_commands)"
+BOOTSTRAP_MANAGER="$(policy_value bootstrap manager)"
+BOOTSTRAP_MANAGER_VERSION="$(policy_value bootstrap manager_version)"
+BOOTSTRAP_DOWNLOAD_BASE_URL="$(policy_value bootstrap download_base_url)"
 
 if [ -z "$APP_NAME" ] || [ -z "$DISTRIBUTION_NAME" ] || [ -z "$APP_MODULE" ] || \
-    [ -z "$MINIMUM_PYTHON" ] || [ -z "$DEFAULT_CONDA_ENV" ] || \
+    [ -z "$MINIMUM_PYTHON" ] || [ -z "$MANAGED_PYTHON" ] || \
+    [ -z "$DEFAULT_CONDA_ENV" ] || \
     [ -z "$RUNTIME_STATE_NAME" ] || [ -z "$VIRTUAL_ENVIRONMENT_NAMES" ] || \
-    [ -z "$UNIX_PYTHON_COMMANDS" ]; then
+    [ -z "$MANAGED_RUNTIME_NAME" ] || [ -z "$LOCK_DIRECTORY_NAME" ] || \
+    [ -z "$UNIX_PYTHON_COMMANDS" ] || [ -z "$BOOTSTRAP_MANAGER" ] || \
+    [ -z "$BOOTSTRAP_MANAGER_VERSION" ] || [ -z "$BOOTSTRAP_DOWNLOAD_BASE_URL" ]; then
     printf '%s\n' "sbk-charts: ERROR: Runtime policy is incomplete: $POLICY_FILE" >&2
     exit 1
 fi
@@ -53,6 +62,22 @@ CONDA_ENV_NAME="${SBK_CHARTS_CONDA_ENV:-$DEFAULT_CONDA_ENV}"
 DEFAULT_VENV_NAME="$(printf '%s\n' "$VIRTUAL_ENVIRONMENT_NAMES" | awk -F, '{ gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1); print $1 }')"
 DEFAULT_VENV="$PROJECT_ROOT/$DEFAULT_VENV_NAME"
 RUNTIME_STATE_FILE="${SBK_CHARTS_STATE_FILE:-$PROJECT_ROOT/$RUNTIME_STATE_NAME}"
+MANAGED_RUNTIME_ROOT="${SBK_CHARTS_RUNTIME_ROOT:-$PROJECT_ROOT/$MANAGED_RUNTIME_NAME}"
+
+SELECTED_BACKEND=""
+SELECTED_PROFILE="core"
+SELECTED_REQUIREMENTS=""
+for application_argument in "$@"
+do
+    backend_requirements="$(policy_value ai.requirements "$application_argument")"
+    if [ -n "$backend_requirements" ]; then
+        SELECTED_BACKEND="$application_argument"
+        SELECTED_PROFILE="$application_argument"
+        SELECTED_REQUIREMENTS="$PROJECT_ROOT/$backend_requirements"
+        break
+    fi
+done
+LOCK_FILE="$PROJECT_ROOT/$LOCK_DIRECTORY_NAME/$SELECTED_PROFILE.txt"
 
 log() {
     printf '%s\n' "$APP_NAME: $*" >&2
@@ -62,6 +87,48 @@ fail() {
     log "ERROR: $*"
     exit 1
 }
+
+sha256_file() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{ print $1 }'
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$1" | awk '{ print $1 }'
+    else
+        return 1
+    fi
+}
+
+sha256_stream() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum | awk '{ print $1 }'
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 | awk '{ print $1 }'
+    else
+        return 1
+    fi
+}
+
+managed_target() {
+    local operating_system machine
+    operating_system="$(uname -s 2>/dev/null || true)"
+    machine="$(uname -m 2>/dev/null || true)"
+    case "$operating_system:$machine" in
+        Linux:x86_64|Linux:amd64) printf '%s\n' "linux-amd64" ;;
+        Linux:arm64|Linux:aarch64) printf '%s\n' "linux-arm64" ;;
+        Darwin:arm64|Darwin:aarch64) printf '%s\n' "macos-arm64" ;;
+        Darwin:x86_64|Darwin:amd64) printf '%s\n' "macos-amd64" ;;
+        *) return 1 ;;
+    esac
+}
+
+MANAGED_TARGET="$(managed_target 2>/dev/null || true)"
+EXPECTED_FINGERPRINT=""
+if [ -n "$MANAGED_TARGET" ] && [ -r "$LOCK_FILE" ]; then
+    EXPECTED_FINGERPRINT="$({
+        printf '%s\n' "$MANAGED_PYTHON" "$MANAGED_TARGET" "$SELECTED_PROFILE"
+        cat "$LOCK_FILE"
+    } | sha256_stream 2>/dev/null || true)"
+fi
 
 python_is_supported() {
     "$1" -c 'import sys; required = tuple(map(int, sys.argv[1].split("."))); raise SystemExit(0 if sys.version_info >= required else 1)' \
@@ -84,7 +151,14 @@ runtime_state_value() {
 }
 
 environment_is_ready() {
-    "$1" "$PROJECT_ROOT/scripts/project_policy.py" --environment-ready >/dev/null 2>&1 && \
+    if [ -n "$SELECTED_BACKEND" ]; then
+        "$1" "$PROJECT_ROOT/scripts/project_policy.py" \
+            --environment-ready "$SELECTED_BACKEND" >/dev/null 2>&1 || return 1
+    else
+        "$1" "$PROJECT_ROOT/scripts/project_policy.py" --environment-ready >/dev/null 2>&1 \
+            || return 1
+    fi
+    \
         "$1" -m pip check >/dev/null 2>&1
 }
 
@@ -99,6 +173,9 @@ install_project() {
 
     log "Installing $APP_NAME into $environment_label"
     "$python_path" -m pip install --editable "$PROJECT_ROOT" || return 1
+    if [ -n "$SELECTED_REQUIREMENTS" ]; then
+        "$python_path" -m pip install --requirement "$SELECTED_REQUIREMENTS" || return 1
+    fi
     environment_is_ready "$python_path"
 }
 
@@ -106,10 +183,12 @@ run_application() {
     local python_path="$1"
     local environment_kind="$2"
     local environment_prefix="$3"
-    shift 3
+    local environment_fingerprint="$4"
+    local environment_profile="$5"
+    shift 5
     if ! "$python_path" "$PROJECT_ROOT/scripts/project_policy.py" \
         --remember-environment "$environment_kind" "$environment_prefix" \
-        "$RUNTIME_STATE_FILE"; then
+        "$RUNTIME_STATE_FILE" "$environment_fingerprint" "$environment_profile"; then
         log "WARNING: Could not remember successful $environment_kind environment $environment_prefix"
     fi
     "$python_path" "$PROJECT_ROOT/scripts/project_policy.py" \
@@ -127,7 +206,7 @@ try_virtual_environment() {
     [ -x "$python_path" ] || return 1
     python_is_supported "$python_path" || return 1
     install_project "$python_path" "virtual environment $environment_dir" || return 1
-    run_application "$python_path" "venv" "$environment_dir" "$@"
+    run_application "$python_path" "venv" "$environment_dir" "" "$SELECTED_PROFILE" "$@"
 }
 
 try_conda_prefix() {
@@ -139,7 +218,158 @@ try_conda_prefix() {
     [ -x "$python_path" ] || return 1
     python_is_supported "$python_path" || return 1
     install_project "$python_path" "Conda environment $environment_dir" || return 1
-    run_application "$python_path" "conda" "$environment_dir" "$@"
+    run_application "$python_path" "conda" "$environment_dir" "" "$SELECTED_PROFILE" "$@"
+}
+
+try_managed_environment() {
+    local environment_dir="$1"
+    local expected_fingerprint="$2"
+    local python_path
+    shift 2
+    [ -n "$environment_dir" ] || return 1
+    [ -n "$expected_fingerprint" ] || return 1
+    python_path="$environment_dir/bin/python"
+    [ -x "$python_path" ] || return 1
+    python_is_supported "$python_path" || return 1
+    environment_is_ready "$python_path" || return 1
+    log "Reusing managed environment $environment_dir"
+    run_application "$python_path" "managed" "$environment_dir" \
+        "$expected_fingerprint" "$SELECTED_PROFILE" "$@"
+}
+
+release_bootstrap_lock() {
+    if [ -n "${BOOTSTRAP_LOCK_DIR:-}" ] && [ -d "$BOOTSTRAP_LOCK_DIR" ]; then
+        rm -f "$BOOTSTRAP_LOCK_DIR/pid"
+        rmdir "$BOOTSTRAP_LOCK_DIR" 2>/dev/null || true
+    fi
+}
+
+acquire_bootstrap_lock() {
+    BOOTSTRAP_LOCK_DIR="$MANAGED_RUNTIME_ROOT/bootstrap.lock"
+    mkdir -p "$MANAGED_RUNTIME_ROOT"
+    attempts=0
+    while ! mkdir "$BOOTSTRAP_LOCK_DIR" 2>/dev/null; do
+        attempts=$((attempts + 1))
+        lock_pid="$(cat "$BOOTSTRAP_LOCK_DIR/pid" 2>/dev/null || true)"
+        if [ -n "$lock_pid" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
+            rm -f "$BOOTSTRAP_LOCK_DIR/pid"
+            rmdir "$BOOTSTRAP_LOCK_DIR" 2>/dev/null || true
+            continue
+        fi
+        [ "$attempts" -lt 60 ] || fail "Timed out waiting for bootstrap lock $BOOTSTRAP_LOCK_DIR"
+        sleep 1
+    done
+    printf '%s\n' "$$" > "$BOOTSTRAP_LOCK_DIR/pid"
+    trap release_bootstrap_lock EXIT HUP INT TERM
+}
+
+download_file() {
+    local url="$1"
+    local destination="$2"
+    if command -v curl >/dev/null 2>&1; then
+        curl --fail --location --retry 3 --silent --show-error --output "$destination" "$url"
+    elif command -v wget >/dev/null 2>&1; then
+        wget --tries=3 --output-document="$destination" "$url"
+    else
+        return 1
+    fi
+}
+
+prepare_bootstrap_manager() {
+    local archive_name archive_sha archive_path archive_url
+    local tool_dir temporary_dir extracted_tool
+
+    [ -n "$MANAGED_TARGET" ] || return 1
+    archive_name="$(policy_value bootstrap "$MANAGED_TARGET-archive")"
+    archive_sha="$(policy_value bootstrap "$MANAGED_TARGET-sha256")"
+    [ -n "$archive_name" ] && [ -n "$archive_sha" ] || return 1
+
+    tool_dir="$MANAGED_RUNTIME_ROOT/tools/$BOOTSTRAP_MANAGER-$BOOTSTRAP_MANAGER_VERSION"
+    BOOTSTRAP_MANAGER_PATH="$tool_dir/$BOOTSTRAP_MANAGER"
+    if [ -x "$BOOTSTRAP_MANAGER_PATH" ] && \
+        [ "$(cat "$tool_dir/archive.sha256" 2>/dev/null || true)" = "$archive_sha" ] && \
+        [ "$(cat "$tool_dir/binary.sha256" 2>/dev/null || true)" = \
+            "$(sha256_file "$BOOTSTRAP_MANAGER_PATH" 2>/dev/null || true)" ]; then
+        return 0
+    fi
+
+    temporary_dir="$(mktemp -d "$MANAGED_RUNTIME_ROOT/.tool.XXXXXX")" || return 1
+    archive_path="$temporary_dir/$archive_name"
+    archive_url="$BOOTSTRAP_DOWNLOAD_BASE_URL/$BOOTSTRAP_MANAGER_VERSION/$archive_name"
+    log "Downloading pinned $BOOTSTRAP_MANAGER $BOOTSTRAP_MANAGER_VERSION for $MANAGED_TARGET"
+    download_file "$archive_url" "$archive_path" || return 1
+    [ "$(sha256_file "$archive_path" 2>/dev/null || true)" = "$archive_sha" ] || {
+        log "Downloaded bootstrap manager failed SHA-256 verification"
+        return 1
+    }
+    case "$archive_name" in
+        *.tar.gz) tar -xzf "$archive_path" -C "$temporary_dir" || return 1 ;;
+        *) return 1 ;;
+    esac
+    extracted_tool="$(find "$temporary_dir" -type f -name "$BOOTSTRAP_MANAGER" -perm -u+x 2>/dev/null | head -n 1)"
+    [ -n "$extracted_tool" ] || return 1
+    mkdir -p "$tool_dir"
+    cp "$extracted_tool" "$BOOTSTRAP_MANAGER_PATH" || return 1
+    chmod 755 "$BOOTSTRAP_MANAGER_PATH" || return 1
+    printf '%s\n' "$archive_sha" > "$tool_dir/archive.sha256"
+    sha256_file "$BOOTSTRAP_MANAGER_PATH" > "$tool_dir/binary.sha256" || return 1
+    rm -rf "$temporary_dir"
+}
+
+create_managed_environment() {
+    local environment_dir="$1"
+    local temporary_environment python_path stale_environment
+    shift
+    [ -n "$EXPECTED_FINGERPRINT" ] || fail "Cannot calculate the managed environment fingerprint"
+    [ -r "$LOCK_FILE" ] || fail "Dependency lock not found: $LOCK_FILE"
+
+    acquire_bootstrap_lock
+    try_managed_environment "$environment_dir" "$EXPECTED_FINGERPRINT" "$@"
+
+    if [ -n "${SBK_CHARTS_UV:-}" ]; then
+        BOOTSTRAP_MANAGER_PATH="$SBK_CHARTS_UV"
+        [ -x "$BOOTSTRAP_MANAGER_PATH" ] || fail "SBK_CHARTS_UV is not executable: $BOOTSTRAP_MANAGER_PATH"
+    else
+        prepare_bootstrap_manager || fail "Could not download and verify the pinned runtime manager. Use a portable release or install Python/Conda."
+    fi
+
+    log "Installing managed Python $MANAGED_PYTHON"
+    env UV_PYTHON_INSTALL_DIR="$MANAGED_RUNTIME_ROOT/python" \
+        UV_CACHE_DIR="$MANAGED_RUNTIME_ROOT/cache" \
+        "$BOOTSTRAP_MANAGER_PATH" python install --install-dir "$MANAGED_RUNTIME_ROOT/python" \
+        "$MANAGED_PYTHON" || fail "Could not install managed Python $MANAGED_PYTHON"
+
+    temporary_environment="$(mktemp -d \
+        "$MANAGED_RUNTIME_ROOT/.env-$EXPECTED_FINGERPRINT.XXXXXX")" \
+        || fail "Could not allocate a temporary managed environment"
+    env UV_PYTHON_INSTALL_DIR="$MANAGED_RUNTIME_ROOT/python" \
+        UV_CACHE_DIR="$MANAGED_RUNTIME_ROOT/cache" UV_LINK_MODE=copy \
+        "$BOOTSTRAP_MANAGER_PATH" venv --managed-python --seed \
+        --python "$MANAGED_PYTHON" "$temporary_environment" \
+        || fail "Could not create managed environment"
+    python_path="$temporary_environment/bin/python"
+    env UV_CACHE_DIR="$MANAGED_RUNTIME_ROOT/cache" UV_LINK_MODE=copy \
+        "$BOOTSTRAP_MANAGER_PATH" pip install --python "$python_path" \
+        --require-hashes --requirement "$LOCK_FILE" \
+        || fail "Could not install locked $SELECTED_PROFILE dependencies"
+    env UV_CACHE_DIR="$MANAGED_RUNTIME_ROOT/cache" UV_LINK_MODE=copy \
+        "$BOOTSTRAP_MANAGER_PATH" pip install --python "$python_path" \
+        --no-build-isolation --no-deps --editable "$PROJECT_ROOT" \
+        || fail "Could not install $APP_NAME"
+    environment_is_ready "$python_path" || fail "Managed environment self-check failed"
+
+    if [ -e "$environment_dir" ]; then
+        stale_environment="$environment_dir.stale-$$"
+        mv "$environment_dir" "$stale_environment" \
+            || fail "Could not preserve incomplete managed environment $environment_dir"
+        log "Preserved incomplete managed environment as $stale_environment"
+    fi
+    mkdir -p "$(dirname "$environment_dir")"
+    mv "$temporary_environment" "$environment_dir" || fail "Could not publish managed environment"
+    release_bootstrap_lock
+    trap - EXIT HUP INT TERM
+    try_managed_environment "$environment_dir" "$EXPECTED_FINGERPRINT" "$@"
+    fail "Managed environment could not start $APP_NAME"
 }
 
 if [ -n "${SBK_CHARTS_VENV:-}" ]; then
@@ -147,8 +377,17 @@ if [ -n "${SBK_CHARTS_VENV:-}" ]; then
 else
     preferred_kind="$(runtime_state_value kind 2>/dev/null || true)"
     preferred_prefix="$(runtime_state_value prefix 2>/dev/null || true)"
+    preferred_fingerprint="$(runtime_state_value fingerprint 2>/dev/null || true)"
+    preferred_profile="$(runtime_state_value profile 2>/dev/null || true)"
     if [ -n "$preferred_prefix" ]; then
         case "$preferred_kind" in
+            managed)
+                if [ "$preferred_fingerprint" = "$EXPECTED_FINGERPRINT" ] && \
+                    [ "$preferred_profile" = "$SELECTED_PROFILE" ]; then
+                    log "Trying remembered managed environment $preferred_prefix"
+                    try_managed_environment "$preferred_prefix" "$EXPECTED_FINGERPRINT" "$@"
+                fi
+                ;;
             venv)
                 log "Trying remembered venv environment $preferred_prefix"
                 try_virtual_environment "$preferred_prefix" "$@"
@@ -171,6 +410,9 @@ else
 $(printf '%s\n' "$VIRTUAL_ENVIRONMENT_NAMES" | tr ',' '\n' | awk '{ gsub(/^[[:space:]]+|[[:space:]]+$/, ""); if (length) print }')
 EOF
 fi
+
+managed_environment="$MANAGED_RUNTIME_ROOT/envs/$EXPECTED_FINGERPRINT"
+try_managed_environment "$managed_environment" "$EXPECTED_FINGERPRINT" "$@"
 
 conda_command=""
 named_conda_environment_exists=0
@@ -197,6 +439,10 @@ do
 done <<EOF
 $(printf '%s\n' "$UNIX_PYTHON_COMMANDS" | tr ',' '\n' | awk '{ gsub(/^[[:space:]]+|[[:space:]]+$/, ""); if (length) print }')
 EOF
+
+if [ -z "${SBK_CHARTS_VENV:-}" ]; then
+    create_managed_environment "$managed_environment" "$@"
+fi
 
 venv_dir="${SBK_CHARTS_VENV:-$DEFAULT_VENV}"
 if [ -n "$system_python" ]; then
@@ -229,7 +475,7 @@ if [ -n "$conda_command" ]; then
 fi
 
 if [ -z "$system_python" ]; then
-    fail "Python >= $MINIMUM_PYTHON and Conda were not found. Install either one and retry."
+    fail "No supported managed runtime, Python >= $MINIMUM_PYTHON, or Conda environment could be prepared."
 fi
 
 fail "Python >= $MINIMUM_PYTHON was found, but neither venv nor Conda could create a working environment. Ensure the Python venv module and network access to the package index are available."

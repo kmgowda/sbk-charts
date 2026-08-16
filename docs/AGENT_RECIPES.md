@@ -33,7 +33,7 @@ src/custom_ai/<plugin_name>/
 
 The module must define one concrete `SbkGenAI` subclass. Directory and module names use lower snake case; the class uses PascalCase. Discovery lowercases the class name to make the command.
 
-Implement plugin-owned CLI configuration in `add_args()` and `parse_args()`. Do not edit the base parser for plugin flags and do not create a central registration list.
+Register plugin flags in the lightweight descriptor and consume them in `parse_args()`. Do not import the optional SDK from the registry.
 
 Implement these result methods using the `(bool, text)` contract:
 
@@ -46,7 +46,7 @@ def get_percentile_histogram_analysis(self) -> tuple[bool, str]: ...
 def get_response(self, query: str) -> tuple[bool, str]: ...
 ```
 
-Reuse the base prompt builders. Read credentials from environment variables, never command history or committed files. Add the SDK to `requirements.txt` with the project pinning convention.
+Reuse the base prompt builders. Read credentials from environment variables, never command history or committed files. Add the SDK to `requirements-ai/<command>.txt`, register it in `sbk-charts.ini`, and regenerate its exact hashed lock.
 
 ### Verify
 
@@ -68,17 +68,17 @@ Then test the configured backend end to end. Confirm all four analyses finish or
 
 | Change | Files |
 |---|---|
-| New backend flag | Plugin `add_args()` and `parse_args()` plus its README |
+| New backend flag | Registry descriptor, plugin `parse_args()`, and README |
 | Default model or endpoint | Plugin constants and README |
-| SDK update | Plugin imports/calls, `requirements.txt`, README |
+| SDK update | Plugin imports/calls, optional requirements, hashed lock, README |
 | Provider-specific response parsing | Plugin request helper |
 | Shared analysis wording | `src/genai/genai.py`, not the plugin |
 
-Run backend help and the affected backend. Also run discovery directly so an import regression is visible:
+Run backend help and import only the affected backend so an SDK regression is visible:
 
 ```bash
 venv-sbk-charts/bin/python -c \
-  "from src.ai.discover import discover_custom_ai_classes; print(discover_custom_ai_classes())"
+  "from src.ai.registry import load_backend_class; print(load_backend_class('<backend>'))"
 ```
 
 ## 3. Add a chart
@@ -177,11 +177,11 @@ Do not copy a shared prompt into every plugin.
 
 ## 8. Debug a missing backend
 
-### Show discovery failures
+### Load the selected backend
 
 ```bash
 venv-sbk-charts/bin/python -c \
-  "from src.ai.discover import discover_custom_ai_classes; print(discover_custom_ai_classes())"
+  "from src.ai.registry import load_backend_class; print(load_backend_class('<backend>'))"
 ```
 
 ### Import the missing module directly
@@ -191,7 +191,7 @@ venv-sbk-charts/bin/python -c \
   "import src.custom_ai.<directory>.<module>"
 ```
 
-Common causes are a dependency absent from `requirements.txt`, a package installed into a different environment, an upstream import path change, or a syntax error. Fix the root cause, rerun discovery, and confirm `./sbk-charts -h` lists the backend.
+Common causes are a stale backend lock, a package installed into a different environment, an upstream import path change, or a syntax error. Fix the root cause and test the selected backend. Help is lazy and should list declared backends without their SDKs.
 
 ## 9. Debug AI timeouts or memory errors
 
@@ -228,7 +228,7 @@ Do not add ChromaDB as a required dependency merely because the alternative impl
 
 Relevant files are `sbk-charts`, `sbk-charts.ps1`, `sbk-charts.bat`, `sbk-charts.ini`, and `scripts/project_policy.py`.
 
-Preserve the main selection priorities. An explicit venv is tried first and bypasses remembered, active, and project-local candidates. Without that override, the launcher tries the remembered validated environment, active environments, project venvs, existing named Conda, a new venv, and finally new or repaired Conda. Validate both interpreter paths: Unix venv Python is under `bin/`; Windows venv Python is under `Scripts\python.exe`; Conda Python is at the environment prefix root on Windows.
+Preserve the main selection priorities. An explicit venv is tried first. Otherwise the launcher tries remembered, active, project-local, and named Conda environments before the fingerprinted managed environment. On a supported target it then verifies pinned `uv`, installs the exact managed Python, installs the selected hashed lock, self-checks, publishes atomically, and remembers it. Legacy venv/Conda creation remains a fallback for unsupported managed targets. Validate Unix `bin/python`, Windows `Scripts\python.exe`, fingerprints, profiles, locking, checksum rejection, first-run creation, and second-run offline reuse.
 
 Required checks include:
 

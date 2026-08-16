@@ -41,11 +41,20 @@ Maps Python packages to non-Python files that must be included, such as the bann
 Defines:
 
 - minimum supported Python;
+- exact managed Python and managed runtime directory;
 - default Conda environment name;
 - remembered-environment state filename;
 - project virtual-environment names;
 - Unix interpreter search order;
 - Windows interpreter launcher search order.
+
+### `[bootstrap]`
+
+Pins the standalone runtime manager version, official download base URL, native archives, and SHA-256 checksums. Adding a target requires both an archive and checksum.
+
+### `[ai.requirements]`
+
+Maps each optional backend command to its human-maintained requirements input. `requirements-lock/<profile>.txt` contains the exact hashed solution used by managed environments. Every profile combines core `requirements.txt` with `requirements-bootstrap.txt`; backend profiles also add their file from `requirements-ai/`. Managed editable installation disables build isolation so it cannot bypass these hashes.
 
 ### `[portable]`
 
@@ -64,7 +73,7 @@ The related mapping sections connect targets to operating systems, processor nam
 | `load_requirements()` | Ignore comments while preserving URL fragments such as `#sha256=...`. |
 | `environment_matches_policy()` | Check installed distribution version and application import. |
 | `runtime_details()` | Produce consistent OS, Python, and environment messages. |
-| `remember_environment()` | Atomically save a successful venv or Conda selection. |
+| `remember_environment()` | Atomically save a successful managed, venv, or Conda selection. |
 | `load_remembered_environment()` | Read a valid prior selection. |
 | `github_matrix()` | Generate the portable native-runner matrix. |
 
@@ -101,6 +110,7 @@ Some values are deliberately not global policy:
 | Action commit SHAs | Workflow YAML | Security review must see the exact pinned action |
 | Current version value | `src/version/sbk_version.py` | One canonical release declaration |
 | Build-tool versions | `requirements-portable.txt` | Dependency management |
+| Contributor-tool versions | `requirements-dev.txt` | Development environment |
 
 Centralization is not the same as putting every constant into one file. A value should stay close to the algorithm or domain that owns it.
 
@@ -108,11 +118,13 @@ Centralization is not the same as putting every constant into one file. A value 
 
 The policy points to `src/version/sbk_version.py`; it does not repeat the version. Launchers compare the installed distribution version with that source declaration. They also import the configured application module and run a dependency check. A mismatch or failed check causes repair or selection of another environment.
 
-After runtime validation and immediately before starting the application process, the launcher writes only environment kind and prefix to the state file:
+After runtime validation and immediately before starting the application process, the launcher writes environment identity and managed-policy state:
 
 ```text
-kind=conda
-prefix=/path/to/conda/environment
+kind=managed
+prefix=/checkout/.sbk-runtime/envs/<fingerprint>
+fingerprint=<sha256>
+profile=core
 ```
 
 The write is atomic. The remembered environment is a preference, not proof that the previous workbook operation completed and not an unconditional trust decision. It is validated again before reuse.

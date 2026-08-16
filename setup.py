@@ -38,6 +38,13 @@ package_dir = project_root
 # Read the canonical runtime requirements; a missing file is a packaging error.
 req_file = os.path.join(package_dir, *project_policy.application.runtime_requirements.split('/'))
 required = policy_reader.load_requirements(Path(req_file))
+extras_required = {
+    name: policy_reader.load_requirements(Path(project_root) / requirements_path)
+    for name, requirements_path in project_policy.ai_requirements.items()
+}
+extras_required['all-ai'] = sorted(
+    {requirement for requirements in extras_required.values() for requirement in requirements}
+)
 
 setup(
     name=project_policy.application.distribution_name,
@@ -61,4 +68,5 @@ setup(
     author_email=project_policy.application.author_email,
     description=project_policy.application.description,
     install_requires=required,
+    extras_require=extras_required,
 )

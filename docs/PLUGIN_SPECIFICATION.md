@@ -19,12 +19,15 @@ The plugin implementation normally changes:
 src/custom_ai/<directory>/__init__.py
 src/custom_ai/<directory>/<directory>.py
 src/custom_ai/<directory>/README.md
-requirements.txt
+src/ai/registry.py
+requirements-ai/<command>.txt
+requirements-lock/<command>.txt
+sbk-charts.ini
 src/custom_ai/README.md
 docs/ARCHITECTURE.md
 ```
 
-Plugin arguments belong in the plugin's `add_args()` and `parse_args()` methods. No central registration edit is needed because discovery is automatic.
+Plugin arguments are registered by a lightweight descriptor in `src/ai/registry.py` and consumed by the plugin's `parse_args()` method. The descriptor must not import the optional SDK.
 
 ## Fillable template
 

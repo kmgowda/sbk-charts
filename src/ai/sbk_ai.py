@@ -33,7 +33,7 @@ import sys
 
 from openpyxl import load_workbook
 
-from src.ai.discover import discover_custom_ai_classes
+from src.ai.registry import BACKENDS, load_backend_class
 from src.charts import constants
 from src.charts.utils import is_r_num_sheet, get_columns_from_worksheet, get_storage_name_from_worksheet
 from src.charts.utils import get_time_unit_from_worksheet, get_action_name_from_worksheet
@@ -126,7 +126,7 @@ class SbkAI:
     and saving the enhanced workbook with performance insights.
 
     Attributes:
-        classes (dict): Dictionary of available AI backend classes discovered at runtime
+        classes (dict): Lightweight descriptors for available AI backends
         ai_instance_map (dict): Mapping of AI instances by name for easy access
         subparsers: Command-line argument subparsers for configuring different AI backends
         file (str): Path to the output Excel file being processed
@@ -140,13 +140,10 @@ class SbkAI:
         """
         Initialize the SbkAI analysis engine.
 
-        This constructor discovers all available AI backend classes and sets up
-        the basic configuration for analysis execution.
-
-        The discovery process uses reflection to find all classes that implement
-        the AI interface in the custom_ai module.
+        This constructor loads only lightweight backend metadata. Provider
+        modules and their optional dependencies are imported after selection.
         """
-        self.classes = discover_custom_ai_classes()
+        self.classes = BACKENDS
         self.ai_instance_map = dict()
         self.subparsers = None
         self.input_files = None
@@ -170,7 +167,7 @@ class SbkAI:
 
         Side Effects:
             - Adds timeout and threading configuration options
-            - Registers subparsers for each available AI backend class
+            - Registers subparsers for each available AI backend descriptor
         """
         parser.add_argument("-secs", "--seconds", help=f"Timeout seconds, default : {self.timeout_seconds}",
                             default=self.timeout_seconds)
@@ -180,11 +177,10 @@ class SbkAI:
                             action="store_true", default=False)
         self.subparsers = parser.add_subparsers(dest="ai_class", help="Available GenAI commands", required=False)
         parser.set_defaults(ai_class=None)
-        for name, cls in self.classes.items():
+        for name, descriptor in self.classes.items():
             try:
                 subp = self.subparsers.add_parser(name)
-                self.ai_instance_map[name.lower()] = cls()
-                self.ai_instance_map[name.lower()].add_args(subp)
+                descriptor.add_arguments(subp)
             except Exception:
                 # don't break arg registration if a class has issues; log for debugging
                 traceback.print_exc()
@@ -213,7 +209,10 @@ class SbkAI:
         self.chat_mode = args.chat
 
         if args.ai_class:
-            self.ai_instance = self.ai_instance_map[args.ai_class.lower()]
+            backend_name = args.ai_class.lower()
+            backend_class = load_backend_class(backend_name)
+            self.ai_instance = backend_class()
+            self.ai_instance_map[backend_name] = self.ai_instance
             self.ai_instance.parse_args(args)
 
     def _initialize_rag_pipeline(self):
@@ -810,4 +809,3 @@ class SbkAI:
                 print("\nAI: This AI backend doesn't support chat queries.\n")
         except Exception as e:
             print(f"\nAI Error: Failed to get response - {str(e)}\n")
-

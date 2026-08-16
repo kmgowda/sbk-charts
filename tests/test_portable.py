@@ -23,6 +23,7 @@ from scripts.project_policy import (
     remember_environment,
     runtime_details,
 )
+from src.ai.registry import BACKENDS
 
 
 BACKEND_GUIDES = frozenset(
@@ -166,6 +167,15 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertEqual(set(self.policy.portable.targets), set(self.policy.portable.runners))
         self.assertTrue(BACKEND_GUIDES.issubset(self.policy.portable.bundle_paths))
         self.assertTrue(POLICY_FILE.is_file())
+        self.assertEqual("3.12.10", self.policy.runtime.managed_python)
+        self.assertEqual(".sbk-runtime", self.policy.runtime.managed_runtime_directory)
+        self.assertEqual("requirements-lock", self.policy.runtime.lock_directory)
+        self.assertEqual("uv", self.policy.bootstrap.manager)
+        self.assertRegex(self.policy.bootstrap.manager_version, r"^\d+\.\d+\.\d+$")
+        self.assertTrue(set(self.policy.portable.targets).issubset(self.policy.bootstrap.archives))
+        self.assertTrue(all(re.fullmatch(r"[0-9a-f]{64}", value)
+                            for value in self.policy.bootstrap.checksums.values()))
+        self.assertEqual(set(BACKENDS) - {"noai"}, set(self.policy.ai_requirements))
 
         matrix = github_matrix(self.policy)
         self.assertEqual(len(self.policy.portable.targets), len(matrix["include"]))
@@ -186,6 +196,17 @@ class PortableReleaseTest(unittest.TestCase):
             version_path.write_text("VERSION_MISSING = True\n", encoding="utf-8")
             with self.assertRaisesRegex(RuntimeError, re.escape(str(version_path))):
                 application_version(selected_policy, root)
+
+    def test_policy_rejects_invalid_bootstrap_checksum(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            policy_file = Path(temporary) / "sbk-charts.ini"
+            source = POLICY_FILE.read_text(encoding="utf-8").replace(
+                "linux-amd64-sha256 = 68a509da24b06b4223a1c0175fb5eb5bc79342b76cbeff0cfe51ac3f5b17b6b2",
+                "linux-amd64-sha256 = not-a-checksum",
+            )
+            policy_file.write_text(source, encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "invalid SHA-256"):
+                load_policy(policy_file)
 
     def test_version_resolution_ignores_non_module_assignments_and_text(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -293,7 +314,39 @@ class PortableReleaseTest(unittest.TestCase):
             )
             remember_environment("venv", "/project/.venv", state_file)
             self.assertEqual(("venv", "/project/.venv"), load_remembered_environment(state_file))
+            remember_environment(
+                "managed", "/project/.sbk-runtime/envs/abc", state_file, "abc", "gemini"
+            )
+            self.assertEqual(
+                ("managed", "/project/.sbk-runtime/envs/abc"),
+                load_remembered_environment(state_file),
+            )
+            state = state_file.read_text(encoding="utf-8")
+            self.assertIn("fingerprint=abc\n", state)
+            self.assertIn("profile=gemini\n", state)
             self.assertEqual([], list(state_file.parent.glob(".*.tmp")))
+
+    def test_core_and_backend_dependency_profiles_are_locked(self):
+        root = build_portable.ROOT
+        core_input = (root / "requirements.txt").read_text(encoding="utf-8").lower()
+        for optional_package in (
+            "anthropic", "google-genai", "huggingface_hub", "lmstudio", "torch", "transformers"
+        ):
+            self.assertNotIn(optional_package, core_input)
+
+        for profile in ("core", *self.policy.ai_requirements):
+            lock = root / self.policy.runtime.lock_directory / f"{profile}.txt"
+            self.assertTrue(lock.is_file(), profile)
+            contents = lock.read_text(encoding="utf-8")
+            self.assertIn("==", contents)
+            self.assertIn("--hash=sha256:", contents)
+
+    def test_backend_registry_is_lazy_and_complete(self):
+        self.assertEqual(
+            {"anthropic", "gemini", "huggingface", "lmstudio", "noai", "ollama", "pytorchllm"},
+            set(BACKENDS),
+        )
+        self.assertFalse(any(descriptor.module in sys.modules for descriptor in BACKENDS.values()))
 
     def test_invalid_remembered_environment_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -312,6 +365,9 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn("scripts/project_policy.py\" --environment-ready", bash_launcher)
         self.assertIn('--runtime-details "$environment_kind" "$environment_prefix"', bash_launcher)
         self.assertIn("policy_value runtime runtime_state_file", bash_launcher)
+        self.assertIn("policy_value runtime managed_python", bash_launcher)
+        self.assertIn("--require-hashes --requirement", bash_launcher)
+        self.assertIn("Trying remembered managed environment", bash_launcher)
         self.assertIn('--remember-environment "$environment_kind" "$environment_prefix"', bash_launcher)
         self.assertLess(
             bash_launcher.index("Trying remembered Conda environment"),
@@ -321,6 +377,9 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn("$PolicyReader --environment-ready", powershell_launcher)
         self.assertIn("--runtime-details $EnvironmentKind $EnvironmentPrefix", powershell_launcher)
         self.assertIn('"runtime.runtime_state_file"', powershell_launcher)
+        self.assertIn('"runtime.managed_python"', powershell_launcher)
+        self.assertIn("--require-hashes --requirement", powershell_launcher)
+        self.assertIn("Trying remembered managed environment", powershell_launcher)
         self.assertIn("--remember-environment $EnvironmentKind", powershell_launcher)
         self.assertLess(
             powershell_launcher.index("Trying remembered Conda environment"),
@@ -330,6 +389,9 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertNotIn('$MinimumPython = "3.10"', powershell_launcher)
         self.assertIn("scripts/project_policy.py --minimum-python", workflow)
         self.assertIn("needs.policy.outputs.minimum_python", workflow)
+        self.assertIn("managed-bootstrap-unix:", workflow)
+        self.assertIn("managed-bootstrap-windows:", workflow)
+        self.assertIn('UV_OFFLINE: "true"', workflow)
         self.assertNotIn("actions/checkout@v", workflow)
         self.assertNotIn("actions/setup-python@v", workflow)
         self.assertEqual(workflow.count("actions/checkout@"), workflow.count("persist-credentials: false"))
@@ -339,6 +401,7 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn("project_policy.application.distribution_name", setup_source)
         self.assertIn("project_policy.application.entry_point", setup_source)
         self.assertIn("project_policy.runtime.minimum_python", setup_source)
+        self.assertIn("extras_required['all-ai']", setup_source)
         self.assertNotIn("Fallback to hardcoded requirements", setup_source)
 
     def test_release_workflow_uses_native_pinned_builds(self):
@@ -357,7 +420,9 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn("gh release upload", workflow)
         self.assertEqual(workflow.count("actions/checkout@"), workflow.count("persist-credentials: false"))
         self.assertIn("cache-dependency-path: |", workflow)
-        self.assertIn("requirements.txt\n          requirements-portable.txt", workflow)
+        self.assertIn("requirements-ai/*.txt", workflow)
+        self.assertIn("requirements-bootstrap.txt", workflow)
+        self.assertIn('python -m pip install ".[all-ai]"', workflow)
 
 
 if __name__ == "__main__":
