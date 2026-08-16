@@ -234,7 +234,7 @@ The Linux/macOS and Windows launchers read shared settings from [`sbk-charts.ini
 flowchart TD
     A[Start launcher] --> B{Explicit SBK_CHARTS_VENV set?}
     B -- Yes --> C{Explicit venv works?}
-    C -- Yes --> H[Run sbk-charts]
+    C -- Yes --> H[Validated environment]
     C -- No --> E{Named Conda environment works?}
     B -- No --> D{Remembered active or project environment works?}
     D -- Yes --> H
@@ -245,7 +245,8 @@ flowchart TD
     F -- No --> G{Can a Conda environment be created?}
     G -- Yes --> H
     G -- No --> I[Exit with an explanation]
-    H --> J[Remember validated environment]
+    H --> J[Remember environment and report runtime]
+    J --> K[Run sbk-charts]
 ```
 
 Useful overrides:
