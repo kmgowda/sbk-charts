@@ -37,12 +37,14 @@ DISTRIBUTION_NAME="$(policy_value application distribution_name)"
 APP_MODULE="$(policy_value application module)"
 MINIMUM_PYTHON="$(policy_value runtime minimum_python)"
 DEFAULT_CONDA_ENV="$(policy_value runtime default_conda_environment)"
+RUNTIME_STATE_NAME="$(policy_value runtime runtime_state_file)"
 VIRTUAL_ENVIRONMENT_NAMES="$(policy_value runtime virtual_environment_names)"
 UNIX_PYTHON_COMMANDS="$(policy_value runtime unix_python_commands)"
 
 if [ -z "$APP_NAME" ] || [ -z "$DISTRIBUTION_NAME" ] || [ -z "$APP_MODULE" ] || \
     [ -z "$MINIMUM_PYTHON" ] || [ -z "$DEFAULT_CONDA_ENV" ] || \
-    [ -z "$VIRTUAL_ENVIRONMENT_NAMES" ] || [ -z "$UNIX_PYTHON_COMMANDS" ]; then
+    [ -z "$RUNTIME_STATE_NAME" ] || [ -z "$VIRTUAL_ENVIRONMENT_NAMES" ] || \
+    [ -z "$UNIX_PYTHON_COMMANDS" ]; then
     printf '%s\n' "sbk-charts: ERROR: Runtime policy is incomplete: $POLICY_FILE" >&2
     exit 1
 fi
@@ -50,6 +52,7 @@ fi
 CONDA_ENV_NAME="${SBK_CHARTS_CONDA_ENV:-$DEFAULT_CONDA_ENV}"
 DEFAULT_VENV_NAME="$(printf '%s\n' "$VIRTUAL_ENVIRONMENT_NAMES" | awk -F, '{ gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1); print $1 }')"
 DEFAULT_VENV="$PROJECT_ROOT/$DEFAULT_VENV_NAME"
+RUNTIME_STATE_FILE="${SBK_CHARTS_STATE_FILE:-$PROJECT_ROOT/$RUNTIME_STATE_NAME}"
 
 log() {
     printf '%s\n' "$APP_NAME: $*" >&2
@@ -67,6 +70,17 @@ python_is_supported() {
 
 last_output_line() {
     awk 'END { sub(/^[[:space:]]+/, ""); sub(/[[:space:]]+$/, ""); print }'
+}
+
+runtime_state_value() {
+    [ -r "$RUNTIME_STATE_FILE" ] || return 1
+    awk -F= -v wanted_key="$1" '
+        $1 == wanted_key {
+            sub(/^[^=]*=/, "")
+            print
+            exit
+        }
+    ' "$RUNTIME_STATE_FILE"
 }
 
 environment_is_ready() {
@@ -93,6 +107,11 @@ run_application() {
     local environment_kind="$2"
     local environment_prefix="$3"
     shift 3
+    if ! "$python_path" "$PROJECT_ROOT/scripts/project_policy.py" \
+        --remember-environment "$environment_kind" "$environment_prefix" \
+        "$RUNTIME_STATE_FILE"; then
+        log "WARNING: Could not remember successful $environment_kind environment $environment_prefix"
+    fi
     "$python_path" "$PROJECT_ROOT/scripts/project_policy.py" \
         --runtime-details "$environment_kind" "$environment_prefix" || \
         fail "Could not report runtime details"
@@ -126,6 +145,21 @@ try_conda_prefix() {
 if [ -n "${SBK_CHARTS_VENV:-}" ]; then
     try_virtual_environment "$SBK_CHARTS_VENV" "$@"
 else
+    preferred_kind="$(runtime_state_value kind 2>/dev/null || true)"
+    preferred_prefix="$(runtime_state_value prefix 2>/dev/null || true)"
+    if [ -n "$preferred_prefix" ]; then
+        case "$preferred_kind" in
+            venv)
+                log "Trying remembered venv environment $preferred_prefix"
+                try_virtual_environment "$preferred_prefix" "$@"
+                ;;
+            conda)
+                log "Trying remembered Conda environment $preferred_prefix"
+                try_conda_prefix "$preferred_prefix" "$@"
+                ;;
+        esac
+    fi
+
     try_virtual_environment "${VIRTUAL_ENV:-}" "$@"
     try_conda_prefix "${CONDA_PREFIX:-}" "$@"
 

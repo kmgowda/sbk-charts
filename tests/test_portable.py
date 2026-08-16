@@ -15,8 +15,10 @@ from scripts.project_policy import (
     application_version,
     environment_matches_policy,
     github_matrix,
+    load_remembered_environment,
     load_policy,
     load_requirements,
+    remember_environment,
     runtime_details,
 )
 
@@ -115,6 +117,7 @@ class PortableReleaseTest(unittest.TestCase):
 
     def test_central_policy_defines_runtime_and_artifact_metadata(self):
         self.assertEqual("3.10", self.policy.runtime.minimum_python)
+        self.assertEqual(".sbk-charts-runtime", self.policy.runtime.runtime_state_file)
         self.assertEqual("venv-sbk-charts", self.policy.runtime.virtual_environment_names[0])
         self.assertEqual(
             {"linux-amd64", "macos-arm64", "windows-amd64"},
@@ -239,6 +242,26 @@ class PortableReleaseTest(unittest.TestCase):
             details,
         )
 
+    def test_successful_environment_is_remembered_atomically(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            state_file = Path(temporary) / self.policy.runtime.runtime_state_file
+
+            remember_environment("conda", "/opt/conda envs/sbk-charts", state_file)
+            self.assertEqual(
+                ("conda", "/opt/conda envs/sbk-charts"),
+                load_remembered_environment(state_file),
+            )
+            remember_environment("venv", "/project/.venv", state_file)
+            self.assertEqual(("venv", "/project/.venv"), load_remembered_environment(state_file))
+            self.assertEqual([], list(state_file.parent.glob(".*.tmp")))
+
+    def test_invalid_remembered_environment_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            state_file = Path(temporary) / "runtime-state"
+            with self.assertRaisesRegex(ValueError, "Unsupported environment kind"):
+                remember_environment("system", "/usr/bin", state_file)
+            self.assertIsNone(load_remembered_environment(state_file))
+
     def test_launchers_and_ci_consume_runtime_policy(self):
         bash_launcher = (build_portable.ROOT / "sbk-charts").read_text(encoding="utf-8")
         powershell_launcher = (build_portable.ROOT / "sbk-charts.ps1").read_text(encoding="utf-8")
@@ -248,9 +271,21 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn("policy_value runtime minimum_python", bash_launcher)
         self.assertIn("scripts/project_policy.py\" --environment-ready", bash_launcher)
         self.assertIn('--runtime-details "$environment_kind" "$environment_prefix"', bash_launcher)
+        self.assertIn("policy_value runtime runtime_state_file", bash_launcher)
+        self.assertIn('--remember-environment "$environment_kind" "$environment_prefix"', bash_launcher)
+        self.assertLess(
+            bash_launcher.index("Trying remembered Conda environment"),
+            bash_launcher.index('try_virtual_environment "${VIRTUAL_ENV:-}"'),
+        )
         self.assertIn('"runtime.minimum_python"', powershell_launcher)
         self.assertIn("$PolicyReader --environment-ready", powershell_launcher)
         self.assertIn("--runtime-details $EnvironmentKind $EnvironmentPrefix", powershell_launcher)
+        self.assertIn('"runtime.runtime_state_file"', powershell_launcher)
+        self.assertIn("--remember-environment $EnvironmentKind", powershell_launcher)
+        self.assertLess(
+            powershell_launcher.index("Trying remembered Conda environment"),
+            powershell_launcher.index("$EnvironmentCandidates ="),
+        )
         self.assertNotIn('MINIMUM_PYTHON="3.10"', bash_launcher)
         self.assertNotIn('$MinimumPython = "3.10"', powershell_launcher)
         self.assertIn("scripts/project_policy.py --minimum-python", workflow)

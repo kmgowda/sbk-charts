@@ -8,6 +8,7 @@ import ast
 import configparser
 import importlib
 import json
+import os
 import platform
 import re
 import sys
@@ -47,6 +48,7 @@ class RuntimePolicy:
 
     minimum_python: str
     default_conda_environment: str
+    runtime_state_file: str
     virtual_environment_names: tuple[str, ...]
     unix_python_commands: tuple[str, ...]
     windows_python_launchers: tuple[str, ...]
@@ -91,6 +93,7 @@ def load_policy(path: Path = POLICY_FILE) -> ProjectPolicy:
     runtime = RuntimePolicy(
         minimum_python=runtime_section["minimum_python"],
         default_conda_environment=runtime_section["default_conda_environment"],
+        runtime_state_file=runtime_section["runtime_state_file"],
         virtual_environment_names=_items(runtime_section["virtual_environment_names"]),
         unix_python_commands=_items(runtime_section["unix_python_commands"]),
         windows_python_launchers=_items(runtime_section["windows_python_launchers"]),
@@ -211,6 +214,41 @@ def runtime_details(
     )
 
 
+def remember_environment(environment_kind: str, environment_prefix: str, state_file: Path) -> None:
+    """Atomically persist the last validated launcher environment."""
+    if environment_kind not in {"venv", "conda"}:
+        raise ValueError(f"Unsupported environment kind: {environment_kind}")
+    if not environment_prefix:
+        raise ValueError("Environment prefix must not be empty")
+
+    temporary = state_file.with_name(f".{state_file.name}.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(
+            f"kind={environment_kind}\nprefix={environment_prefix}\n",
+            encoding="utf-8",
+        )
+        temporary.replace(state_file)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def load_remembered_environment(state_file: Path) -> tuple[str, str] | None:
+    """Load a valid remembered launcher environment, if one exists."""
+    try:
+        values = dict(
+            line.split("=", 1)
+            for line in state_file.read_text(encoding="utf-8").splitlines()
+            if "=" in line
+        )
+    except OSError:
+        return None
+    environment_kind = values.get("kind", "")
+    environment_prefix = values.get("prefix", "")
+    if environment_kind not in {"venv", "conda"} or not environment_prefix:
+        return None
+    return environment_kind, environment_prefix
+
+
 def github_matrix(policy: ProjectPolicy) -> dict[str, list[dict[str, str]]]:
     """Return the native portable build matrix declared by project policy."""
     return {
@@ -237,6 +275,11 @@ def main() -> int:
         nargs=2,
         metavar=("ENVIRONMENT_KIND", "ENVIRONMENT_PREFIX"),
     )
+    outputs.add_argument(
+        "--remember-environment",
+        nargs=3,
+        metavar=("ENVIRONMENT_KIND", "ENVIRONMENT_PREFIX", "STATE_FILE"),
+    )
     selected = parser.parse_args()
     if selected.environment_ready:
         return 0 if environment_matches_policy(load_policy()) else 1
@@ -248,6 +291,10 @@ def main() -> int:
         return 0
     if selected.runtime_details:
         print("\n".join(runtime_details(load_policy(), *selected.runtime_details)))
+        return 0
+    if selected.remember_environment:
+        environment_kind, environment_prefix, state_file = selected.remember_environment
+        remember_environment(environment_kind, environment_prefix, Path(state_file))
         return 0
 
 

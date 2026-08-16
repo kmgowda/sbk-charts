@@ -14,5 +14,6 @@ src/sbk_charts.egg-info
 sbk-charts-venv
 venv-sbk-charts/
 .venv/
+.sbk-charts-runtime
 sbk_charts.egg-info
 .continue

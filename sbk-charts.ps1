@@ -51,6 +51,7 @@ $DistributionName = Get-RequiredPolicyValue $Policy "application.distribution_na
 $AppModule = Get-RequiredPolicyValue $Policy "application.module"
 $MinimumPython = Get-RequiredPolicyValue $Policy "runtime.minimum_python"
 $DefaultCondaEnvironment = Get-RequiredPolicyValue $Policy "runtime.default_conda_environment"
+$RuntimeStateName = Get-RequiredPolicyValue $Policy "runtime.runtime_state_file"
 $VirtualEnvironmentNames = @(
     (Get-RequiredPolicyValue $Policy "runtime.virtual_environment_names").Split(',') |
         ForEach-Object { $_.Trim() } | Where-Object { $_ }
@@ -65,6 +66,11 @@ $CondaEnvironmentName = if ($env:SBK_CHARTS_CONDA_ENV) {
     $DefaultCondaEnvironment
 }
 $DefaultVenv = Join-Path $ProjectRoot $VirtualEnvironmentNames[0]
+$RuntimeStateFile = if ($env:SBK_CHARTS_STATE_FILE) {
+    $env:SBK_CHARTS_STATE_FILE
+} else {
+    Join-Path $ProjectRoot $RuntimeStateName
+}
 
 function Write-LauncherMessage {
     param([string] $Message)
@@ -115,6 +121,11 @@ function Start-Application {
         [string] $EnvironmentPrefix,
         [string[]] $Arguments
     )
+    & $PythonPath $PolicyReader --remember-environment $EnvironmentKind `
+        $EnvironmentPrefix $RuntimeStateFile
+    if ($LASTEXITCODE -ne 0) {
+        Write-LauncherMessage "WARNING: Could not remember successful $EnvironmentKind environment $EnvironmentPrefix"
+    }
     & $PythonPath $PolicyReader --runtime-details $EnvironmentKind $EnvironmentPrefix
     if ($LASTEXITCODE -ne 0) {
         throw "Could not report runtime details"
@@ -142,6 +153,33 @@ function Use-EnvironmentPrefix {
     }
     Start-Application -PythonPath $PythonPath -EnvironmentKind $EnvironmentKind `
         -EnvironmentPrefix $EnvironmentPrefix -Arguments $Arguments
+}
+
+function Read-RuntimeState {
+    if (-not (Test-Path -LiteralPath $RuntimeStateFile -PathType Leaf)) {
+        return @{}
+    }
+    $Values = @{}
+    foreach ($RawLine in Get-Content -LiteralPath $RuntimeStateFile) {
+        if ($RawLine -match '^([^=]+)=(.*)$') {
+            $Values[$Matches[1]] = $Matches[2]
+        }
+    }
+    return $Values
+}
+
+if (-not $env:SBK_CHARTS_VENV) {
+    $RuntimeState = Read-RuntimeState
+    $PreferredKind = [string] $RuntimeState["kind"]
+    $PreferredPrefix = [string] $RuntimeState["prefix"]
+    if ($PreferredPrefix -and $PreferredKind -eq "venv") {
+        Write-LauncherMessage "Trying remembered venv environment $PreferredPrefix"
+        Use-EnvironmentPrefix $PreferredPrefix "venv" $ApplicationArguments `
+            -PythonRelativePath "Scripts\python.exe"
+    } elseif ($PreferredPrefix -and $PreferredKind -eq "conda") {
+        Write-LauncherMessage "Trying remembered Conda environment $PreferredPrefix"
+        Use-EnvironmentPrefix $PreferredPrefix "conda" $ApplicationArguments
+    }
 }
 
 $EnvironmentCandidates = if ($env:SBK_CHARTS_VENV) {

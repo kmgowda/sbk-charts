@@ -5,7 +5,8 @@ packaging, CI, and portable releases. Change a value there when modifying:
 
 - application and distribution identity;
 - the Python minimum and interpreter search order;
-- default Conda and project virtual-environment names;
+- default Conda and project virtual-environment names, plus the ignored runtime
+  preference state filename;
 - package data, version file, or runtime requirements file;
 - portable targets, native runners, archive formats, and build Python;
 - portable manifest, checksum, bundled paths, entry script, or collected

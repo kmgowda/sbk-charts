@@ -41,21 +41,24 @@ Windows PowerShell:
 
 The launcher requires Python 3.10 or newer. It performs the following steps:
 
-1. Reuses `SBK_CHARTS_VENV`, an active virtual environment, an active Conda
-   environment, or a project-local environment when it matches the checked-out
-   sbk-charts version and its installed dependencies are healthy.
-2. Reuses the named Conda environment `sbk-charts` when it already exists.
-3. Creates `venv-sbk-charts` with an available Python 3.10+ interpreter.
-4. Falls back to creating a Conda environment when venv setup fails.
-5. Installs the project in editable mode on first use, or refreshes an existing
+1. Honors an explicit `SBK_CHARTS_VENV` override when one is configured.
+2. Otherwise, tries the last environment that successfully launched
+   sbk-charts before probing active or project-local environments. This avoids
+   retrying an incompatible venv before a previously working Conda environment.
+3. Reuses the named Conda environment `sbk-charts` when it already exists.
+4. Creates `venv-sbk-charts` with an available Python 3.10+ interpreter.
+5. Falls back to creating a Conda environment when venv setup fails.
+6. Installs the project in editable mode on first use, or refreshes an existing
    environment when its installed metadata is older than the checked-out source.
-6. Reports the operating system, Python version and executable, and whether the
+7. Reports the operating system, Python version and executable, and whether the
    selected environment is `venv` or `conda`, then forwards all supplied
    arguments unchanged.
 
 The first bootstrap requires access to the configured Python package index.
 Set `SBK_CHARTS_VENV` to choose a different virtual-environment directory or
 `SBK_CHARTS_CONDA_ENV` to choose a different Conda environment name.
+The last successful selection is stored in the ignored `.sbk-charts-runtime`
+file. Set `SBK_CHARTS_STATE_FILE` to keep this state at a different path.
 The launchers read their Python version, environment names, application module,
 and interpreter search order from [`sbk-charts.ini`](sbk-charts.ini), which is
 the source of truth for runtime and distribution policy.
