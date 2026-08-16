@@ -320,7 +320,7 @@ create_managed_environment() {
     local environment_dir="$1"
     local temporary_environment python_path stale_environment
     shift
-    [ -n "$EXPECTED_FINGERPRINT" ] || fail "Cannot calculate the managed environment fingerprint"
+    [ -n "$EXPECTED_FINGERPRINT" ] || return 1
     [ -r "$LOCK_FILE" ] || fail "Dependency lock not found: $LOCK_FILE"
 
     acquire_bootstrap_lock
@@ -330,7 +330,11 @@ create_managed_environment() {
         BOOTSTRAP_MANAGER_PATH="$SBK_CHARTS_UV"
         [ -x "$BOOTSTRAP_MANAGER_PATH" ] || fail "SBK_CHARTS_UV is not executable: $BOOTSTRAP_MANAGER_PATH"
     else
-        prepare_bootstrap_manager || fail "Could not download and verify the pinned runtime manager. Use a portable release or install Python/Conda."
+        prepare_bootstrap_manager || {
+            log "Could not download and verify the pinned runtime manager. Use a portable release or install Python/Conda."
+            release_bootstrap_lock
+            return 1
+        }
     fi
 
     log "Installing managed Python $MANAGED_PYTHON"
@@ -450,7 +454,7 @@ if [ -n "$system_python" ]; then
     if "$system_python" -m venv "$venv_dir"; then
         venv_python="$venv_dir/bin/python"
         if install_project "$venv_python" "virtual environment $venv_dir"; then
-            run_application "$venv_python" "venv" "$venv_dir" "$@"
+            run_application "$venv_python" "venv" "$venv_dir" "" "$SELECTED_PROFILE" "$@"
         fi
         log "Virtual environment setup failed; trying Conda"
     else
