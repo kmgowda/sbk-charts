@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import configparser
 import json
 import re
@@ -12,7 +13,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_FILE = ROOT / "sbk-charts.ini"
-VERSION_PATTERN = re.compile(r"__sbk_version__\s*=\s*['\"]([^'\"]+)['\"]")
 
 
 def _items(value: str) -> tuple[str, ...]:
@@ -130,12 +130,35 @@ def load_policy(path: Path = POLICY_FILE) -> ProjectPolicy:
 
 
 def application_version(policy: ProjectPolicy, root: Path = ROOT) -> str:
-    """Read the configured version file without importing application code."""
+    """Read one module-level literal version without executing application code."""
     version_file = root / policy.application.version_file
-    match = VERSION_PATTERN.search(version_file.read_text(encoding="utf-8"))
-    if match:
-        return match.group(1)
-    raise RuntimeError(f"Could not find __sbk_version__ in {version_file}")
+    source = version_file.read_text(encoding="utf-8")
+    try:
+        module = ast.parse(source, filename=str(version_file))
+    except SyntaxError as error:
+        raise RuntimeError(f"Could not parse configured version file {version_file}: {error}") from error
+
+    assignments: list[ast.expr] = []
+    for statement in module.body:
+        if isinstance(statement, ast.Assign):
+            if any(isinstance(target, ast.Name) and target.id == "__sbk_version__" for target in statement.targets):
+                assignments.append(statement.value)
+        elif (
+            isinstance(statement, ast.AnnAssign)
+            and isinstance(statement.target, ast.Name)
+            and statement.target.id == "__sbk_version__"
+        ):
+            assignments.append(statement.value)
+
+    if len(assignments) != 1:
+        raise RuntimeError(
+            f"Expected exactly one module-level __sbk_version__ assignment in {version_file}; "
+            f"found {len(assignments)}"
+        )
+    value = assignments[0]
+    if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
+        raise RuntimeError(f"__sbk_version__ must be assigned a string literal in {version_file}")
+    return value.value
 
 
 def load_requirements(path: Path) -> list[str]:

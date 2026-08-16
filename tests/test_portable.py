@@ -142,6 +142,49 @@ class PortableReleaseTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, str(version_path)):
                 application_version(selected_policy, root)
 
+    def test_version_resolution_ignores_non_module_assignments_and_text(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            version_path = root / "version.py"
+            application = replace(self.policy.application, version_file=version_path.name)
+            selected_policy = replace(self.policy, application=application)
+            invalid_sources = (
+                '# __sbk_version__ = "1.0.0"\n',
+                '"""__sbk_version__ = "1.0.0"""\n',
+                'if False:\n    __sbk_version__ = "1.0.0"\n',
+            )
+
+            for source in invalid_sources:
+                with self.subTest(source=source):
+                    version_path.write_text(source, encoding="utf-8")
+                    with self.assertRaisesRegex(RuntimeError, "found 0"):
+                        application_version(selected_policy, root)
+
+    def test_version_resolution_rejects_multiple_assignments(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            version_path = root / "version.py"
+            version_path.write_text(
+                '__sbk_version__ = "1.0.0"\n__sbk_version__ = "2.0.0"\n',
+                encoding="utf-8",
+            )
+            application = replace(self.policy.application, version_file=version_path.name)
+            selected_policy = replace(self.policy, application=application)
+
+            with self.assertRaisesRegex(RuntimeError, "found 2"):
+                application_version(selected_policy, root)
+
+    def test_version_resolution_rejects_non_literal_assignment(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            version_path = root / "version.py"
+            version_path.write_text('__sbk_version__ = str("1.0.0")\n', encoding="utf-8")
+            application = replace(self.policy.application, version_file=version_path.name)
+            selected_policy = replace(self.policy, application=application)
+
+            with self.assertRaisesRegex(RuntimeError, "string literal"):
+                application_version(selected_policy, root)
+
     def test_requirements_strip_comments_but_preserve_url_fragments(self):
         with tempfile.TemporaryDirectory() as temporary:
             requirements_file = Path(temporary) / "requirements.txt"
@@ -173,6 +216,7 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn("needs.policy.outputs.minimum_python", workflow)
         self.assertNotIn("actions/checkout@v", workflow)
         self.assertNotIn("actions/setup-python@v", workflow)
+        self.assertEqual(workflow.count("actions/checkout@"), workflow.count("persist-credentials: false"))
 
     def test_packaging_consumes_application_metadata(self):
         setup_source = (build_portable.ROOT / "setup.py").read_text(encoding="utf-8")
@@ -195,6 +239,9 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn("pyinstaller-hooks-contrib==2026.6", portable_requirements)
         self.assertIn("https://download.pytorch.org/whl/cpu", workflow)
         self.assertIn("gh release upload", workflow)
+        self.assertEqual(workflow.count("actions/checkout@"), workflow.count("persist-credentials: false"))
+        self.assertIn("cache-dependency-path: |", workflow)
+        self.assertIn("requirements.txt\n          requirements-portable.txt", workflow)
 
 
 if __name__ == "__main__":
