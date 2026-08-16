@@ -46,7 +46,7 @@ def get_percentile_histogram_analysis(self) -> tuple[bool, str]: ...
 def get_response(self, query: str) -> tuple[bool, str]: ...
 ```
 
-Reuse the base prompt builders. Read credentials from environment variables, never command history or committed files. Add the SDK to `requirements-ai/<command>.txt`, register it in `sbk-charts.ini`, and regenerate its exact hashed lock.
+Reuse the base prompt builders. Read credentials from environment variables, never command history or committed files. Add the SDK to `requirements-ai/<command>.txt`, register it in `sbk-charts.ini`, and regenerate its exact hashed lock. Add the new backend README to `MANIFEST.in` and the portable `bundle_paths`, then extend the portable-policy test that checks the bundled guide set.
 
 ### Verify
 
@@ -63,6 +63,8 @@ Test the missing-auth or unavailable-service path. It should produce clear failu
 ```
 
 Then test the configured backend end to end. Confirm all four analyses finish or fail individually with useful text. If chat is supported, run with `-chat` and ask one question whose answer must mention a value or storage name from the sample.
+
+For launcher integration, use a fresh temporary runtime root and verify that selecting the backend creates its dependency profile. Run the same command offline a second time and confirm the remembered profile and lock fingerprint are reused.
 
 ## 2. Change an existing AI backend
 

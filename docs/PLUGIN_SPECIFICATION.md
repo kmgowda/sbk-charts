@@ -23,8 +23,10 @@ src/ai/registry.py
 requirements-ai/<command>.txt
 requirements-lock/<command>.txt
 sbk-charts.ini
+MANIFEST.in
 src/custom_ai/README.md
 docs/ARCHITECTURE.md
+tests/test_portable.py
 ```
 
 Plugin arguments are registered by a lightweight descriptor in `src/ai/registry.py` and consumed by the plugin's `parse_args()` method. The descriptor must not import the optional SDK.
@@ -174,6 +176,7 @@ Do not expose credentials in exceptions or logs. Expected provider failures shou
 - [ ] Add backend row to `src/custom_ai/README.md`.
 - [ ] Add focused `src/custom_ai/<directory>/README.md`.
 - [ ] Add backend row to `docs/ARCHITECTURE.md`.
+- [ ] Add the backend README to the source manifest and portable bundle paths.
 - [ ] Include setup, exact flags, examples, data/privacy note, resource note, and troubleshooting.
 - [ ] Avoid claims about current model availability or price unless linked and dated.
 
@@ -187,6 +190,8 @@ Do not expose credentials in exceptions or logs. Expected provider failures shou
 - [ ] Chat answer uses retrieved benchmark context.
 - [ ] Parallel mode tested, or `-nothreads` documented and tested.
 - [ ] Dependency is present in a clean installation.
+- [ ] A fresh managed bootstrap creates the backend profile, when the lock supports the test target.
+- [ ] A second offline run reuses the remembered profile and lock fingerprint.
 - [ ] No secret appears in output, workbook, or git diff.
 
 Record exact commands, operating system, Python version, model, elapsed time, and any untested platform.
