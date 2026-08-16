@@ -111,8 +111,14 @@ function Install-Project {
 function Start-Application {
     param(
         [string] $PythonPath,
+        [string] $EnvironmentKind,
+        [string] $EnvironmentPrefix,
         [string[]] $Arguments
     )
+    & $PythonPath $PolicyReader --runtime-details $EnvironmentKind $EnvironmentPrefix
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not report runtime details"
+    }
     & $PythonPath -m $AppModule @Arguments
     exit $LASTEXITCODE
 }
@@ -131,10 +137,11 @@ function Use-EnvironmentPrefix {
     if (-not (Test-SupportedPython $PythonPath)) {
         return
     }
-    if (-not (Install-Project $PythonPath "$EnvironmentKind $EnvironmentPrefix")) {
+    if (-not (Install-Project $PythonPath "$EnvironmentKind environment $EnvironmentPrefix")) {
         return
     }
-    Start-Application $PythonPath $Arguments
+    Start-Application -PythonPath $PythonPath -EnvironmentKind $EnvironmentKind `
+        -EnvironmentPrefix $EnvironmentPrefix -Arguments $Arguments
 }
 
 $EnvironmentCandidates = if ($env:SBK_CHARTS_VENV) {
@@ -153,18 +160,18 @@ foreach ($EnvironmentPrefix in $EnvironmentCandidates) {
         continue
     }
     $SeenCandidates[$CandidateKey] = $true
-    Use-EnvironmentPrefix $EnvironmentPrefix "virtual environment" $ApplicationArguments `
+    Use-EnvironmentPrefix $EnvironmentPrefix "venv" $ApplicationArguments `
         -PythonRelativePath "Scripts\python.exe"
 }
 
 if (-not $env:SBK_CHARTS_VENV) {
-    Use-EnvironmentPrefix $env:CONDA_PREFIX "Conda environment" $ApplicationArguments
+    Use-EnvironmentPrefix $env:CONDA_PREFIX "conda" $ApplicationArguments
 
     $ProjectEnvironmentCandidates = @($VirtualEnvironmentNames | ForEach-Object {
         Join-Path $ProjectRoot $_
     })
     foreach ($EnvironmentPrefix in $ProjectEnvironmentCandidates) {
-        Use-EnvironmentPrefix $EnvironmentPrefix "virtual environment" $ApplicationArguments `
+        Use-EnvironmentPrefix $EnvironmentPrefix "venv" $ApplicationArguments `
             -PythonRelativePath "Scripts\python.exe"
     }
 }
@@ -176,7 +183,7 @@ if ($CondaCommand) {
     if ($LASTEXITCODE -eq 0 -and $CondaPrefixOutput) {
         $NamedCondaEnvironmentExists = $true
         $CondaPrefix = [string](@($CondaPrefixOutput) | Select-Object -Last 1)
-        Use-EnvironmentPrefix $CondaPrefix.Trim() "Conda environment" $ApplicationArguments
+        Use-EnvironmentPrefix $CondaPrefix.Trim() "conda" $ApplicationArguments
     }
 }
 
@@ -212,7 +219,8 @@ if ($SupportedLauncher) {
         $VenvPython = Join-Path $VenvPath "Scripts\python.exe"
         if ((Test-SupportedPython $VenvPython) -and
             (Install-Project $VenvPython "virtual environment $VenvPath")) {
-            Start-Application $VenvPython $ApplicationArguments
+            Start-Application -PythonPath $VenvPython -EnvironmentKind "venv" `
+                -EnvironmentPrefix $VenvPath -Arguments $ApplicationArguments
         }
     }
     Write-LauncherMessage "Virtual environment setup failed; trying Conda"
@@ -231,7 +239,7 @@ if ($CondaCommand) {
     }
     $CondaPrefixOutput = & $CondaCommand.Source run --name $CondaEnvironmentName python -c "import sys; print(sys.prefix)"
     $CondaPrefix = [string](@($CondaPrefixOutput) | Select-Object -Last 1)
-    Use-EnvironmentPrefix $CondaPrefix.Trim() "Conda environment" $ApplicationArguments
+    Use-EnvironmentPrefix $CondaPrefix.Trim() "conda" $ApplicationArguments
 }
 
 if (-not $SupportedLauncher) {

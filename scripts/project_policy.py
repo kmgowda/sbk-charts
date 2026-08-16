@@ -8,6 +8,7 @@ import ast
 import configparser
 import importlib
 import json
+import platform
 import re
 import sys
 from dataclasses import dataclass
@@ -196,6 +197,20 @@ def environment_matches_policy(policy: ProjectPolicy, root: Path = ROOT) -> bool
     return True
 
 
+def runtime_details(
+    policy: ProjectPolicy,
+    environment_kind: str,
+    environment_prefix: str,
+) -> tuple[str, ...]:
+    """Return standardized launcher details for the selected runtime."""
+    label = policy.application.name
+    return (
+        f"{label}: Operating system: {platform.platform(aliased=True)}",
+        f"{label}: Python: {platform.python_version()} ({sys.executable})",
+        f"{label}: Environment: {environment_kind} ({environment_prefix})",
+    )
+
+
 def github_matrix(policy: ProjectPolicy) -> dict[str, list[dict[str, str]]]:
     """Return the native portable build matrix declared by project policy."""
     return {
@@ -217,6 +232,11 @@ def main() -> int:
     outputs.add_argument("--environment-ready", action="store_true")
     outputs.add_argument("--github-matrix", action="store_true")
     outputs.add_argument("--minimum-python", action="store_true")
+    outputs.add_argument(
+        "--runtime-details",
+        nargs=2,
+        metavar=("ENVIRONMENT_KIND", "ENVIRONMENT_PREFIX"),
+    )
     selected = parser.parse_args()
     if selected.environment_ready:
         return 0 if environment_matches_policy(load_policy()) else 1
@@ -225,6 +245,9 @@ def main() -> int:
         return 0
     if selected.minimum_python:
         print(load_policy().runtime.minimum_python)
+        return 0
+    if selected.runtime_details:
+        print("\n".join(runtime_details(load_policy(), *selected.runtime_details)))
         return 0
 
 

@@ -90,7 +90,12 @@ install_project() {
 
 run_application() {
     local python_path="$1"
-    shift
+    local environment_kind="$2"
+    local environment_prefix="$3"
+    shift 3
+    "$python_path" "$PROJECT_ROOT/scripts/project_policy.py" \
+        --runtime-details "$environment_kind" "$environment_prefix" || \
+        fail "Could not report runtime details"
     exec "$python_path" -m "$APP_MODULE" "$@"
 }
 
@@ -103,7 +108,7 @@ try_virtual_environment() {
     [ -x "$python_path" ] || return 1
     python_is_supported "$python_path" || return 1
     install_project "$python_path" "virtual environment $environment_dir" || return 1
-    run_application "$python_path" "$@"
+    run_application "$python_path" "venv" "$environment_dir" "$@"
 }
 
 try_conda_prefix() {
@@ -115,7 +120,7 @@ try_conda_prefix() {
     [ -x "$python_path" ] || return 1
     python_is_supported "$python_path" || return 1
     install_project "$python_path" "Conda environment $environment_dir" || return 1
-    run_application "$python_path" "$@"
+    run_application "$python_path" "conda" "$environment_dir" "$@"
 }
 
 if [ -n "${SBK_CHARTS_VENV:-}" ]; then
@@ -165,7 +170,7 @@ if [ -n "$system_python" ]; then
     if "$system_python" -m venv "$venv_dir"; then
         venv_python="$venv_dir/bin/python"
         if install_project "$venv_python" "virtual environment $venv_dir"; then
-            run_application "$venv_python" "$@"
+            run_application "$venv_python" "venv" "$venv_dir" "$@"
         fi
         log "Virtual environment setup failed; trying Conda"
     else
