@@ -13,33 +13,27 @@ import sys
 import tarfile
 import tempfile
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePath
+
+from scripts.project_policy import ProjectPolicy, application_version, load_policy
 
 ROOT = Path(__file__).resolve().parents[1]
-APPLICATION_NAME = "sbk-charts"
+POLICY = load_policy()
 
 
-def application_version() -> str:
-    """Read the sbk-charts version without importing application dependencies."""
-    namespace: dict[str, object] = {}
-    version_file = ROOT / "src" / "version" / "sbk_version.py"
-    exec(version_file.read_text(encoding="utf-8"), namespace)
-    return str(namespace["__sbk_version__"])
-
-
-def current_platform() -> str:
+def current_platform(policy: ProjectPolicy = POLICY) -> str:
     """Return the portable target identifier for the current native host."""
-    operating_system = {"darwin": "macos", "linux": "linux", "win32": "windows"}.get(sys.platform)
+    operating_system = policy.portable.platforms.get(sys.platform)
     if operating_system is None:
         raise SystemExit(f"Unsupported portable-build operating system: {sys.platform}.")
     machine = platform.machine().lower()
-    if machine in {"arm64", "aarch64"}:
-        architecture = "arm64"
-    elif machine in {"amd64", "x86_64", "x64"}:
-        architecture = "amd64"
-    else:
+    architecture = policy.portable.architectures.get(machine)
+    if architecture is None:
         raise SystemExit(f"Unsupported portable-build architecture: {platform.machine()}.")
-    return f"{operating_system}-{architecture}"
+    target = f"{operating_system}-{architecture}"
+    if target not in policy.portable.targets:
+        raise SystemExit(f"Unsupported portable-build target: {target}.")
+    return target
 
 
 def sha256(path: Path) -> str:
@@ -51,17 +45,37 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def portable_executable(directory: Path, target: str) -> Path:
+def portable_executable(directory: Path, target: str, policy: ProjectPolicy = POLICY) -> Path:
     """Resolve the frozen executable inside a PyInstaller onedir output."""
     suffix = ".exe" if target.startswith("windows-") else ""
-    return directory / f"{APPLICATION_NAME}{suffix}"
+    return directory / f"{policy.application.name}{suffix}"
 
 
-def build_bundle(output_directory: Path) -> Path:
+def copy_bundle_paths(bundle: Path, policy: ProjectPolicy) -> None:
+    """Copy every policy-declared documentation or metadata path."""
+    for relative_name in policy.portable.bundle_paths:
+        source = ROOT / relative_name
+        destination = bundle / relative_name
+        if source.is_dir():
+            shutil.copytree(source, destination)
+        elif source.is_file():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+        else:
+            raise FileNotFoundError(f"Portable bundle path does not exist: {source}")
+
+
+def zip_member_name(bundle_name: str, relative_path: PurePath) -> str:
+    """Return a ZIP-standard member name for paths from any host OS."""
+    return f"{bundle_name}/{relative_path.as_posix()}"
+
+
+def build_bundle(output_directory: Path, policy: ProjectPolicy = POLICY) -> Path:
     """Build, smoke-test, manifest, archive, and checksum a portable bundle."""
-    version = application_version()
-    target = current_platform()
-    bundle_name = f"{APPLICATION_NAME}-{version}-{target}"
+    version = application_version(policy)
+    target = current_platform(policy)
+    application_name = policy.application.name
+    bundle_name = f"{application_name}-{version}-{target}"
     output_directory.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory(prefix="sbk-charts-portable-") as temporary:
@@ -75,62 +89,78 @@ def build_bundle(output_directory: Path) -> Path:
                 "--clean",
                 "--onedir",
                 "--name",
-                APPLICATION_NAME,
+                application_name,
                 "--paths",
                 str(ROOT),
-                "--collect-data",
-                "src.main",
-                "--collect-data",
-                "src.images",
-                "--collect-submodules",
-                "src.custom_ai",
+                *[
+                    argument
+                    for package in policy.package_data
+                    for argument in ("--collect-data", package)
+                ],
+                *[
+                    argument
+                    for package in policy.portable.collect_submodules
+                    for argument in ("--collect-submodules", package)
+                ],
                 "--distpath",
                 str(work / "dist"),
                 "--workpath",
                 str(work / "work"),
                 "--specpath",
                 str(work),
-                str(ROOT / "scripts" / "sbk_charts_portable_entry.py"),
+                str(ROOT / policy.portable.entry_script),
             ],
             check=True,
             cwd=ROOT,
         )
 
-        frozen = work / "dist" / APPLICATION_NAME
+        frozen = work / "dist" / application_name
         subprocess.run(
-            [str(portable_executable(frozen, target)), "--help"],
+            [str(portable_executable(frozen, target, policy)), "--help"],
             check=True,
             cwd=frozen,
         )
 
         bundle = work / bundle_name
         shutil.copytree(frozen, bundle)
-        shutil.copy2(ROOT / "LICENSE", bundle / "LICENSE")
-        shutil.copy2(ROOT / "README.md", bundle / "README.md")
-        shutil.copytree(ROOT / "docs", bundle / "docs")
+        copy_bundle_paths(bundle, policy)
 
         files = {
             path.relative_to(bundle).as_posix(): sha256(path)
             for path in sorted(bundle.rglob("*"))
             if path.is_file()
         }
-        (bundle / "manifest.json").write_text(
-            json.dumps({"version": version, "platform": target, "files": files}, indent=2, sort_keys=True) + "\n",
+        (bundle / policy.portable.manifest_name).write_text(
+            json.dumps(
+                {
+                    "application": application_name,
+                    "archive_format": policy.portable.archive_formats[target],
+                    "files": files,
+                    "hash_algorithm": policy.portable.hash_algorithm,
+                    "platform": target,
+                    "version": version,
+                },
+                indent=2,
+                sort_keys=True,
+            ) + "\n",
             encoding="utf-8",
         )
 
-        if target.startswith("windows-"):
+        archive_format = policy.portable.archive_formats[target]
+        if archive_format == "zip":
             archive = output_directory / f"{bundle_name}.zip"
             with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as output:
                 for path in sorted(bundle.rglob("*")):
                     if path.is_file():
-                        output.write(path, Path(bundle_name) / path.relative_to(bundle))
-        else:
+                        output.write(path, zip_member_name(bundle_name, path.relative_to(bundle)))
+        elif archive_format == "tar.gz":
             archive = output_directory / f"{bundle_name}.tar.gz"
             with tarfile.open(archive, "w:gz") as output:
                 output.add(bundle, arcname=bundle_name)
+        else:
+            raise ValueError(f"Unsupported portable archive format: {archive_format}")
 
-    checksum = archive.with_suffix(archive.suffix + ".sha256")
+    checksum = archive.with_suffix(archive.suffix + policy.portable.checksum_suffix)
     checksum.write_text(f"{sha256(archive)}  {archive.name}\n", encoding="utf-8")
     return archive
 

@@ -603,8 +603,10 @@ For research scholars and product managers thinking about where this can go.
 ```
 sbk-charts/
 ├── sbk-charts                    # CLI shell wrapper
+├── sbk-charts.ini                # runtime policy and artifact metadata
 ├── setup.py                      # packaging
 ├── requirements.txt
+├── requirements-portable.txt     # pinned portable-build tools
 ├── README.md                     # end-user manual
 ├── docs/
 │   └── ARCHITECTURE.md           # ← you are here
@@ -647,6 +649,25 @@ sbk-charts/
         ├── pytorch_llm/pytorch_llm.py
         └── no_ai/no_ai.py
 ```
+
+### Deployment policy and artifact metadata
+
+`sbk-charts.ini` is the deployment source of truth shared by the Bash and
+PowerShell launchers, Python packaging, portable archive builder, tests, and
+release workflow. It owns application/package identity, the minimum Python
+version, environment search policy, portable target-to-runner mappings,
+archive formats, manifest/checksum rules, and bundled paths. Python consumers
+load and validate it through `scripts/project_policy.py`; the launchers use
+native INI readers so bootstrapping does not itself require Python.
+
+Runtime Python dependencies remain in `requirements.txt`, while PyInstaller
+and hook versions used only for producing release archives are isolated in
+`requirements-portable.txt`. Domain constants such as SBK CSV column names,
+chart styles, model defaults, and RAG scoring weights remain with their owning
+modules because they are not deployment policy.
+
+See [`docs/POLICY.md`](POLICY.md) for the policy ownership rules and the
+hardcoded-value audit boundaries.
 
 ---
 

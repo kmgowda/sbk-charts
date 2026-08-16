@@ -4,12 +4,13 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 
 def main(arguments: list[str] | None = None) -> int:
     """Run the normal sbk-charts CLI while preserving all supplied arguments."""
     selected = list(sys.argv[1:] if arguments is None else arguments)
-    sys.argv = ["sbk-charts", *selected]
+    sys.argv = [Path(sys.executable).stem, *selected]
 
     from src.main.sbk_charts import sbk_charts
 
