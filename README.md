@@ -42,11 +42,15 @@ Windows PowerShell:
 The launcher requires Python 3.10 or newer. It performs the following steps:
 
 1. Reuses `SBK_CHARTS_VENV`, an active virtual environment, an active Conda
-   environment, or a project-local environment when one is already usable.
+   environment, or a project-local environment when it matches the checked-out
+   sbk-charts version and its installed dependencies are healthy.
 2. Reuses the named Conda environment `sbk-charts` when it already exists.
 3. Creates `venv-sbk-charts` with an available Python 3.10+ interpreter.
 4. Falls back to creating a Conda environment when venv setup fails.
-5. Installs the project in editable mode on first use and forwards all supplied
+5. Installs the project in editable mode on first use, or refreshes an existing
+   environment when its installed metadata is older than the checked-out source.
+6. Reports the operating system, Python version and executable, and whether the
+   selected environment is `venv` or `conda`, then forwards all supplied
    arguments unchanged.
 
 The first bootstrap requires access to the configured Python package index.
@@ -75,13 +79,19 @@ verification, execution, local-build, and platform-support details.
 <SBK directory>./sbk-charts
 ...
 (venv-sbk-charts) kmg@Mac-Studio sbk-charts % sbk-charts -h
-usage: sbk-charts [-h] -i IFILES [-o OFILE] [-secs SECONDS] [-nothreads NOTHREADS] [-chat] {huggingface,lmstudio,noai,ollama} ...
+sbk-charts: Reusing virtual environment /Users/kmg/projects/sbk-charts/venv-sbk-charts
+sbk-charts: Operating system: macOS-15.6.1-arm64-arm-64bit
+sbk-charts: Python: 3.12.11 (/Users/kmg/projects/sbk-charts/venv-sbk-charts/bin/python)
+sbk-charts: Environment: venv (/Users/kmg/projects/sbk-charts/venv-sbk-charts)
+usage: sbk-charts [-h] -i IFILES [-o OFILE] [-secs SECONDS] [-nothreads]
+                  [-chat]
+                  {anthropic,gemini,huggingface,lmstudio,noai,ollama,pytorchllm} ...
 
 SBK Charts - Storage Benchmark Visualization Tool
 
 positional arguments:
-  {huggingface,lmstudio,noai,ollama}
-                        Available sub-commands
+  {anthropic,gemini,huggingface,lmstudio,noai,ollama,pytorchllm}
+                        Available GenAI commands
 
 options:
   -h, --help            show this help message and exit
@@ -89,8 +99,8 @@ options:
   -o, --ofile OFILE     Output XLSX file path (default: out.xlsx)
   -secs, --seconds SECONDS
                         Timeout seconds, default : 120
-  -nothreads, --nothreads NOTHREADS
-                        No parallel threads, default : False
+  -nothreads, --nothreads
+                        Disable parallel threads (default: threads enabled)
   -chat, --chat         Start interactive chat mode with AI
 
 Please report issues at https://github.com/kmgowda/sbk-charts
@@ -110,7 +120,7 @@ Example command with single CSV file
   ____) | | |_) | | . \           | |____  | |  | |  / ____ \  | | \ \     | |     ____) |
  |_____/  |____/  |_|\_\           \_____| |_|  |_| /_/    \_\ |_|  \_\    |_|    |_____/
 
-Sbk Charts Version : 3.26.1.0
+Sbk Charts Version : 4.26.8.1
 Input Files :  ./samples/charts/sbk-file-read.csv
 Output File :  ./samples/charts/sbk-file-read.xlsx
 SBK logo image found: /Users/kmg/projects/sbk-charts/images/sbk-logo.png
@@ -136,7 +146,7 @@ Example command with multiple CSV files
   ____) | | |_) | | . \           | |____  | |  | |  / ____ \  | | \ \     | |     ____) |
  |_____/  |____/  |_|\_\           \_____| |_|  |_| /_/    \_\ |_|  \_\    |_|    |_____/
 
-Sbk Charts Version : 3.26.1.0
+Sbk Charts Version : 4.26.8.1
 Input Files :  ./samples/charts/sbk-file-read.csv,./samples/charts/sbk-rocksdb-read.csv
 Output File :  ./samples/charts/sbk-file-rocksdb-read.xlsx
 SBK logo image found: /Users/kmg/projects/sbk-charts/images/sbk-logo.png

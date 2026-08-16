@@ -18,6 +18,15 @@ Python is already installed. Portable-only build-tool versions are kept in
 `requirements-portable.txt`; application dependencies remain in
 `requirements.txt`.
 
+The release version itself is owned by `src/version/sbk_version.py`; the
+`application.version_file` policy entry points packaging and artifact builders
+to that canonical declaration. The launchers compare that source version with
+the installed distribution before reuse. A mismatch triggers an editable
+reinstall so a source update cannot run against stale dependency metadata.
+After selecting a healthy runtime, both launchers use the policy helper to
+report OS details, the exact Python runtime, and the selected `venv` or `conda`
+environment consistently across platforms.
+
 ## Audit boundaries
 
 The codebase-wide hardcoded-value review intentionally leaves these values in
