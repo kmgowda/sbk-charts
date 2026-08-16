@@ -3,665 +3,335 @@ Copyright (c) KMG. All Rights Reserved.
 Licensed under the Apache License, Version 2.0.
 -->
 
-# AGENT_RECIPES.md — Step-by-step task playbooks for sbk-charts
+# Contributor and software-agent recipes
 
-> **Audience.** AI coding agents and human contributors who need
-> concrete, copy-pasteable procedures for common tasks in this
-> repository. Each recipe lists the **exact files to touch**, the
-> **exact commands to run**, and **what success looks like**.
->
-> Read <ref_file file="/root/projects/sbk-charts/AGENTS.md" /> first
-> for repo-wide conventions and gotchas, and
-> <ref_file file="/root/projects/sbk-charts/docs/ARCHITECTURE.md" />
-> for the design background.
+These recipes turn common requests into repeatable edits and verification. Read [AGENTS.md](../AGENTS.md) first. Use [ARCHITECTURE.md](ARCHITECTURE.md) when a recipe mentions an invariant you do not yet understand.
 
----
+## 1. Add an AI backend
 
-## Index
+### Choose the closest existing adapter
 
-1. [Add a new AI plugin (backend)](#1-add-a-new-ai-plugin-backend)
-2. [Modify an existing AI plugin (add a CLI flag, swap an SDK)](#2-modify-an-existing-ai-plugin)
-3. [Add a new chart to the workbook](#3-add-a-new-chart-to-the-workbook)
-4. [Add a new column / metric to `charts/constants.py`](#4-add-a-new-column--metric-to-chartsconstantspy)
-5. [Change a prompt template (affects all plugins)](#5-change-a-prompt-template-affects-all-plugins)
-6. [Tweak the Summary sheet](#6-tweak-the-summary-sheet)
-7. [Debug a plugin that silently disappears from `-h`](#7-debug-a-plugin-that-silently-disappears-from--h)
-8. [Debug "AI timed out" / partial Summary output](#8-debug-ai-timed-out--partial-summary-output)
-9. [Bump a Python dependency](#9-bump-a-python-dependency)
-10. [Cut a new release](#10-cut-a-new-release)
+| New backend type | Start from |
+|---|---|
+| Cloud SDK with an API key | `src/custom_ai/gemini/` or `anthropic/` |
+| Local HTTP service | `src/custom_ai/ollama/` |
+| Local service with its own SDK | `src/custom_ai/lm_studio/` |
+| In-process Transformers model | `src/custom_ai/pytorch_llm/` |
 
----
+For a substantial plugin, fill in [PLUGIN_SPECIFICATION.md](PLUGIN_SPECIFICATION.md) before coding.
 
-## 1. Add a new AI plugin (backend)
+### Implement
 
-**Goal:** Make `sbk-charts -i run.csv <newplugin>` work, with the AI
-calling the new model/service to generate the four canonical analyses.
+Create:
 
-### 1.1 Prerequisites
-
-Before you start, confirm:
-
-- You have a Python client/SDK for the target model (cloud API or
-  local server).
-- The library is on **PyPI** (or installable with pip).
-- You have read the existing plugins under
-  <ref_file file="/root/projects/sbk-charts/src/custom_ai/" />. The
-  closest reference is usually:
-  - **For a cloud API** → mirror `gemini/gemini.py` or
-    `anthropic/anthropic.py`.
-  - **For a local HTTP server** → mirror `ollama/ollama.py` or
-    `lm_studio/lm_studio.py`.
-  - **For an in-process model** → mirror `pytorch_llm/pytorch_llm.py`.
-
-### 1.2 Files to create
-
-Pick a plugin name. The convention (see <ref_file file="/root/projects/sbk-charts/AGENTS.md" />
-§3) is:
-
-- Directory name: lowercase, snake_case (`mistral` or `azure_openai`).
-- Module filename: same as the directory (`mistral.py`).
-- Class name: PascalCase (`Mistral`, `AzureOpenAI`).
-- CLI subcommand: lowercased class name (`mistral`, `azureopenai`).
-
-```
-src/custom_ai/mistral/
-├── __init__.py        # empty is fine
-└── mistral.py         # contains `class Mistral(SbkGenAI):`
+```text
+src/custom_ai/<plugin_name>/
+    __init__.py
+    <plugin_name>.py
+    README.md
 ```
 
-### 1.3 Step-by-step
+The module must define one concrete `SbkGenAI` subclass. Directory and module names use lower snake case; the class uses PascalCase. Discovery lowercases the class name to make the command.
 
-**Step A — Create the directory + empty `__init__.py`.**
+Implement plugin-owned CLI configuration in `add_args()` and `parse_args()`. Do not edit the base parser for plugin flags and do not create a central registration list.
 
-```bash
-mkdir -p src/custom_ai/mistral
-touch src/custom_ai/mistral/__init__.py
-```
-
-**Step B — Add the plugin dependency to `requirements.txt`.**
-
-Pin with `~=` (compatible release):
-
-```
-mistralai~=1.5.0
-```
-
-Install it:
-
-```bash
-pip install -r requirements.txt
-```
-
-**Step C — Implement the plugin.** Copy the template below into
-`src/custom_ai/mistral/mistral.py` and adapt the four `_call_*`
-helpers to your SDK.
+Implement these result methods using the `(bool, text)` contract:
 
 ```python
-#!/usr/local/bin/python3
-# Copyright (c) KMG. All Rights Reserved.
-# Licensed under the Apache License, Version 2.0 (the "License").
-
-"""Mistral AI Integration Module."""
-
-import os
-from typing import Tuple
-from mistralai import Mistral as MistralClient   # or whatever your SDK exports
-
-from src.genai.genai import SbkGenAI
-
-DEFAULT_MODEL = "mistral-large-latest"
-DEFAULT_MAX_TOKENS = 2048
-DEFAULT_TEMPERATURE = 0.4
-
-
-class Mistral(SbkGenAI):
-    """Mistral AI analysis backend."""
-
-    def __init__(self):
-        super().__init__()
-        self.api_key = os.getenv("MISTRAL_API_KEY")
-        self.model = DEFAULT_MODEL
-        self.max_tokens = DEFAULT_MAX_TOKENS
-        self.temperature = DEFAULT_TEMPERATURE
-        self._client = None
-        if self.api_key:
-            try:
-                self._client = MistralClient(api_key=self.api_key)
-            except Exception as e:
-                print(f"Warning: Failed to init Mistral client: {e}")
-
-    def add_args(self, parser):
-        parser.add_argument("--mistral-model",
-                            default=DEFAULT_MODEL,
-                            help=f"Mistral model (default: {DEFAULT_MODEL})")
-        parser.add_argument("--mistral-max-tokens", type=int,
-                            default=DEFAULT_MAX_TOKENS)
-        parser.add_argument("--mistral-temperature", type=float,
-                            default=DEFAULT_TEMPERATURE)
-
-    def parse_args(self, args):
-        self.model = args.mistral_model
-        self.max_tokens = args.mistral_max_tokens
-        self.temperature = args.mistral_temperature
-
-    def get_model_description(self) -> Tuple[bool, str]:
-        if not self.api_key:
-            return False, ("Mistral analysis is not available "
-                           "(missing MISTRAL_API_KEY).")
-        return True, (f"Mistral API\n"
-                      f" Model: {self.model}\n"
-                      f" Temperature: {self.temperature}\n"
-                      f" Max Tokens: {self.max_tokens}")
-
-    def _call(self, prompt: str) -> Tuple[bool, str]:
-        if not self.api_key:
-            return False, "Mistral API key not configured."
-        try:
-            resp = self._client.chat.complete(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-            )
-            return True, resp.choices[0].message.content.strip()
-        except Exception as e:
-            return False, f"Error calling Mistral API: {e}"
-
-    def get_throughput_analysis(self) -> Tuple[bool, str]:
-        return self._call(self.get_throughput_prompt())
-
-    def get_latency_analysis(self) -> Tuple[bool, str]:
-        return self._call(self.get_latency_prompt())
-
-    def get_total_mb_analysis(self) -> Tuple[bool, str]:
-        return self._call(self.get_total_mb_prompt())
-
-    def get_percentile_histogram_analysis(self) -> Tuple[bool, str]:
-        return self._call(self.get_percentile_histogram_prompt())
-
-    def get_response(self, query) -> Tuple[bool, str]:
-        prompt = (
-            "You are a storage performance engineer. Analyze the following "
-            f"query in the context of the loaded benchmark data:\nQuery: {query}\n"
-            "Provide a focused technical answer."
-        )
-        return self._call(self._enhance_prompt_with_rag(prompt, query))
-
-    def close(self, args):
-        # SDK has no explicit close; provided for interface compatibility.
-        pass
+def get_model_description(self) -> tuple[bool, str]: ...
+def get_throughput_analysis(self) -> tuple[bool, str]: ...
+def get_latency_analysis(self) -> tuple[bool, str]: ...
+def get_total_mb_analysis(self) -> tuple[bool, str]: ...
+def get_percentile_histogram_analysis(self) -> tuple[bool, str]: ...
+def get_response(self, query: str) -> tuple[bool, str]: ...
 ```
 
-**Step D — Verify discovery.** No registration step is needed —
-`SbkAI.__init__` will pick the plugin up automatically. Confirm:
+Reuse the base prompt builders. Read credentials from environment variables, never command history or committed files. Add the SDK to `requirements.txt` with the project pinning convention.
+
+### Verify
 
 ```bash
 ./sbk-charts -h
+./sbk-charts -i samples/charts/sbk-file-read.csv <plugin-command> -h
 ```
 
-You should see `mistral` listed in the subcommand list.
-
-If it does not appear, run:
+Test the missing-auth or unavailable-service path. It should produce clear failures and still save a workbook:
 
 ```bash
-python3 -c "from src.ai.discover import discover_custom_ai_classes; print(discover_custom_ai_classes())"
+./sbk-charts -i samples/charts/sbk-file-read.csv \
+  -o /tmp/plugin-missing-service.xlsx <plugin-command>
 ```
 
-— the first import error in the output is the cause (see Recipe §7).
+Then test the configured backend end to end. Confirm all four analyses finish or fail individually with useful text. If chat is supported, run with `-chat` and ask one question whose answer must mention a value or storage name from the sample.
 
-**Step E — End-to-end smoke test.**
+## 2. Change an existing AI backend
 
-```bash
-export MISTRAL_API_KEY=...
-./sbk-charts -i samples/charts/sbk-file-read.csv -o /tmp/out.xlsx \
-    mistral --mistral-model mistral-large-latest
-```
-
-Expected output ends with `File updated with graphs and AI documentation: /tmp/out.xlsx`
-and all four analyses logged as `✓ Completed get_*_analysis`.
-
-If the API key is missing, the plugin must **fail gracefully** —
-each analysis returns `(False, "Mistral API key not configured.")`
-and the Summary sheet still gets written, just with error messages
-in the AI block.
-
-**Step F — Update docs.** Add the new row to the plugin comparison
-table in <ref_file file="/root/projects/sbk-charts/docs/ARCHITECTURE.md" />
-§5.9 and the seven-plugin count throughout that file.
-
-### 1.4 Acceptance checklist
-
-- [ ] Plugin appears in `sbk-charts -h`.
-- [ ] All four analyses succeed against a sample CSV with a valid API
-  key.
-- [ ] Without an API key, the four analyses each return a clear
-  `(False, "...")` and the workbook still saves cleanly.
-- [ ] `requirements.txt` lists the new dep, pinned with `~=`.
-- [ ] No code change leaks into other plugins.
-- [ ] Plugin name in the comparison table in ARCHITECTURE.md §5.9.
-- [ ] `gemini/anthropic` etc. continue to work — discovery is silent
-  on import errors but the existence of your plugin should not regress
-  them.
-
----
-
-## 2. Modify an existing AI plugin
-
-**Goal:** Add a new CLI flag, swap an SDK version, or fix a bug in one
-plugin.
-
-### 2.1 Files to touch
-
-| Change | Touch |
+| Change | Files |
 |---|---|
-| New CLI flag | The plugin's `add_args()` and `parse_args()` |
-| New default value | The `DEFAULT_*` constants at the top of the plugin |
-| SDK swap | The plugin's imports + the request/response handling, and `requirements.txt` |
-| Bug in a specific analysis | The relevant `get_*_analysis()` method or its helper |
+| New backend flag | Plugin `add_args()` and `parse_args()` plus its README |
+| Default model or endpoint | Plugin constants and README |
+| SDK update | Plugin imports/calls, `requirements.txt`, README |
+| Provider-specific response parsing | Plugin request helper |
+| Shared analysis wording | `src/genai/genai.py`, not the plugin |
 
-**Do not** modify prompts in the plugin. Prompts live in
-<ref_file file="/root/projects/sbk-charts/src/genai/genai.py" /> — see
-Recipe §5.
-
-### 2.2 Verification
+Run backend help and the affected backend. Also run discovery directly so an import regression is visible:
 
 ```bash
-./sbk-charts -i samples/charts/sbk-file-read.csv -o /tmp/out.xlsx <plugin> [...new flags...]
+venv-sbk-charts/bin/python -c \
+  "from src.ai.discover import discover_custom_ai_classes; print(discover_custom_ai_classes())"
 ```
 
-Open the produced workbook, scroll to the Summary sheet column H, and
-confirm the analyses reflect the change.
+## 3. Add a chart
 
-### 2.3 Worked example: the Gemini SDK migration
+### Decide the data level
 
-The recent change in
-<ref_file file="/root/projects/sbk-charts/src/custom_ai/gemini/gemini.py" />
-swapped `google.ai.generativelanguage` → `google.genai` (the modern
-`google-genai` 1.62+ Client API). The pattern was:
+- Use R sheets for interval values and time-series comparisons.
+- Use T sheets for totals and run-level summaries.
+- Use `SbkCharts` for reusable series and per-run behavior.
+- Use `SbkMultiCharts` for cross-run sheets and workbook ordering.
 
-1. Update the import (`import google.genai as genai`).
-2. Replace `GenerativeServiceClient(...)` constructions with
-   `genai.Client(api_key=...)`.
-3. Replace request/response shaping with the new
-   `client.models.generate_content(model=..., contents=..., config=GenerateContentConfig(...))`
-   form.
-4. `requirements.txt` already had `google-genai~=1.62.0`.
+If the metric is new, add its exact CSV header once to `src/charts/constants.py`.
 
-End-to-end verification was a single CLI run with `GEMINI_API_KEY` set.
+### Implement
 
----
+1. Find an existing chart with the same shape.
+2. Reuse `create_line_chart()`, `create_bar_chart()`, and existing series helpers.
+3. Create a stable worksheet name that follows current naming conventions.
+4. Add the method call to the intended position in `SbkMultiCharts.create_graphs()`.
+5. Let `apply_table_theme()` and `apply_chart_theme()` style it.
 
-## 3. Add a new chart to the workbook
+Do not rename existing chart sheets. Do not hard-code column indexes when header lookup can find them.
 
-**Goal:** Produce a new chart sheet in `out.xlsx`. For example, a "Total
-Records / Second by Storage" comparison.
-
-### 3.1 Files to touch
-
-- <ref_file file="/root/projects/sbk-charts/src/charts/multicharts.py" /> —
-  add the chart method on `SbkMultiCharts`.
-- (Optional) <ref_file file="/root/projects/sbk-charts/src/charts/charts.py" /> —
-  if there is a single-run analog, add it on the base class.
-- <ref_file file="/root/projects/sbk-charts/src/charts/multicharts.py" />
-  `create_graphs()` at the bottom — register your new method in the
-  sequence.
-
-### 3.2 Step-by-step
-
-**Step A — Decide R-sheet or T-sheet.**
-
-- *R-sheet (per-interval)* chart → iterate `if is_r_num_sheet(name)`.
-- *T-sheet (totals)* chart → iterate `if is_t_num_sheet(name)`.
-
-**Step B — Pick a series builder from `SbkCharts`.** Common ones:
-
-| Builder | Returns | Use for |
-|---|---|---|
-| `get_throughput_mb_series(ws, ws_name)` | single MB/Sec series | line/bar of MB/Sec |
-| `get_throughput_write_request_mb_series` / `get_throughput_read_request_mb_series` | request-side MB/Sec | write/read split |
-| `get_latency_series(ws, ws_name)` | dict of latency-column series | latency line charts |
-| `get_latency_percentile_series(ws, ws_name, names_list)` | row-wise percentile series | percentile line charts (use with `slc_percentile_names`) |
-| `get_latency_percentile_count_series(ws, ws_name, names_list)` | row-wise percentile-count series | histogram |
-| `get_avg_latency_series` / `get_min_latency_series` / `get_max_latency_series` | single cell-series | bar charts of totals |
-| `get_write_timeout_events_series` / `get_read_timeout_events_series` | timeout event series | bar charts of timeouts |
-
-If the chart you want isn't covered, add a new
-`__get_column_series(ws, ws_name, column_name)` wrapper on `SbkCharts`
-and reference it from your new method.
-
-**Step C — Add the method.** Template for a *bar chart comparing a
-single T-column across all T-sheets*:
-
-```python
-def create_total_records_per_sec_compare_graph(self):
-    """Create a bar chart comparing total Records/Sec across T-sheets."""
-    chart = None
-    for name in self.wb.sheetnames:
-        if is_t_num_sheet(name):
-            ws = self.wb[name]
-            if chart is None:
-                action = get_action_name_from_worksheet(ws)
-                chart = self.create_bar_chart(
-                    "Total Records / Second Comparison",
-                    action, "Records / Second", 25, 50)
-            prefix = name + "-" + get_storage_name_from_worksheet(ws)
-            chart.append(self.__get_column_series(ws, prefix, constants.RECORDS_PER_SEC))
-    if chart is not None:
-        sheet = self.wb.create_sheet("Total_Records_PerSec")
-        sheet.add_chart(chart)
-        return sheet
-    return None
-```
-
-**Step D — Register in `create_graphs()`.** At the bottom of
-<ref_file file="/root/projects/sbk-charts/src/charts/multicharts.py" />:
-
-```python
-def create_graphs(self):
-    if self.check_time_units():
-        self.create_summary_sheet()
-        # ... existing calls ...
-        self.create_total_records_per_sec_compare_graph()   # <-- new
-        self.wb.save(self.file)
-```
-
-**Step E — Verify.**
+### Verify one and multiple runs
 
 ```bash
-./sbk-charts -i samples/charts/sbk-file-read.csv -o /tmp/out.xlsx
-python3 -c "import openpyxl; print('Total_Records_PerSec' in openpyxl.load_workbook('/tmp/out.xlsx').sheetnames)"
+./sbk-charts -i samples/charts/sbk-file-read.csv \
+  -o /tmp/chart-single.xlsx
+
+./sbk-charts \
+  -i samples/charts/sbk-file-read.csv,samples/charts/sbk-rocksdb-read.csv \
+  -o /tmp/chart-compare.xlsx
 ```
 
-Should print `True`. Open the workbook and inspect the new sheet.
-
-### 3.3 Acceptance checklist
-
-- [ ] New sheet appears in `wb.sheetnames`.
-- [ ] Chart axes, title, and series legend render correctly.
-- [ ] Multi-CSV runs (e.g. `-i a.csv,b.csv`) show one series per input.
-- [ ] No regression to the existing chart set.
-
----
-
-## 4. Add a new column / metric to `charts/constants.py`
-
-**Goal:** Reference a CSV column that isn't yet a named constant. For
-example, a new SBK version emits an `EffectiveQueueDepth` column you
-want to plot.
-
-### 4.1 Files to touch
-
-1. <ref_file file="/root/projects/sbk-charts/src/charts/constants.py" /> —
-   add the constant.
-2. Whoever wants to *use* the column (a chart method, a prompt builder,
-   etc.) imports the constant and references it.
-
-### 4.2 Step-by-step
-
-**Step A — Add the constant.** Use the **exact** header string from the
-CSV as the value:
-
-```python
-# in src/charts/constants.py
-EFFECTIVE_QUEUE_DEPTH = "EffectiveQueueDepth"
-```
-
-**Step B — Use it.** Never hard-code the string anywhere; always
-reference `constants.EFFECTIVE_QUEUE_DEPTH`.
-
-**Step C — Verify.** The column will be picked up automatically by
-`get_columns_from_worksheet()` because that function reads whatever
-headers actually exist in the worksheet. The constant is for *code*
-to use, not for the parser.
-
----
-
-## 5. Change a prompt template (affects all plugins)
-
-**Goal:** Reword one of the four canonical prompts (throughput,
-latency, total MB, percentile histogram) — e.g. add an instruction to
-output in Markdown, or to use a specific time unit in the explanation.
-
-### 5.1 Files to touch
-
-- <ref_file file="/root/projects/sbk-charts/src/genai/genai.py" /> —
-  the four `get_*_prompt()` methods.
-
-### 5.2 Step-by-step
-
-**Step A — Identify the prompt.** Each prompt builder returns the
-prompt string that every plugin sends to its model:
-
-| Builder | Used by | Lines |
-|---|---|---|
-| `get_throughput_prompt` | `get_throughput_analysis` in every plugin | ~152–200 |
-| `get_latency_prompt` | `get_latency_analysis` | ~202–293 |
-| `get_total_mb_prompt` | `get_total_mb_analysis` | ~296–326 |
-| `get_percentile_histogram_prompt` | `get_percentile_histogram_analysis` | ~328–403 |
-
-**Step B — Edit the prompt string.** Keep the structure (persona line,
-task list, embedded metrics table, "Now write the analysis…"). Only
-change the parts you intend to change.
-
-**Step C — Verify with at least two backends.** Cloud and local should
-both produce sensible output. The user's existing budget (`-secs`) does
-not change.
+List sheets programmatically, then inspect both files visually:
 
 ```bash
-./sbk-charts -i samples/charts/sbk-file-read.csv -o /tmp/out-gemini.xlsx gemini
-./sbk-charts -i samples/charts/sbk-file-read.csv -o /tmp/out-ollama.xlsx ollama
+venv-sbk-charts/bin/python -c \
+  "import openpyxl; print(openpyxl.load_workbook('/tmp/chart-compare.xlsx').sheetnames)"
 ```
 
-Open both Summary sheets and confirm the analyses reflect the
-prompt change.
+Check chart size, title, axes, legend, series colors, adjacent-line contrast, fonts, data range, and placement.
 
-### 5.3 Acceptance checklist
+## 4. Change workbook styling
 
-- [ ] Only `src/genai/genai.py` is touched.
-- [ ] All four prompts still embed their metrics table.
-- [ ] At least one cloud and one local backend produce sensible output.
-- [ ] No regression in the chat-mode `get_response` flow.
+Presentation settings are concentrated in `src/charts/charts.py`, with Summary-specific formatting in `src/charts/multicharts.py` and AI text formatting in `src/ai/sbk_ai.py`.
 
----
+Before editing, identify every consumer of the value with `rg`. Change shared theme functions when the requirement applies to all sheets. Change one chart method only when the requirement is local.
 
-## 6. Tweak the Summary sheet
+Test at least:
 
-**Goal:** Add a row, column, or new section to the Summary sheet.
+- a dense line chart;
+- a bar chart;
+- a percentile chart;
+- R and T tables;
+- Summary without AI;
+- Summary with AI if AI formatting changed.
 
-### 6.1 Files to touch
+Visual inspection is mandatory. Library load success does not prove the text fits, the chart is large enough, or neighboring colors are distinguishable.
 
-- <ref_file file="/root/projects/sbk-charts/src/charts/multicharts.py" /> —
-  `create_summary_sheet()` writes the metadata, drivers/actions, time
-  unit, and benchmark date/time table.
-- <ref_file file="/root/projects/sbk-charts/src/ai/sbk_ai.py" /> —
-  `add_ai_analysis()` writes the four AI narratives into column H of
-  the same sheet, using `sheet.max_row + N` anchors.
+## 5. Reorder workbook sheets
 
-### 6.2 Gotcha — the two-phase Summary
+Sheet creation order is controlled near the bottom of `src/charts/multicharts.py` in `create_graphs()`.
 
-See <ref_file file="/root/projects/sbk-charts/AGENTS.md" /> §4.2. If
-you add rows in stage 2, the AI block at stage 3 *automatically*
-pushes down because it uses `sheet.max_row`. If you add a new column
-or reposition column H, you must update the AI side too.
+1. Map the requested conceptual order to the exact `create_*` calls.
+2. Preserve `create_summary_sheet()` and `create_sbk_date_sheet()` at the beginning.
+3. Keep theme application and workbook save at the end.
+4. Move call sites, not generated sheets after the fact.
+5. Generate a workbook and compare the complete `sheetnames` list with the requested order.
 
-### 6.3 Verification
+Remember that some methods create several numbered sheets.
+
+## 6. Change the Summary sheet
+
+The Summary sheet is written twice:
+
+- `SbkMultiCharts.create_summary_sheet()` writes metadata and benchmark timing.
+- `SbkAI.add_ai_analysis()` appends AI content in columns G and H.
+
+If you add ordinary rows, the AI block follows `max_row`. If you change columns, merged ranges, widths, or the meaning of columns G/H, update and test both writers.
+
+Run once without a backend and once with an available backend. Inspect values, fonts, wrapping, row heights, and separation between the two sections.
+
+## 7. Change a shared prompt
+
+Edit one of these methods in `src/genai/genai.py`:
+
+- `get_throughput_prompt()`;
+- `get_latency_prompt()`;
+- `get_total_mb_prompt()`;
+- `get_percentile_histogram_prompt()`.
+
+Keep metric data in the prompt and make unit instructions explicit. A prompt change affects all production backends, so test representative cloud and local implementations when available. If services or credentials are unavailable, test prompt construction directly and state the integration gap.
+
+Do not copy a shared prompt into every plugin.
+
+## 8. Debug a missing backend
+
+### Show discovery failures
 
 ```bash
-./sbk-charts -i samples/charts/sbk-file-read.csv -o /tmp/out.xlsx
-python3 -c "
-import openpyxl
-ws = openpyxl.load_workbook('/tmp/out.xlsx')['Summary']
-for r in range(1, ws.max_row + 1):
-    row = [ws.cell(row=r, column=c).value for c in range(7, 12)]
-    if any(v is not None for v in row):
-        print(r, row)
-"
+venv-sbk-charts/bin/python -c \
+  "from src.ai.discover import discover_custom_ai_classes; print(discover_custom_ai_classes())"
 ```
 
-Confirm new content appears in the expected row range and the AI block
-(if you ran with a backend) still lands below it.
-
-### 6.4 Worked example
-
-The recent benchmark date/time table (Sheet Name / Storage / Start /
-End / Duration columns) was added by extending `create_summary_sheet()`
-to iterate every R-sheet, read the first and last `Date`+`Time` cells,
-compute the duration, and write a 5-column table just below the
-action-to-storage block. The AI block continued to land correctly
-because it anchors on `sheet.max_row + N`.
-
----
-
-## 7. Debug a plugin that silently disappears from `-h`
-
-**Symptom.** `sbk-charts -h` shows a smaller plugin list than expected.
-The plugin's directory exists, but its subcommand is missing.
-
-### 7.1 Root cause
-
-The discovery layer (<ref_file file="/root/projects/sbk-charts/src/ai/discover.py" />)
-catches **any** exception during a plugin's `import_module()` call and
-prints `Importing module <name> failed with error: <e>` to stdout. The
-discoverer then proceeds without the broken plugin. **This is by
-design** — a broken plugin should not break the others — but it makes
-import errors silent.
-
-### 7.2 Procedure
-
-**Step A — List discovered plugins explicitly.**
+### Import the missing module directly
 
 ```bash
-python3 -c "from src.ai.discover import discover_custom_ai_classes; \
-    print(discover_custom_ai_classes())"
+venv-sbk-charts/bin/python -c \
+  "import src.custom_ai.<directory>.<module>"
 ```
 
-Stdout *above* the dict will contain the import errors.
+Common causes are a dependency absent from `requirements.txt`, a package installed into a different environment, an upstream import path change, or a syntax error. Fix the root cause, rerun discovery, and confirm `./sbk-charts -h` lists the backend.
 
-**Step B — Re-run the actual import** by hand to get the full
-traceback:
+## 9. Debug AI timeouts or memory errors
+
+1. Increase the total budget, for example `-secs 600`.
+2. Add `-nothreads` before the backend command.
+3. Check provider rate limits or local-server health.
+4. For PyTorch, check RAM, accelerator memory, device choice, and model size.
+5. Distinguish timeout text from provider error text saved in Summary.
+
+Example:
 
 ```bash
-python3 -c "import src.custom_ai.<plugin>.<plugin>"
+./sbk-charts -i input.csv -o /tmp/slow-model.xlsx \
+  -secs 600 -nothreads pytorchllm --pt-model <smaller-model>
 ```
 
-This will produce a clean traceback you can act on. Typical causes:
+The timeout is a total analysis budget, not a guaranteed hard termination of provider or native-library work already running.
 
-- Missing dependency in `requirements.txt`.
-- Renamed module/class in an upstream SDK (the recent Gemini case:
-  `google.ai.generativelanguage` was deprecated).
-- Syntax error in the plugin file.
+## 10. Change RAG behavior
 
-**Step C — Fix and re-verify.** After the fix, `discover_custom_ai_classes()`
-should return a dict containing your plugin's lowercased class name as
-a key, and `./sbk-charts -h` should list its subcommand.
+The default path is `SbkSimpleRAGPipeline` in `src/rag/sbk_rag.py`. The Chroma implementation is optional and is not selected by `SbkAI` today.
 
----
+When changing retrieval:
 
-## 8. Debug "AI timed out" / partial Summary output
+1. test ingestion from multiple `StorageStat` values;
+2. preserve intentional all-zero metric filtering unless the requirement changes it;
+3. test direct metric questions and storage-comparison questions;
+4. inspect retrieved context, not only the final model response;
+5. ensure empty data and empty results fail safely.
 
-**Symptom.** One or more of the four analyses come back as
-`(False, "Analysis timed out")` in the Summary sheet.
+Do not add ChromaDB as a required dependency merely because the alternative implementation exists.
 
-### 8.1 Diagnosis order
+## 11. Change source bootstrap behavior
 
-1. **Is the model just slow?** Re-run with `-secs 600` (10 minutes).
-   If it now succeeds, the prompt is fine; you just hit the default
-   120 s wall.
-2. **Is one analysis blocking the others?** Re-run with `-nothreads`.
-   In sequential mode you'll see exactly which analysis stalls.
-3. **Is the model OOM-ing or being throttled?** For `PyTorchLLM` on a
-   single GPU: definitely use `-nothreads`. For cloud APIs: check the
-   provider's rate-limit response.
-4. **Is the prompt too long?** Each prompt embeds a metrics table.
-   With many storage systems × many percentiles, the latency prompt
-   in particular can grow. If you suspect this, log the prompt length:
-   ```python
-   print(f"DEBUG prompt len = {len(prompt)} chars")
-   ```
-   inside the plugin before sending.
-5. **Is the model returning empty / unparseable text?** Each plugin
-   wraps response parsing in `try/except`. If the model returns nothing
-   useful, the plugin returns `(False, "No content in response")` —
-   that is *not* the same as a timeout. Distinguish the two when
-   reporting back to the user.
+Relevant files are `sbk-charts`, `sbk-charts.ps1`, `sbk-charts.bat`, `sbk-charts.ini`, and `scripts/project_policy.py`.
 
----
+Preserve the main selection priorities. An explicit venv is tried first and bypasses remembered, active, and project-local candidates. Without that override, the launcher tries the remembered validated environment, active environments, project venvs, existing named Conda, a new venv, and finally new or repaired Conda. Validate both interpreter paths: Unix venv Python is under `bin/`; Windows venv Python is under `Scripts\python.exe`; Conda Python is at the environment prefix root on Windows.
 
-## 9. Bump a Python dependency
-
-**Goal:** Move a package in `requirements.txt` to a newer release.
-
-### 9.1 Step-by-step
-
-**Step A — Pick the bump.** Patch (`1.2.3 → 1.2.4`) and minor
-(`1.2.3 → 1.3.0`) bumps are fine. **Major** bumps (`1.x → 2.x`) for
-key deps (`pandas`, `openpyxl`, `torch`, `google-genai`, `anthropic`)
-require user approval per
-<ref_file file="/root/projects/sbk-charts/AGENTS.md" /> §7.
-
-**Step B — Edit `requirements.txt`.** Keep the `~=` pin form:
-
-```
-google-genai~=1.63.0
-```
-
-**Step C — Install and run.**
+Required checks include:
 
 ```bash
-pip install -r requirements.txt --upgrade
-./sbk-charts -i samples/charts/sbk-file-read.csv -o /tmp/out.xlsx
+bash -n sbk-charts
+./sbk-charts -h
+venv-sbk-charts/bin/python -m unittest discover -s tests -v
 ```
 
-If the dep is plugin-specific (e.g. `anthropic`), also run with that
-plugin to confirm the API surface hasn't changed.
+Test the changed selection branch, runtime detail output, state persistence, and argument forwarding. Windows changes require a real Windows PowerShell/batch smoke test before release approval.
 
-**Step D — If the API has changed**, follow Recipe §2.3 (worked
-example: Gemini migration) — update the plugin's imports and method
-shape to match the new SDK.
+## 12. Change centralized policy
 
----
+Use `sbk-charts.ini` when a value is shared by launchers, setup, CI, or portable artifacts. Keep domain-only values in their modules.
 
-## 10. Cut a new release
-
-> Requires explicit user approval per
-> <ref_file file="/root/projects/sbk-charts/AGENTS.md" /> §7.
-
-**Step A — Bump the version.** Edit
-<ref_file file="/root/projects/sbk-charts/src/version/sbk_version.py" />:
-
-```python
-__sbk_version__ = "3.26.2.2"
-```
-
-**Step B — Build the wheel and sdist.**
+After a policy edit, run:
 
 ```bash
-python -m build
-ls dist/
-# dist/sbk_charts-3.26.2.2-py3-none-any.whl
-# dist/sbk_charts-3.26.2.2.tar.gz
+venv-sbk-charts/bin/python scripts/project_policy.py --minimum-python
+venv-sbk-charts/bin/python scripts/project_policy.py --github-matrix
+venv-sbk-charts/bin/python -m unittest discover -s tests -v
 ```
 
-**Step C — Smoke-test the wheel in a clean venv.**
+Update [POLICY.md](POLICY.md), extend validation tests, and check every consumer of the changed key.
+
+## 13. Build and verify packages
+
+Build without deleting unrelated user artifacts:
 
 ```bash
-python3 -m venv /tmp/sbk-release-test
-source /tmp/sbk-release-test/bin/activate
-pip install dist/sbk_charts-3.26.2.2-py3-none-any.whl
-sbk-charts -i samples/charts/sbk-file-read.csv -o /tmp/out.xlsx
-deactivate
+venv-sbk-charts/bin/python -m build
 ```
 
-**Step D — Tag, push, and upload to GitHub Releases.** *Only with
-explicit user approval.*
+Inspect the wheel and source archive with `unzip -l` and `tar -tzf`. Confirm at least:
+
+- `src/main/banner.txt`;
+- `src/images/sbk-logo.png`;
+- `sbk-charts.ini`;
+- source-distribution scripts and documentation expected by `MANIFEST.in`.
+
+For high-confidence release verification, install the wheel into a fresh temporary environment and run it from outside the repository.
+
+## 14. Build a portable archive
+
+Install build-only requirements into a suitable native environment:
 
 ```bash
-git tag 3.26.2.2
-git push origin 3.26.2.2
-# upload dist/* to https://github.com/kmgowda/sbk-charts/releases/new
+python -m pip install -r requirements-portable.txt
+python scripts/build_portable.py
 ```
 
----
+The builder identifies the current target, runs PyInstaller, smoke-tests the frozen executable with `--help`, copies declared documentation/metadata, generates `manifest.json`, creates the native archive, and writes an external `.sha256` file.
 
-*If a task you need to do is not in this file, add it here when
-you're done so the next agent benefits.*
+Inspect the archive root, executable, `_internal` directory, manifest paths, file hashes, and checksum. A build proves only its current operating system and architecture.
+
+## 15. Update documentation
+
+1. Read the code that owns the behavior.
+2. Prefer short sentences and define project-specific terms.
+3. Put beginner instructions before internal details.
+4. Use real current commands; copy option names from argparse code or help output.
+5. Use `<version>` in release examples unless documenting the current release explicitly.
+6. Link to the owning guide instead of duplicating long explanations.
+7. Use Mermaid only when it makes relationships easier to understand.
+8. Render diagrams when `mmdc` is available.
+9. Search for stale names, versions, paths, flags, and custom reference tags.
+10. Run the documented commands that are safe and local.
+
+Useful audit searches:
+
+```bash
+rg -n "3\\.26|sbk-analytics|-nothreads true|pytorch_llm|--model |--input|--output" \
+  --glob '*.md'
+rg -n "<ref_file|<ref_snippet|file:///" --glob '*.md'
+```
+
+## 16. Cut a release
+
+Changing the version, creating tags, pushing, and publishing require explicit user approval.
+
+1. Set the approved version once in `src/version/sbk_version.py`.
+2. Run tests, lint, source CLI, workbook inspection, wheel, and sdist checks.
+3. Build native portable artifacts through the release workflow or on each native target.
+4. Confirm documentation uses the intended version where a current-version statement is necessary.
+5. Commit and tag only after reviewing the exact diff and artifact list.
+6. Push and publish only when specifically authorized.
+
+Use placeholders in reusable instructions:
+
+```bash
+git tag <version>
+git push origin <version>
+```
+
+## 17. Pull-request handoff
+
+A useful PR description contains:
+
+- the user problem;
+- the implemented behavior;
+- important design decisions and compatibility notes;
+- exact commands and results;
+- platform, provider, or visual checks not performed;
+- screenshots for workbook appearance changes when practical;
+- documentation and test updates;
+- follow-up work that is intentionally out of scope.

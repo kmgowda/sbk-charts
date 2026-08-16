@@ -1,94 +1,36 @@
-# Add New AI Plugin
+# Add an sbk-charts AI backend
 
-## Overview
-This skill guides through adding a new AI backend plugin to sbk-charts.
+Use this skill when adding a cloud provider, local model server, or in-process language model.
 
-## When to use this skill
-Use this skill when:
-- Adding support for a new AI provider (e.g., OpenAI, Claude, local models)
-- Creating a custom AI backend
-- Extending the AI analysis capabilities
+## Read first
 
-## Prerequisites
-- Read `docs/PLUGIN_SPECIFICATION.md` for the spec template
-- Read `docs/AGENT_RECIPES.md` for the "Add a new AI plugin" recipe
-- Have the AI provider's API documentation available
+- `AGENTS.md`
+- `docs/ARCHITECTURE.md`, especially the AI plugin system
+- `docs/PLUGIN_SPECIFICATION.md`
+- `docs/AGENT_RECIPES.md`, recipe 1
 
-## Steps
+## Procedure
 
-### 1. Create the plugin directory
-```bash
-mkdir -p src/custom_ai/<plugin_name>
-touch src/custom_ai/<plugin_name>/__init__.py
-```
-
-### 2. Create the plugin module
-Create `src/custom_ai/<plugin_name>/<plugin_name>.py` with:
-- Class name: PascalCase of the plugin name (e.g., `OpenAI`, `Claude`)
-- Inherit from `SbkGenAI` (from `src.genai.genai`)
-- Implement the four analysis methods:
-  - `get_throughput_analysis()`
-  - `get_latency_analysis()`
-  - `get_total_mb_analysis()`
-  - `get_percentile_histogram_analysis()`
-
-### 3. Add CLI arguments
-Update `src/parser/sbk_parser.py` to add plugin-specific arguments:
-- Prefix with plugin name: `--<plugin>-model`, `--<plugin>-api-key`, etc.
-- Add to the appropriate subparser
-
-### 4. Update requirements.txt
-Add the required dependencies for your plugin to `requirements.txt`
-
-### 5. Test the plugin
-```bash
-# Install in editable mode
-pip install -e .
-
-# Test with a sample CSV
-sbk-charts -i samples/charts/sbk-file-read.csv <plugin_name>
-```
-
-### 6. Update documentation
-- Add a README in `src/custom_ai/<plugin_name>/README.md`
-- Update `AGENTS.md` if there are plugin-specific gotchas
-- Update `docs/PLUGIN_SPECIFICATION.md` if you added new patterns
-
-## Naming Conventions
-- Directory: lowercase with underscores (e.g., `open_ai`, `claude`)
-- Module: same as directory (e.g., `open_ai.py`)
-- Class: PascalCase (e.g., `OpenAI`, `Claude`)
-- CLI subcommand: lowercase class name (e.g., `openai`, `claude`)
-- CLI flags: prefixed with plugin name (e.g., `--openai-model`)
-
-## Common Patterns
-
-### API Key Handling
-Most plugins need an API key. Pattern:
-```python
-import os
-api_key = os.environ.get('PLUGIN_API_KEY') or args.plugin_api_key
-if not api_key:
-    raise ValueError("API key required")
-```
-
-### Model Configuration
-Allow model selection via CLI:
-```python
-model = args.plugin_model or "default-model-name"
-```
-
-### Timeout Handling
-Respect the global timeout:
-```python
-timeout = args.seconds or 120
-```
-
-### Thread Safety
-If the plugin uses GPU resources, note that users should use `-nothreads` flag.
+1. Choose the closest existing backend pattern.
+2. For a substantial integration, complete a plugin specification.
+3. Create `src/custom_ai/<name>/__init__.py`, `<name>.py`, and `README.md`.
+4. Define one concrete `SbkGenAI` subclass. Its lowercased class name becomes the command automatically.
+5. Add plugin flags in its `add_args()` and consume them in `parse_args()`. Do not edit the base parser and do not create a registry.
+6. Reuse all four shared prompt builders from `SbkGenAI`.
+7. Return `(True, text)` on success and `(False, actionable_error)` for expected failure.
+8. Implement chat with `_enhance_prompt_with_rag()` when supported.
+9. Close sessions or release model resources in `close()`.
+10. Add the dependency to `requirements.txt` and update the backend index and architecture table.
 
 ## Verification
-- Plugin appears in `sbk-charts -h` output
-- All four analyses complete successfully
-- Output is written to Excel Summary sheet
-- No import errors in discovery phase
+
+```bash
+./sbk-charts -h
+./sbk-charts -i samples/charts/sbk-file-read.csv <backend> -h
+./sbk-charts -i samples/charts/sbk-file-read.csv \
+  -o /tmp/backend.xlsx <backend>
+```
+
+Test missing authentication/service, configured happy path, all four analyses, chat when supported, and `-nothreads` when the model is not safe for four concurrent calls. Confirm the workbook saves even when provider calls fail clearly.
+
+Never print, store, or commit credentials.

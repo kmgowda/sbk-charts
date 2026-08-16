@@ -3,433 +3,306 @@ Copyright (c) KMG. All Rights Reserved.
 Licensed under the Apache License, Version 2.0.
 -->
 
-# AGENTS.md — AI Agent Guide for the sbk-charts Repository
+# Software-agent and contributor guide
 
-> **Audience.** This file is the standard entry point for AI coding agents
-> (Devin, Claude Code, Cursor, GitHub Copilot, Continue, Aider, OpenAI
-> Codex, etc.) working in this repository. It tells the agent **what
-> sbk-charts is, how to run and verify it, what conventions to follow,
-> where things live, and what the common gotchas are**.
->
-> Humans: see <ref_file file="/root/projects/sbk-charts/README.md" /> for
-> the end-user manual, and <ref_file file="/root/projects/sbk-charts/docs/ARCHITECTURE.md" />
-> for the internal design.
+This is the repository entry point for Codex, Devin, Cursor, Windsurf, Copilot, Aider, and human contributors. It states what the project does, where behavior lives, which rules must remain true, and how to prove a change works.
 
----
+Read this file before editing. Then read the task-specific source and the matching recipe in [docs/AGENT_RECIPES.md](docs/AGENT_RECIPES.md). The [architecture guide](docs/ARCHITECTURE.md) explains the complete data flow.
 
-## 1. What this repository is
+## 1. Project in one minute
 
-**sbk-charts** is a Python application that converts one or more
-[SBK](https://github.com/kmgowda/SBK) benchmark CSV files into a
-richly-formatted `.xlsx` workbook containing:
+sbk-charts is a Python 3.10+ command-line application. It reads one or more SBK benchmark CSV files and creates an `.xlsx` report containing:
 
-1. **R/T worksheets** — for each input CSV, two sheets are produced:
-   - `R<n>` — *per-interval* rows (rows where the `Type` column is anything
-     other than `Total`).
-   - `T<n>` — *total/summary* rows (rows where `Type == "Total"`).
-2. **~20 chart sheets** — throughput, latency, percentile, percentile-count
-   histograms, write/read variations, and timeout-event comparisons.
-3. **A Summary sheet** — metadata (sbk-charts version, generation date/time,
-   drivers, time unit, the benchmark date/time table), plus optional
-   AI-generated narrative analysis.
+- an `SBK` cover sheet, plus one `R<n>` interval-data sheet and one `T<n>` total-data sheet per input;
+- a Summary sheet and a Durations sheet;
+- throughput, latency, percentile, percentile-count, data-volume, and timeout charts;
+- optional AI-written analyses and optional interactive chat.
 
-**Languages & runtime.** Python 3.10+. Pure-Python (no native code besides
-PyTorch wheels in optional plugins).
+The main pipeline is fixed:
 
-**License.** Apache 2.0.
+```text
+CSV files -> R/T sheets -> Summary and charts -> optional AI text -> optional chat
+```
 
-**Default branch.** `main`. Active development happens on feature branches
-and is merged to `main` via PR.
+The source launchers can create or reuse a virtual or Conda environment. Portable releases bundle Python and dependencies.
 
-### Top-level package map (memorise this)
+## 2. Read the right document
 
-| Package | Role | When you edit it |
+| Need | Read |
+|---|---|
+| User commands and examples | [README.md](README.md) |
+| Full module and runtime design | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Step-by-step change procedures | [docs/AGENT_RECIPES.md](docs/AGENT_RECIPES.md) |
+| New AI plugin contract | [docs/PLUGIN_SPECIFICATION.md](docs/PLUGIN_SPECIFICATION.md) |
+| Shared configuration ownership | [docs/POLICY.md](docs/POLICY.md) |
+| Standalone archives | [docs/PORTABLE.md](docs/PORTABLE.md) |
+| Backend setup and flags | [src/custom_ai/README.md](src/custom_ai/README.md) |
+
+## 3. Code map
+
+| Path | Owns | Change it when |
 |---|---|---|
-| `src/main/` | CLI entry point (`sbk_charts()` orchestrator). | When changing top-level flow (sheets → charts → AI). |
-| `src/parser/` | Base argparse setup (`-i`, `-o`). | Rarely. |
-| `src/sheets/` | CSV → R/T worksheets. | When changing how CSVs map to sheets, or sheet naming. |
-| `src/charts/` | All chart generation (per-run and multi-run). ~2 100 LoC. | When adding/changing a chart, the Summary sheet, or chart constants. **Most common change after plugins.** |
-| `src/stat/` | `StorageStat` immutable dataclass. | Rarely. Only when adding a new top-level statistic. |
-| `src/genai/` | `SbkGenAI` abstract base + prompt builders. | When changing the prompt templates (affects every backend). |
-| `src/ai/` | `SbkAI` orchestrator (parallel execution, chat, plugin discovery). | When changing how AI analyses run, time out, or are written into Excel. |
-| `src/rag/` | Simple RAG (default) + ChromaDB RAG (optional). | When changing retrieval logic or grounding. |
-| `src/custom_ai/<name>/` | One subdirectory per AI backend. **7 plugins today.** | When adding or fixing an AI backend. **Most common change.** |
-| `src/version/` | `__sbk_version__` string. | When cutting a release. |
+| `src/main/` | CLI orchestration | Changing top-level stage order or startup output |
+| `src/parser/` | Base `-i` and `-o` flags | Changing non-AI input/output syntax |
+| `src/sheets/` | CSV-to-R/T split and initial workbook | Changing data-sheet creation |
+| `src/charts/` | Summary, charts, themes, CSV header constants | Adding or changing workbook visuals |
+| `src/stat/` | Frozen `StorageStat` | Changing the AI-facing statistics shape |
+| `src/genai/` | Shared AI interface and prompts | Changing every backend's analysis contract or prompt |
+| `src/ai/` | Plugin discovery, scheduling, Excel AI text, chat | Changing AI execution or layout |
+| `src/rag/` | Retrieval and grounding | Changing chat context selection |
+| `src/custom_ai/<name>/` | One AI adapter | Adding or fixing one backend |
+| `src/version/` | Canonical version | Cutting an approved release |
+| `scripts/` | Policy and portable builds | Changing release/runtime tooling |
+| `sbk-charts.ini` | Shared runtime/artifact metadata | Changing a value consumed by multiple delivery systems |
+| `.github/workflows/` | CI and release automation | Changing verification or native builds |
+| `tests/` | Policy/portable unit tests | Changing launchers, policy, packaging, or archives |
 
-**For new AI plugins, see <ref_file file="/root/projects/sbk-charts/docs/PLUGIN_SPECIFICATION.md" />
-(spec template + worked example) and
-<ref_file file="/root/projects/sbk-charts/docs/AGENT_RECIPES.md" />
-("Add a new AI plugin" recipe).**
+## 4. First actions for any task
 
----
+1. Run `git status --short --branch`. Preserve unrelated user changes.
+2. Identify the owning module from the table above.
+3. Read that module, its direct callers, its constants, and the matching architecture section.
+4. Search before assuming. Prefer `rg` and `rg --files`.
+5. Choose the verification commands before editing.
+6. Make the smallest coherent change and update its documentation.
+7. Run targeted checks, then the end-to-end sample.
+8. Inspect the generated workbook when chart or Summary behavior changed.
+9. Review `git diff --check`, `git status`, and the staged file list before committing.
 
-## 2. Build, run, and verify
+Do not rely on old terminal examples in issues or reviews when the current parser and source can answer the question.
 
-### Set up the dev environment
+## 5. Development setup
+
+The simplest source setup is:
 
 ```bash
-# from the repo root
 python3 -m venv venv-sbk-charts
 source venv-sbk-charts/bin/activate
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -e .
 ```
 
-### Run the tool from source
+You can also let `./sbk-charts` bootstrap the environment. Reusing its managed interpreter keeps verification consistent:
 
 ```bash
-# Single CSV
-./sbk-charts -i /path/to/run.csv -o out.xlsx
-
-# Multiple CSVs (driver comparison)
-./sbk-charts -i run-a.csv,run-b.csv,run-c.csv -o compare.xlsx
-
-# With an AI backend (Gemini)
-export GEMINI_API_KEY=...
-./sbk-charts -i run.csv gemini --gemini-model gemini-2.5-flash
-
-# With a local backend (Ollama)
-./sbk-charts -i run.csv ollama --ollama-model llama3.1
-
-# With chat mode after the analyses
-./sbk-charts -i run.csv gemini -chat
-
-# Disable threading for plugin debugging
-./sbk-charts -i run.csv pytorchllm -nothreads
-
-# List available AI backends and base flags
-./sbk-charts -h
+venv-sbk-charts/bin/python -m unittest discover -s tests -v
 ```
 
-### Build a distributable wheel
+Do not add a runtime dependency without adding it to `requirements.txt`. Keep portable-only build tools in `requirements-portable.txt`.
+
+## 6. Definition of done
+
+Every code change must pass checks proportional to its risk. The minimum application smoke test is:
 
 ```bash
-python -m build
-# produces dist/sbk_charts-<version>-py3-none-any.whl
+./sbk-charts -i samples/charts/sbk-file-read.csv -o /tmp/sbk-charts-out.xlsx
 ```
 
-### Verification — what counts as "done"
+Confirm the workbook can be read and contains Summary:
 
-A change is **done** only after all of the following succeed:
+```bash
+venv-sbk-charts/bin/python -c \
+  "import openpyxl; w=openpyxl.load_workbook('/tmp/sbk-charts-out.xlsx'); print(len(w.sheetnames), 'Summary' in w.sheetnames)"
+```
 
-1. **The CLI runs to completion** on a sample CSV:
-   ```bash
-   ./sbk-charts -i samples/charts/sbk-file-read.csv -o /tmp/out.xlsx
-   ```
-   No tracebacks, exit code 0, and `/tmp/out.xlsx` is created.
+Run the available unit tests:
 
-2. **If you touched plugin code**, run the affected plugin end-to-end:
-   ```bash
-   ./sbk-charts -i samples/charts/sbk-file-read.csv -o /tmp/out.xlsx <plugin>
-   ```
-   The four analyses must all complete (or fail gracefully with a clear
-   error message — e.g. missing API key) within the 120 s budget.
+```bash
+venv-sbk-charts/bin/python -m unittest discover -s tests -v
+```
 
-3. **If you touched chart code**, open the generated `.xlsx` and verify
-   the new/changed chart looks right:
-   ```bash
-   python3 -c "import openpyxl; wb = openpyxl.load_workbook('/tmp/out.xlsx'); print(wb.sheetnames)"
-   ```
+Run syntax and undefined-name checks on changed Python files, or use the CI scope:
 
-4. **No new pip dependency** introduced without adding it to
-   `requirements.txt`.
+```bash
+venv-sbk-charts/bin/python -m flake8 . \
+  --count --select=E9,F63,F7,F82 --show-source --statistics
+```
 
-> There are **no unit tests** in the repo today. End-to-end CLI runs are
-> the verification mechanism.
+Always finish with:
 
----
+```bash
+git diff --check
+git status --short
+```
 
-## 3. Repository conventions
+Additional requirements by change type:
 
-### File-system conventions
-
-| Path | Convention |
+| Change | Additional proof |
 |---|---|
-| `src/custom_ai/<name>/__init__.py` | Can be empty. |
-| `src/custom_ai/<name>/<name>.py` | The plugin module. Lower-case filename matches the directory name. |
-| Class name inside the plugin | PascalCase of the directory name. `gemini/` → class `Gemini`; `hugging_face/` → class `HuggingFace`; `pytorch_llm/` → class `PyTorchLLM`. **The discovery layer keys plugins by lower-cased class name**, so a class named `HuggingFace` becomes the subcommand `huggingface`. |
-| `src/charts/constants.py` | Add new column-name constants here. Use the exact CSV header string as the value. |
-| `src/sheets/constants.py` | Sheet naming constants (`R_PREFIX`, `T_PREFIX`, `TYPE`). |
-| `src/version/sbk_version.py` | Single-line `__sbk_version__ = "X.Y.Z.N"`. |
-| `requirements.txt` | All runtime deps. Pin with `~=` (PEP 440 compatible release). |
-| `setup.py` | Picks up `requirements.txt` automatically; do not duplicate deps. |
+| Chart or table | Open the workbook in Excel, LibreOffice, or equivalent and inspect size, labels, colors, series, and order. |
+| AI plugin | Run that backend end to end, or prove missing credentials/service fail clearly and still save the workbook. |
+| Shared prompt | Exercise representative cloud and local backends when credentials/services are available. |
+| Launcher | Run `-h`; test reuse and creation paths relevant to the OS; run `bash -n sbk-charts` for Bash changes. |
+| Windows launcher | Run PowerShell and batch smoke tests on Windows; static inspection on Linux is not sufficient release proof. |
+| Policy or portable build | Run `tests/test_portable.py`, policy CLI outputs, wheel, sdist, and a native archive build when feasible. |
+| Packaging | Build wheel and sdist and inspect required assets. |
+| Mermaid diagram | Render with Mermaid CLI v11+ when available. |
+| Documentation only | Check links, code syntax, Mermaid syntax, spelling, current names, and current flags. |
 
-### Coding conventions
+## 7. Core invariants
 
-- **Python 3.10+**. Use `typing` features (`Optional`, `List`, `Tuple`, etc.).
-- **Type hints** on public methods. Existing code uses sparse hints; add
-  them when modifying a function. Don't strip existing hints.
-- **Docstrings** are encouraged on every public function/method. Follow
-  the existing style: short summary, `Parameters:`/`Returns:` blocks.
-- **No emojis** in code, comments, or docs unless the user explicitly
-  requests them. (Existing `print()` calls do contain some emoji
-  decorations — match the surrounding style when editing those.)
-- **No `print()` for new debug output** — if you need diagnostics, route
-  through `logging` like `src/rag/sbk_rag.py` does.
-- **Imports**: stdlib first, third-party second, `src.*` last. Do not
-  add wildcard imports.
-- **Constants for column names**: never hard-code a CSV header string
-  like `"MB/Sec"` or `"AvgLatency"` inline. Always use a constant from
-  `src/charts/constants.py`. Add a new constant if the column is new.
+### Workbook stages
 
-### Naming conventions
+Do not reorder the three creation stages without updating every consumer:
 
-- **AI plugin subcommand** = lower-cased class name. `Gemini` → `gemini`;
-  `LmStudio` → `lmstudio`.
-- **CLI flags for a plugin** are prefixed by the plugin name:
-  `--gemini-model`, `--anthropic-max-tokens`, `--pt-device`. Pick the
-  shortest unambiguous prefix.
-- **Chart sheet names** are pre-chosen; do not rename existing ones —
-  user-saved workbooks depend on them. New charts should follow the
-  pattern `Total_<MetricName>` for T-sheet charts and `<MetricName>` or
-  `<MetricName>-<n>` for R-sheet charts.
+1. `SbkMultiSheets` creates R/T data sheets with XlsxWriter.
+2. `SbkMultiCharts` reopens the file with openpyxl and creates Summary and charts.
+3. `SbkAI` optionally appends analysis to the existing Summary sheet.
 
----
+### R/T addressing
 
-## 4. Known gotchas (in priority order)
+Each input CSV must map to one `R<n>` and one `T<n>` sheet. Chart and AI code use `is_r_num_sheet()` and `is_t_num_sheet()` to find data. Renaming these sheets is a cross-project compatibility change.
 
-### 4.1 Plugin discovery silently swallows ImportError
+### Summary has two writers
 
-`src.ai.discover.discover_custom_ai_classes` calls
-`importlib.import_module` on every submodule of `src.custom_ai`. If the
-import fails (typically a missing third-party dep), the discoverer prints
-`Importing module <name> failed with error: <e>` and **continues** so
-the other plugins remain usable. **The result is that a broken plugin
-silently disappears from `sbk-charts -h`.**
+`src/charts/multicharts.py` owns the main Summary layout. `src/ai/sbk_ai.py` owns the AI block in columns G and H. Check both when changing rows, columns, widths, or anchors.
 
-If the user reports "I can't see my plugin in the help output", run:
+### One latency unit per comparison
+
+Comparison charts require all R sheets to use the same latency unit. Do not remove this check without adding correct unit conversion.
+
+### Shared prompts belong in the framework
+
+The four standard prompts live in `src/genai/genai.py`. A change there affects every backend. Provider-specific request formatting belongs in the provider plugin.
+
+### Statistics are constructed once
+
+`StorageStat` is frozen. Build its regular and total mappings before construction and treat them as read-only after construction.
+
+### Fail one plugin, not the application
+
+Discovery intentionally catches import failures so one missing optional provider does not hide other backends. Preserve that isolation and make the failure message useful.
+
+### Zero-only RAG metrics are skipped
+
+The simple retrieval layer intentionally ignores all-zero metrics. This avoids irrelevant read or write fields in single-direction workloads.
+
+## 8. Coding conventions
+
+- Support Python 3.10 and newer.
+- Use standard-library imports first, third-party imports second, and `src.*` imports last.
+- Do not add wildcard imports.
+- Add type hints when modifying public functions and methods.
+- Write short docstrings for public behavior.
+- Use logging for new diagnostic output. User-facing CLI progress may follow the surrounding output style.
+- Do not add emojis to code, comments, or documentation.
+- Use exact SBK CSV header constants from `src/charts/constants.py`; never repeat strings such as `MB/Sec` inline.
+- Use sheet constants from `src/sheets/constants.py`.
+- Keep plugin directory and module names lower snake case.
+- The plugin class uses PascalCase; its lowercased class name becomes the subcommand.
+- Prefix plugin flags with the backend name when possible.
+- Pin normal dependencies with compatible-release constraints (`~=`) unless a package has a documented reason for another form.
+- Preserve Apache 2.0 headers. Do not modify `LICENSE` without explicit approval.
+
+## 9. Plugin rules
+
+A backend lives at `src/custom_ai/<directory>/<directory>.py` and subclasses `SbkGenAI`. Discovery is automatic. Do not add a registration list and do not edit `src/parser/sbk_parser.py` for plugin-only flags.
+
+Every production backend should:
+
+- expose its configuration in `add_args()` and consume it in `parse_args()`;
+- return `(True, text)` or `(False, readable_error)`;
+- implement all four canonical analyses;
+- implement chat response behavior if chat is supported;
+- reuse prompt builders from `SbkGenAI`;
+- document authentication, model, threading, and resource needs;
+- clean up sessions or model resources in `close()` when necessary.
+
+If a backend disappears from `-h`, run:
 
 ```bash
-python3 -c "from src.ai.discover import discover_custom_ai_classes; print(discover_custom_ai_classes())"
+venv-sbk-charts/bin/python -c \
+  "from src.ai.discover import discover_custom_ai_classes; print(discover_custom_ai_classes())"
 ```
 
-The first import error in the stdout is your culprit. This is exactly
-how the recent Gemini fix surfaced (`google.ai.generativelanguage` →
-`google.genai`).
+Then import the missing module directly for a traceback.
 
-### 4.2 The Summary sheet is built in two phases
+## 10. Chart rules
 
-`SbkMultiCharts.create_summary_sheet()` (stage 2) writes the version,
-date/time, drivers/actions table, and the benchmark date/time table.
-Then `SbkAI.add_ai_analysis()` (stage 3) appends the four AI narratives
-into column H of the **same** sheet.
+- Decide whether the source is an R sheet, a T sheet, or both.
+- Reuse the series builders and chart factories in `SbkCharts`.
+- Add any new CSV header to `src/charts/constants.py` first.
+- Keep existing sheet names stable; users may have automation or saved formulas that depend on them.
+- Put broad comparison sheets before detailed sheets.
+- Use the shared theme functions so dimensions, fonts, backgrounds, and line colors remain consistent.
+- Test one input and multiple inputs.
+- Inspect the rendered workbook; a valid openpyxl file is not proof that a chart is readable.
 
-If you change the Summary layout, you must verify **both** writers still
-agree on which row to start at. The AI step uses `sheet.max_row + 3` and
-`sheet.max_row + 2` as anchors, so adding rows in stage 2 automatically
-pushes the AI block down — but adding columns or repositioning column H
-will break the AI block.
+## 11. Bootstrap, policy, and release rules
 
-### 4.3 The R/T sheet split is the universal addressing scheme
+`sbk-charts.ini` owns shared runtime and artifact values. `scripts/project_policy.py` provides typed Python access and validation. Bash and PowerShell have small native INI readers because bootstrap cannot assume Python exists.
 
-Every downstream module (charts, AI orchestration, RAG) addresses data
-by R-sheet/T-sheet name and uses `is_r_num_sheet` / `is_t_num_sheet`
-(<ref_file file="/root/projects/sbk-charts/src/charts/utils.py" />) to
-classify a worksheet. If you rename, prefix, or otherwise rearrange the
-data sheets, you must update those regexes and every caller.
+When changing policy:
 
-Sheets named anything other than `R<digits>` or `T<digits>` are ignored
-by the chart and AI code paths. This is why `Summary`, `Throughput_MB`,
-etc. coexist safely in the same workbook.
+- update all consumers or keep the existing key contract;
+- extend tests for validation and generated CI data;
+- update [docs/POLICY.md](docs/POLICY.md);
+- smoke-test Linux/macOS Bash and Windows PowerShell/batch paths as applicable.
 
-### 4.4 Prompts live in `SbkGenAI`, not in plugins
+The version is declared once in `src/version/sbk_version.py`. Do not copy it into examples that will become stale; use `<version>` in release procedures.
 
-The four prompt-builder methods (`get_throughput_prompt`,
-`get_latency_prompt`, `get_total_mb_prompt`,
-`get_percentile_histogram_prompt`) live in
-<ref_file file="/root/projects/sbk-charts/src/genai/genai.py" />. **All
-seven plugins call them.** Changing a prompt template therefore changes
-the output of every backend simultaneously — that is the design.
+## 12. Mermaid rules
 
-If you want a plugin-specific prompt tweak, override the relevant
-`get_*_analysis()` method and build a custom prompt there. Do not
-duplicate the canonical prompts in the plugin.
+Use simple Mermaid syntax that renders consistently:
 
-### 4.5 ThreadPoolExecutor is the default; some plugins need `-nothreads`
+- use ASCII text in node and sequence labels;
+- quote labels when punctuation could be parsed as syntax;
+- use `<br/>` for a line break;
+- do not use `++` in sequence messages;
+- avoid Unicode arrows and em dashes in sequence messages;
+- avoid unquoted participant aliases containing parentheses;
+- render diagrams with `mmdc` v11+ when it is installed.
 
-`SbkAI.add_ai_analysis()` submits 4 analyses to a 4-worker pool. For
-cloud APIs this is fine. For `PyTorchLLM` on a single GPU it can OOM
-the device — the user must pass `-nothreads` to fall back to sequential
-execution. Document this in any new plugin's README if it has this
-property.
+## 13. Repository safety
 
-### 4.6 The 120-second budget is a hard wall
+Preserve unrelated work in a dirty tree. Stage explicit files rather than relying on `git add -A`.
 
-`-secs/--seconds` defaults to 120. Once exceeded, in-flight futures are
-cancelled and their results become `(False, "Analysis timed out")`. A
-slow local model on CPU **will** hit this — surface this clearly to
-users with `print()` warnings, not silent partial output.
+Never commit:
 
-### 4.7 RAG ingestion of zero-valued metrics is intentionally skipped
+- `out.xlsx` or other generated reports;
+- `venv-sbk-charts/`, `.venv/`, or Conda environments;
+- `dist/`, `build/`, wheels, source archives, or portable archives;
+- downloaded model files or caches;
+- `.sbk-charts-runtime`;
+- API keys, tokens, credentials, or secret-bearing logs.
 
-`SbkSimpleRAGPipeline._process_storage_stat` skips metrics whose values
-are all zero (e.g. write metrics during a pure-read benchmark). This
-prevents the RAG index from being polluted with meaningless rows.
-Do not "fix" this unless you have a specific reason — the keyword scorer
-relies on the assumption that ingested data is non-trivial.
+The following actions need the user's explicit approval for the specific action:
 
-### 4.8 `StorageStat` is a frozen dataclass
+- pushing commits, tags, artifacts, or releases;
+- changing the version string;
+- modifying license text;
+- adding a new top-level Python package beside existing `src/*` packages;
+- making a major-version upgrade to pandas, openpyxl, torch, google-genai, or another key dependency;
+- force-pushing, rewriting history, or deleting branches.
 
-You cannot reassign `stat.regular[...] = …` after construction. Build
-the full `regular` and `total` dicts before calling `StorageStat(...)`.
-If you need an in-place "edit", construct a new `StorageStat` with the
-changed fields.
+Do not claim Windows, macOS, GPU, provider API, or portable-runtime testing if it was not actually performed. State the exact limitation.
 
-### 4.9 Mermaid diagrams in `docs/ARCHITECTURE.md`
+## 14. Task routing for software agents
 
-If you edit the architecture doc's diagrams, test them with `mmdc`
-(mermaid-cli v11+ on Node 18+). Pitfalls:
+| User request | Primary files | Required reading |
+|---|---|---|
+| Improve chart appearance | `src/charts/charts.py`, `multicharts.py` | Architecture sections 7 and 8; chart recipe |
+| Add or reorder charts | `src/charts/multicharts.py` | Workbook order and chart recipe |
+| Fix CSV conversion | `src/sheets/` | Architecture section 6 |
+| Add an AI backend | `src/custom_ai/` | Plugin specification and plugin recipe |
+| Fix missing backend imports | plugin and `requirements.txt` | Discovery section and troubleshooting recipe |
+| Change AI text layout | `src/ai/sbk_ai.py` | Summary two-writer rule |
+| Change prompt content | `src/genai/genai.py` | Canonical-prompt rule |
+| Improve chat grounding | `src/rag/sbk_rag.py` | Architecture section 12 |
+| Fix self-bootstrap | root launchers, policy helper | Policy and bootstrap recipes |
+| Change portable archives | `scripts/build_portable.py`, policy, workflow | Portable guide and tests |
+| Cut a release | version, packaging, workflows | Release recipe; explicit approval required |
+| Update docs | relevant Markdown plus code source | Verify every command and link against current code |
 
-- HTML entities like `&#91;` / `&lt;` are rendered **literally** in some
-  versions. Use plain ASCII inside `[" "]` node labels, or `<br/>` for
-  line breaks (which is supported).
-- `++` is a reserved token in sequence-diagram messages. Use words
-  instead (e.g. "plus" or "and").
-- Em-dash (`—`) and Unicode arrow (`→`) inside sequence-diagram messages
-  cause parse errors. Use `--` and `then`/`to`.
-- `participant X as Some (Name)` with unquoted parens fails — drop the
-  parens from aliases.
+## 15. Handoff format
 
-### 4.10 Do not commit `out.xlsx`, `venv-sbk-charts/`, or generated wheels
+At completion, report:
 
-These are working artefacts. `.gitignore` already covers them but
-agents using `git add -A` can accidentally pick up stray files. Stage
-specific files only.
+1. the user-visible outcome;
+2. important implementation choices;
+3. exact verification commands and results;
+4. anything not tested and why;
+5. changed-file links;
+6. commit, branch, push, or PR details only when those actions were requested and completed.
 
----
-
-## 5. Where to look for deeper documentation
-
-| Topic | Read |
-|---|---|
-| End-user manual | <ref_file file="/root/projects/sbk-charts/README.md" /> |
-| Internal architecture, data flow, design decisions, open research problems | <ref_file file="/root/projects/sbk-charts/docs/ARCHITECTURE.md" /> |
-| Step-by-step recipes (add an AI plugin, add a chart, fix a bug, …) | <ref_file file="/root/projects/sbk-charts/docs/AGENT_RECIPES.md" /> |
-| Fillable spec template for spec-driven plugin development | <ref_file file="/root/projects/sbk-charts/docs/PLUGIN_SPECIFICATION.md" /> |
-| SBK upstream (the benchmark engine that produces the CSVs) | <https://github.com/kmgowda/SBK> |
-
----
-
-## 6. The two AI-development workflows this repo supports
-
-This repository works equally well for both styles of AI-assisted
-development:
-
-### 6.1 Vibe coding (informal, iterative)
-
-For quick fixes, single-file edits, debugging:
-
-1. Agent reads the relevant file + this `AGENTS.md` + the relevant
-   `AGENT_RECIPES.md` recipe.
-2. Agent makes the change.
-3. Agent verifies with the end-to-end CLI run from §2.
-4. Agent reports results to the human.
-
-**Loop is small.** No spec document. Suitable for: bugfixes, prompt
-tweaks, README updates, small refactors, adding a new chart column to
-`constants.py`.
-
-### 6.2 Spec-driven development (formal, repeatable)
-
-For larger work (a new AI plugin, a new chart, a new feature in
-`SbkAI`):
-
-1. Human (or AI assistant) writes a spec by filling in
-   <ref_file file="/root/projects/sbk-charts/docs/PLUGIN_SPECIFICATION.md" />
-   (for plugins) or a similar markdown template.
-2. Spec is reviewed / refined by the human.
-3. Agent reads the spec + `AGENTS.md` + `AGENT_RECIPES.md`.
-4. Agent generates code and updates docs according to the spec.
-5. Agent runs the verification checklist; iterates on failures.
-6. Spec stays in version control as the source of truth for the
-   feature.
-
-**Loop is larger** but produces auditable artefacts.
-
-The spec template explicitly cross-references the recipes, so the
-agent has a single deterministic path from spec → working code.
-
----
-
-## 7. Things that are out of scope for an AI agent without explicit user approval
-
-The following actions require explicit user confirmation **for every
-specific action** (not blanket approval):
-
-- Running `git push`, `git tag`, or any operation that publishes to a
-  remote.
-- Modifying the Apache 2.0 license headers or `LICENSE` file.
-- Changing the version string in
-  <ref_file file="/root/projects/sbk-charts/src/version/sbk_version.py" />.
-- Cutting a GitHub release or uploading wheels.
-- Adding a new top-level Python package (i.e. something parallel to
-  `src/ai/`, `src/charts/`, etc.). New *AI plugins* under `src/custom_ai/`
-  are fine.
-- Upgrading a major version of a key dependency (`pandas`, `openpyxl`,
-  `torch`, `google-genai`). Patch-level / minor bumps are fine.
-- Force-pushing, rewriting history, or deleting branches.
-
-For everything else inside `src/custom_ai/`, `src/charts/`, `src/sheets/`,
-`src/genai/`, `src/ai/`, `src/rag/`, `docs/`, and the top-level CLI,
-normal edit-and-verify flow is fine.
-
----
-
-## 8. Quick agent self-check before starting
-
-Before making any change, the agent should be able to answer these
-questions for the change at hand. If the agent can't answer them, it
-should re-read this file and the relevant linked docs.
-
-1. Which package does my change live in (`src/custom_ai/<name>/`,
-   `src/charts/`, …)?
-2. What's the verification command that proves my change is correct
-   (typically a CLI run on `samples/charts/sbk-file-read.csv`)?
-3. Have I touched any of the gotcha areas in §4? Did I update both
-   sides of any cross-cutting change (e.g. Summary sheet writers in
-   stage 2 and stage 3)?
-4. If I added a new dependency, did I add it to `requirements.txt`?
-5. If I added a new AI plugin, did I follow the directory + class +
-   subcommand naming convention from §3?
-6. If I changed a prompt, did I check that all seven plugins still
-   produce a sensible response (or at least that my change is one
-   place — `SbkGenAI` — and applies uniformly)?
-7. Are there any architectural invariants from
-   <ref_file file="/root/projects/sbk-charts/docs/ARCHITECTURE.md" /> §8
-   my change must preserve (three-stage ordering, R/T addressing,
-   prompts-in-framework, frozen `StorageStat`)?
-
----
-
-## 9. Devin Skills for Common Tasks
-
-This repository includes Devin skills (in `.devin/skills/`) that provide
-step-by-step guidance for common development tasks. When working with
-Devin or similar AI agents, these skills can be invoked to get
-contextual guidance:
-
-### Available Skills
-
-- **build-verify** — Build the package and verify all assets (logo, banner.txt)
-  are bundled correctly. Includes end-to-end testing with fresh installs.
-
-- **add-ai-plugin** — Add a new AI backend plugin. Covers directory structure,
-  class naming, CLI argument integration, and testing.
-
-- **add-chart** — Add a new chart type. Covers per-run vs multi-run charts,
-  data series patterns, and integration into the graph generation pipeline.
-
-- **fix-common-issues** — Troubleshoot and fix common issues like import errors,
-  missing plugins, build failures, and runtime problems.
-
-### Using the Skills
-
-If you're using Devin, these skills are automatically discoverable. For other
-AI agents, the skill documentation is available in the `.devin/skills/`
-directory and can be referenced manually.
-
-### Skills in Releases
-
-The `.devin/skills/` directory is included in the source distribution
-(`.tar.gz`) via `MANIFEST.in`, so they are available in GitHub releases.
-They are not included in the wheel (`.whl`) since they are developer-facing
-documentation, not runtime dependencies.
+Do not hide failed checks. Explain whether they indicate a code problem, environment limitation, unavailable credential, unsupported platform, or unrelated pre-existing issue.

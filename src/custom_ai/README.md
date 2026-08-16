@@ -1,128 +1,114 @@
-# Custom AI Implementations for SBK Charts
+<!--
+Copyright (c) KMG. All Rights Reserved.
+Licensed under the Apache License, Version 2.0.
+-->
 
-This directory contains custom AI implementations for analyzing storage benchmark results in the SBK Charts application. Each implementation provides AI-powered analysis of performance metrics including throughput, latency, and other storage-related statistics.
+# AI backends
 
-## Available AI Backends
+sbk-charts can create the workbook without AI. If a backend command is selected, it also writes four plain-English analyses to the Summary sheet and can start interactive chat.
 
-### 1. Hugging Face
-- **Description**: Cloud-based AI analysis using Hugging Face's Inference API
-- **Requirements**:
-  - `HUGGINGFACE_API_TOKEN` environment variable set with a valid API key
-  - Internet access to Hugging Face's API endpoints
-- **Configuration**:
-  - `--model_id`: Specify the Hugging Face model ID (default: `google/gemma-2-2b-it`)
-- **Usage**:
-  ```bash
-  export HUGGINGFACE_API_TOKEN=your_api_token_here
-  sbk-charts -i ./samples/charts/sbk-file-read.csv huggingface
-  ```
+All backends receive the same throughput, latency, total-MB, and percentile-histogram prompts from `src/genai/genai.py`. A backend's job is to configure a model, send those prompts, convert the response to text, and return `(success, text)`.
 
-For more details, see the documentation in [Hugging face](hugging_face/README.md)
+## Choose a backend
 
-### 2. LM Studio
-- **Description**: Local AI analysis using LM Studio's local inference server
-- **Requirements**:
-  - LM Studio application running locally
-  - Compatible LLM model loaded in LM Studio
-  - Network access to the LM Studio server (default: localhost:1234)
-- **Configuration**:
-  - `--url`: LM Studio server URL (default: `http://localhost:1234/v1`)
-  - `--lm-model`: Model name (default: `openai/gpt-oss-20b`)
-  - `--lm-temperature`: Sampling temperature (0.0-1.0, default: 0.4)
-  - `--lm-max-tokens`: Maximum tokens to generate (default: 1800)
-- **Usage**:
-  ```bash
-  sbk-charts -i ./samples/charts/sbk-file-read.csv lmstudio
-  ```
-For more details, see the documentation in [LM Studio](lm_studio/README.md)
+| Command | Runs | Setup | Default |
+|---|---|---|---|
+| `anthropic` | Anthropic cloud | `ANTHROPIC_API_KEY` | `anthropic-sonnet-4-20250514` |
+| `gemini` | Google cloud | `GEMINI_API_KEY` | `gemini-2.5-flash` |
+| `huggingface` | Hugging Face inference service | `HUGGINGFACE_API_TOKEN` | `meta-llama/Llama-3.1-8B-Instruct` |
+| `lmstudio` | Local LM Studio process | Start LM Studio and load a model | Server-selected model |
+| `ollama` | Local or remote Ollama server | Start Ollama and pull a model | `llama3.1` |
+| `pytorchllm` | Current Python process | Model files and sufficient compute/memory | `openai/gpt-oss-20b` |
+| `noai` | Current process | None | Placeholder failure text |
 
+Use a cloud backend for simple setup when benchmark data may be sent to that provider. Use Ollama or LM Studio when you want a locally served model. Use PyTorchLLM only when the selected model fits your machine; the default model is large.
 
-### 3. Ollama
-- **Description**: Local AI analysis using Ollama's local model serving
-- **Requirements**:
-  - Ollama server running locally
-  - Compatible model pulled via Ollama
-- **Configuration**:
-  - `--ollama-url`: Ollama server URL (default: `http://localhost:11434`)
-  - `--ollama-model`: Model name (default: `llama3.1`)
-  - `--ollama-temperature`: Sampling temperature (0.0-1.0, default: 0.4)
-  - `--ollama-timeout`: Request timeout in seconds (default: 120)
-- **Usage**:
-  ```bash
-  sbk-charts -i ./samples/charts/sbk-file-read.csv ollama --ollama-model llama3.1 --ollama-temperature 0.4
-  ```
+## Common syntax
 
-For more details, see the documentation in [ollama](ollama/README.md)
-
-### 4. NoAI (Default)
-- **Description**: Placeholder implementation that returns error messages
-- **Usage**:
-  ```bash
-  sbk-charts -i ./samples/charts/sbk-file-read.csv noai
-  ```
-  This will display a message indicating that AI analysis is not enabled.
-
-## Extending with Custom AI Implementations
-
-To create a new AI backend, create a new Python module in this directory that implements the `SbkGenAI` abstract base class. Your implementation must provide the following methods:
-
-```python
-class MyCustomAI(SbkGenAI):
-    def get_model_description(self) -> Tuple[bool, str]:
-        """Return a description of the AI model being used."""
-        pass
-        
-    def get_throughput_analysis(self) -> Tuple[bool, str]:
-        """Generate analysis of throughput metrics."""
-        pass
-        
-    def get_latency_analysis(self) -> Tuple[bool, str]:
-        """Generate analysis of latency metrics."""
-        pass
-        
-    def get_total_mb_analysis(self) -> Tuple[bool, str]:
-        """Generate analysis of total MB processed."""
-        pass
-        
-    def get_percentile_histogram_analysis(self) -> Tuple[bool, str]:
-        """Generate analysis of percentile histogram data."""
-        pass
+```text
+./sbk-charts -i <input.csv> -o <output.xlsx> \
+  [-secs <seconds>] [-nothreads] [-chat] \
+  <backend> [backend options]
 ```
 
-## Common Configuration
+Global flags must appear before the backend. Backend flags appear after it.
 
-All AI backends support the following common configuration options:
+```bash
+./sbk-charts -i input.csv -o report.xlsx -secs 300 -nothreads \
+  ollama --ollama-model llama3.1
+```
 
-- `-i, --input`: Comma-separated list of input CSV files
-- `-o, --output`: Output file path (optional, prints to console if not specified)
-- `--log-level`: Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+Show current commands:
 
-## Example Commands
+```bash
+./sbk-charts -h
+```
 
-1. **Basic usage with Hugging Face**:
-   ```bash
-   export HUGGINGFACE_API_TOKEN=your_token_here
-   sbk-charts -i file1.csv,file2.csv huggingface
-   ```
+Show one backend's current options:
 
-2. **Using LM Studio with custom parameters**:
-   ```bash
-   sbk-charts -i data.csv lmstudio --lm-temperature 0.7 --lm-max-tokens 2000
-   ```
+```bash
+./sbk-charts -i samples/charts/sbk-file-read.csv <backend> -h
+```
 
-3. **Saving output to a file**:
-   ```bash
-   sbk-charts -i data.csv ollama -o analysis_results.txt
-   ```
+## Backend flags
 
-## Troubleshooting
+| Backend | Flags |
+|---|---|
+| Anthropic | `--anthropic-model`, `--anthropic-max-tokens`, `--anthropic-temperature` |
+| Gemini | `--gemini-model`, `--gemini-max-tokens`, `--gemini-temperature` |
+| Hugging Face | `-id`, `--model_id` |
+| LM Studio | `--url`, `--lm-model`, `--lm-temperature`, `--lm-max-tokens` |
+| Ollama | `-url`/`--ollama-url`, `-model`/`--ollama-model`, `-tmp`/`--ollama-temperature`, `-timeout`/`--ollama-timeout` |
+| PyTorchLLM | `--pt-model`, `--pt-train`, `--pt-device`, `--pt-max-length`, `--pt-temperature`, `--pt-top-p` |
+| NoAI | No backend-specific flags |
 
-- **Connection Issues**: Ensure the AI service (LM Studio/Ollama) is running and accessible
-- **API Key Errors**: Verify that environment variables like `HUGGINGFACE_API_TOKEN` are set correctly
-- **Model Loading**: Make sure the specified model is available in your local/remote environment
-- **Timeout Errors**: Increase the timeout value for large datasets or complex analyses
+`-secs` is the orchestrator's total four-analysis budget. `--ollama-timeout` is the timeout for an individual Ollama HTTP request. They are different controls.
 
-## License
+## Chat
 
-This project is licensed under the Apache License 2.0. See the LICENSE file for details.
+Add `-chat` before the backend command:
 
+```bash
+./sbk-charts -i input.csv -o report.xlsx -chat gemini
+```
+
+Chat initializes the in-memory Simple RAG pipeline from workbook statistics. Retrieved benchmark facts are added to the question before the selected backend is called. Press Enter on an empty line to submit a question and Control-D to exit.
+
+## Threading
+
+The four analyses run concurrently by default. Use `-nothreads` for a local service that behaves inconsistently under simultaneous requests, for step-by-step debugging, or for an in-process model on one GPU.
+
+```bash
+./sbk-charts -i input.csv -o report.xlsx -nothreads lmstudio
+```
+
+`-nothreads` is a flag and takes no `true` or `false` value.
+
+## Data and security
+
+Cloud backends send prompt text derived from benchmark measurements to their provider. Review the provider's privacy, retention, region, and billing rules before use. Never place API keys in a command committed to source control. Use environment variables or your organization's secret manager.
+
+Local backends avoid a cloud provider only when the server and model are actually local. A remotely hosted Ollama or LM Studio endpoint still sends data over the network.
+
+## Failure behavior
+
+If no backend command is selected, chart creation completes and the program prints that AI is disabled. If a selected backend lacks a key, service, model, or resource, each analysis should return readable failure text and the workbook should still be saved.
+
+If a command is missing from `./sbk-charts -h`, its Python module probably failed to import:
+
+```bash
+venv-sbk-charts/bin/python -c \
+  "from src.ai.discover import discover_custom_ai_classes; print(discover_custom_ai_classes())"
+```
+
+## Detailed guides
+
+- [Anthropic](anthropic/README.md)
+- [Gemini](gemini/README.md)
+- [Hugging Face](hugging_face/README.md)
+- [LM Studio](lm_studio/README.md)
+- [Ollama](ollama/README.md)
+- [PyTorchLLM](pytorch_llm/README.md)
+- [NoAI](no_ai/README.md)
+
+To design another backend, use [the plugin specification](../../docs/PLUGIN_SPECIFICATION.md) and [the contributor recipe](../../docs/AGENT_RECIPES.md#1-add-an-ai-backend).

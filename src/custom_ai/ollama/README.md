@@ -1,132 +1,56 @@
-<!--
-Copyright (c) KMG. All Rights Reserved.
+# Ollama backend
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+The `ollama` command sends shared SBK analysis prompts to an Ollama server over HTTP. The server can run on the same computer or on a reachable network host.
 
-    http://www.apache.org/licenses/LICENSE-2.0
--->
-# Ollama Implementation for SBK Charts
+## Setup
 
-This document describes the Ollama implementation for SBK Charts, which enables AI-powered analysis of storage benchmark results using the Ollama API.
-
-## Overview
-
-The Ollama implementation allows SBK Charts to leverage local LLMs through the Ollama API for generating descriptive summaries of throughput, latency, and other performance metrics. This implementation provides an alternative to cloud-based AI services and enables offline analysis capabilities.
-
-## Implementation Details
-
-The Ollama implementation is located in the `src/custom_ai/ollama` directory and extends the base AI interface defined in `src/custom_ai/base_ai.py`.
-
-### Key Features
-
-1. **Local LLM Integration**: Uses Ollama API to run local language models
-2. **Offline Processing**: No internet connection required for analysis
-3. **Flexible Model Support**: Works with any Ollama-supported model
-4. **Consistent Interface**: Maintains compatibility with existing SBK Charts AI framework
-
-### Configuration
-
-The Ollama implementation requires the following configuration:
-
-- **Ollama Server**: Must be running locally or accessible via network
-- **Model Selection**: Specify the desired model (e.g., `llama3`, `mistral`, etc.)
-- **API Endpoint**: Default is `http://localhost:11434` (can be customized)
-
-### Usage
-
-To use the Ollama implementation, run SBK Charts with the `ollama` subcommand:
+Install Ollama, download a model, and start the service:
 
 ```bash
-# Basic usage with default settings
-sbk-charts -i input.csv -o output.xlsx ollama
-
-# With custom model
-sbk-charts -i input.csv -o output.xlsx ollama --model llama3
-
-# With custom endpoint
-sbk-charts -i input.csv -o output.xlsx ollama --url http://localhost:11434
-
+ollama pull llama3.1
+ollama serve
 ```
 
-# Process single CSV file with Ollama
-sbk-charts -i ./samples/charts/sbk-file-read.csv -o ./samples/charts/sbk-file-read-ollama.xlsx ollama
+Confirm the API responds:
 
-# Process multiple CSV files with Ollama
-sbk-charts -i ./samples/charts/sbk-file-read.csv,./samples/charts/sbk-rocksdb-read.csv -o ./samples/charts/sbk-file-rocksdb-read-ollama.xlsx ollama
-
-# With custom model
-sbk-charts -i ./samples/charts/sbk-file-read.csv -o ./samples/charts/sbk-file-read-ollama.xlsx ollama --model mistral
-
-# Ollama Integration with SBK Charts
-
-The Ollama implementation integrates seamlessly with the existing SBK Charts framework:
-
-- Inherits from `SbkGenAI` class for consistent interface
-- Implements all required analysis methods:
-  - `get_throughput_analysis()`
-  - `get_latency_analysis()`
-  - `get_total_mb_analysis()`
-  - `get_percentile_histogram_analysis()`
-- Uses the same prompt templates as other AI implementations
-- Maintains same return format (`success, result` tuple)
-
-## Prerequisites
-
-### Ollama Installation
-
-Install Ollama from https://ollama.com/
-Pull required models:
 ```bash
-ollama pull llama3
-ollama pull mistral
+curl http://localhost:11434/api/tags
 ```
 
-## Python Dependencies
+## Run
 
-- **requests library**
-- **ollama Python package** (if using Ollama's Python client)
-
-# Error Handling
-
-The implementation includes robust error handling for:
-- Ollama server connectivity issues
-- Model loading failures
-- API response errors
-- Network timeouts
-- Invalid configuration parameters
-
-# Performance Considerations
-
-- **Local Processing**: Analysis is performed locally, which may be slower than cloud-based solutions
-- **Memory Usage**: LLMs require significant memory resources
-- **Model Size**: Larger models will take longer to process
-- **Network Latency**: If Ollama is running remotely, network latency affects performance
-
-# Troubleshooting
-
-## Common Issues
-
-- **Ollama Server Not Running**: Ensure Ollama is started (`ollama serve`)
-- **Model Not Pulled**: Pull required model using `ollama pull <model-name>`
-- **Network Connectivity**: Verify Ollama endpoint is accessible
-- **Resource Constraints**: Monitor memory usage during analysis
-
-# Debugging
-
-Enable verbose logging by setting environment variable:
-
-```
-export OLLAMA_DEBUG=1
+```bash
+./sbk-charts -i input.csv -o ollama-report.xlsx ollama
 ```
 
-# Directory Structure
+```bash
+./sbk-charts -i input.csv -o ollama-report.xlsx -secs 600 \
+  ollama \
+  --ollama-url http://localhost:11434 \
+  --ollama-model llama3.1 \
+  --ollama-temperature 0.4 \
+  --ollama-timeout 120
 ```
-src/
-└── custom_ai/
-    └── ollama/
-        ├── __init__.py
-        ├── ollama_ai.py          # Main implementation
-        └── README.md             # This document
-```
+
+| Flag | Code default |
+|---|---|
+| `-url`, `--ollama-url` | `http://localhost:11434` |
+| `-model`, `--ollama-model` | `llama3.1` |
+| `-tmp`, `--ollama-temperature` | `0.4` |
+| `-timeout`, `--ollama-timeout` | `120` seconds per HTTP request |
+
+The global `-secs` value is the total budget for all four analyses. `--ollama-timeout` applies to one HTTP request.
+
+## How it works
+
+The adapter checks `/api/tags` for service health and sends chat requests to `/api/chat`. It reads the assistant message from the JSON response. Chat mode adds retrieved benchmark measurements to the prompt.
+
+## Troubleshooting
+
+- Connection refused: run `ollama serve` and verify the URL.
+- Model not found: run `ollama pull <model>` and use the same name in `--ollama-model`.
+- Slow or timed-out calls: choose a smaller model, increase both relevant timeouts, or add `-nothreads`.
+- Out of memory: choose a smaller or more strongly quantized model.
+- Remote endpoint: check firewall and routing, and remember benchmark prompt data leaves the local machine.
+
+The implementation uses the `requests` package; it does not require the Ollama Python client.

@@ -1,36 +1,54 @@
 <!--
 Copyright (c) KMG. All Rights Reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0.
 -->
-# SBK Charts 
-The sbk-charts is the python application software to create the xlsx file for given single or multiple CSV file containing the SBK performance 
-results. The generated xlsx file contains the graphs of latency percentile variations and throughput variations.
-The [SBK framework](https://github.com/kmgowda/SBK) can be used to benchmark the performance of various storage engines like RocksDB, LMDB, LevelDB, etc. and to generate the performance results in CSV format.
-The sbk-charts application can be used to visualize these results in a more user-friendly way.
 
-**sbk-charts uses AI to generate descriptive summaries about throughput and latency analysis**
+# sbk-charts
 
-## Self-bootstrapping `sbk-charts` launcher
+sbk-charts turns one or more [SBK](https://github.com/kmgowda/SBK) benchmark CSV files into a readable Excel workbook. The workbook keeps the original measurements, separates interval data from totals, and adds formatted charts for throughput, latency, percentiles, data volume, and timeout events. It can also ask a selected AI backend to write plain-English performance summaries and answer questions about the loaded results.
 
-The repository includes cross-platform `sbk-charts` launchers that prepare
-their own Python environment and forward every command-line argument to the
-existing sbk-charts application.
+The current application version is **4.26.8.1** and it requires Python 3.10 or newer when run from source.
 
-Linux and macOS:
+## What it produces
+
+The workbook starts with an `SBK` cover sheet containing the project logo. For each input CSV, sbk-charts then creates two data sheets:
+
+- `R1`, `R2`, and so on contain regular interval rows, where the CSV `Type` value is not `Total`.
+- `T1`, `T2`, and so on contain total rows, where `Type` is `Total`.
+
+It then adds a Summary sheet, a benchmark-duration sheet, and chart sheets. Broad comparisons appear first, followed by total summaries and then fine-grained latency and percentile views.
+
+```mermaid
+flowchart LR
+    A[SBK CSV files] --> B[R and T data sheets]
+    B --> C[Summary and duration sheets]
+    C --> D[Comparison charts]
+    D --> E[Optional AI summaries]
+    E --> F[Excel workbook]
+```
+
+Important features include:
+
+- single-run and multi-run workbooks;
+- rich Excel tables with readable fonts, widths, colors, and frozen headers;
+- throughput comparisons in MB/sec and records/sec;
+- write/read throughput and timeout comparisons;
+- minimum, average, maximum, and percentile latency charts;
+- percentile-count histograms;
+- a Summary sheet with version, report date/time, drivers, actions, and latency unit, plus a Durations sheet with each run's start, end, and elapsed time;
+- optional AI analysis through Anthropic, Gemini, Hugging Face, LM Studio, Ollama, or an in-process PyTorch model;
+- an interactive AI chat mode grounded in the workbook data;
+- self-bootstrapping launchers for Linux, macOS, and Windows;
+- native portable archives that do not require Python on the destination machine.
+
+## Quick start
+
+Clone the repository and run the launcher from the project root.
+
+Linux or macOS:
 
 ```bash
 ./sbk-charts -i samples/charts/sbk-file-read.csv -o out.xlsx
-```
-
-Windows Command Prompt:
-
-```bat
-sbk-charts.bat -i samples\charts\sbk-file-read.csv -o out.xlsx
 ```
 
 Windows PowerShell:
@@ -39,372 +57,299 @@ Windows PowerShell:
 .\sbk-charts.ps1 -i samples\charts\sbk-file-read.csv -o out.xlsx
 ```
 
-The launcher requires Python 3.10 or newer. It performs the following steps:
+Windows Command Prompt:
 
-1. Honors an explicit `SBK_CHARTS_VENV` override when one is configured.
-2. Otherwise, tries the last environment that successfully launched
-   sbk-charts before probing active or project-local environments. This avoids
-   retrying an incompatible venv before a previously working Conda environment.
-3. Reuses the named Conda environment `sbk-charts` when it already exists.
-4. Creates `venv-sbk-charts` with an available Python 3.10+ interpreter.
-5. Falls back to creating a Conda environment when venv setup fails.
-6. Installs the project in editable mode on first use, or refreshes an existing
-   environment when its installed metadata is older than the checked-out source.
-7. Reports the operating system, Python version and executable, and whether the
-   selected environment is `venv` or `conda`, then forwards all supplied
-   arguments unchanged.
-
-The first bootstrap requires access to the configured Python package index.
-Set `SBK_CHARTS_VENV` to choose a different virtual-environment directory or
-`SBK_CHARTS_CONDA_ENV` to choose a different Conda environment name.
-The last successful selection is stored in the ignored `.sbk-charts-runtime`
-file. Set `SBK_CHARTS_STATE_FILE` to keep this state at a different path.
-The launchers read their Python version, environment names, application module,
-and interpreter search order from [`sbk-charts.ini`](sbk-charts.ini), which is
-the source of truth for runtime and distribution policy.
-Maintainers can find the ownership rules in
-[`docs/POLICY.md`](docs/POLICY.md).
-
-### Standalone portable distributions
-
-GitHub releases can also provide native, self-contained archives for Linux
-x86-64, macOS Apple silicon, and Windows x86-64. These archives bundle Python
-and all sbk-charts dependencies, so Python, pip, venv, and Conda are not
-required on the destination host. Each archive includes a file manifest and an
-external SHA-256 checksum.
-
-See [Portable sbk-charts distributions](docs/PORTABLE.md) for download,
-verification, execution, local-build, and platform-support details.
-
-## Running SBK Charts:
-
-```
-<SBK directory>./sbk-charts
-...
-(venv-sbk-charts) kmg@Mac-Studio sbk-charts % sbk-charts -h
-sbk-charts: Reusing virtual environment /Users/kmg/projects/sbk-charts/venv-sbk-charts
-sbk-charts: Operating system: macOS-15.6.1-arm64-arm-64bit
-sbk-charts: Python: 3.12.11 (/Users/kmg/projects/sbk-charts/venv-sbk-charts/bin/python)
-sbk-charts: Environment: venv (/Users/kmg/projects/sbk-charts/venv-sbk-charts)
-usage: sbk-charts [-h] -i IFILES [-o OFILE] [-secs SECONDS] [-nothreads]
-                  [-chat]
-                  {anthropic,gemini,huggingface,lmstudio,noai,ollama,pytorchllm} ...
-
-SBK Charts - Storage Benchmark Visualization Tool
-
-positional arguments:
-  {anthropic,gemini,huggingface,lmstudio,noai,ollama,pytorchllm}
-                        Available GenAI commands
-
-options:
-  -h, --help            show this help message and exit
-  -i, --ifiles IFILES   Comma-separated list of input CSV files containing benchmark results
-  -o, --ofile OFILE     Output XLSX file path (default: out.xlsx)
-  -secs, --seconds SECONDS
-                        Timeout seconds, default : 120
-  -nothreads, --nothreads
-                        Disable parallel threads (default: threads enabled)
-  -chat, --chat         Start interactive chat mode with AI
-
-Please report issues at https://github.com/kmgowda/sbk-charts
-
+```bat
+sbk-charts.bat -i samples\charts\sbk-file-read.csv -o out.xlsx
 ```
 
-# Single CSV file processing
+On first use, the source launcher finds Python 3.10 or newer, prepares an environment, installs the project, and starts the application. Later runs prefer the last environment that passed runtime and dependency validation. The launcher prints the operating system, exact Python executable, Python version, and whether it selected a virtual environment or Conda.
 
-Example command with single CSV file
+The first bootstrap needs access to the Python package index. If Python virtual-environment setup fails, for example because a platform-specific PyTorch wheel is unavailable, the launcher tries Conda when Conda is installed.
+
+## Command-line syntax
+
+```text
+sbk-charts -i <csv[,csv...]> [-o <workbook.xlsx>] \
+    [-secs <seconds>] [-nothreads] [-chat] [ai-backend] [backend-options]
 ```
-(venv-sbk-charts) kmg@Mac-Studio sbk-charts % sbk-charts -i ./samples/charts/sbk-file-read.csv -o ./samples/charts/sbk-file-read.xlsx
 
-   _____   ____    _  __            _____   _    _              _____    _______    _____
-  / ____| |  _ \  | |/ /           / ____| | |  | |     /\     |  __ \  |__   __|  / ____|
- | (___   | |_) | | ' /   ______  | |      | |__| |    /  \    | |__) |    | |    | (___
-  \___ \  |  _ <  |  <   |______| | |      |  __  |   / /\ \   |  _  /     | |     \___ \
-  ____) | | |_) | | . \           | |____  | |  | |  / ____ \  | | \ \     | |     ____) |
- |_____/  |____/  |_|\_\           \_____| |_|  |_| /_/    \_\ |_|  \_\    |_|    |_____/
+Common options:
 
-Sbk Charts Version : 4.26.8.1
-Input Files :  ./samples/charts/sbk-file-read.csv
-Output File :  ./samples/charts/sbk-file-read.xlsx
-SBK logo image found: /Users/kmg/projects/sbk-charts/images/sbk-logo.png
-xlsx file : ./samples/charts/sbk-file-read.xlsx created
-Time Unit : NANOSECONDS
-Reading : FILE
-file : ./samples/charts/sbk-file-read.xlsx updated with graphs
-AI is not enabled!. you can use the subcommands [huggingface lmstudio noai ollama] to enable it.
+| Option | Meaning |
+|---|---|
+| `-i`, `--ifiles` | Required comma-separated input CSV paths. Do not add spaces around the commas. |
+| `-o`, `--ofile` | Output workbook path. Default: `out.xlsx`. |
+| `-secs`, `--seconds` | Total AI analysis time budget in seconds. Default: `120`. |
+| `-nothreads` | Run the four AI analyses one at a time. Useful for local or GPU models. |
+| `-chat` | Start interactive chat after workbook analysis. Requires an AI backend. |
+| `-h`, `--help` | Show general help. Put `-h` after a backend name for backend-specific help. |
+
+Global options must come before the AI backend name. Backend-specific options come after it.
+
+```bash
+./sbk-charts -i input.csv -o report.xlsx -secs 300 -nothreads ollama --ollama-model llama3.1
 ```
-you can see the sample [fil read in csv](./samples/charts/sbk-file-read.csv) as input file and the generated output file is [file read graphs](./samples/charts/sbk-file-read.xlsx)
 
+## Everyday examples
 
-## Multiple CSV files processing
+Create charts from one run:
 
-Example command with multiple CSV files
+```bash
+./sbk-charts -i samples/charts/sbk-file-read.csv -o file-read.xlsx
 ```
-(venv-sbk-charts) kmg@Mac-Studio sbk-charts % sbk-charts -i ./samples/charts/sbk-file-read.csv,./samples/charts/sbk-rocksdb-read.csv -o ./samples/charts/sbk-file-rocksdb-read.xlsx
 
-   _____   ____    _  __            _____   _    _              _____    _______    _____
-  / ____| |  _ \  | |/ /           / ____| | |  | |     /\     |  __ \  |__   __|  / ____|
- | (___   | |_) | | ' /   ______  | |      | |__| |    /  \    | |__) |    | |    | (___
-  \___ \  |  _ <  |  <   |______| | |      |  __  |   / /\ \   |  _  /     | |     \___ \
-  ____) | | |_) | | . \           | |____  | |  | |  / ____ \  | | \ \     | |     ____) |
- |_____/  |____/  |_|\_\           \_____| |_|  |_| /_/    \_\ |_|  \_\    |_|    |_____/
+Compare two runs in one workbook:
 
-Sbk Charts Version : 4.26.8.1
-Input Files :  ./samples/charts/sbk-file-read.csv,./samples/charts/sbk-rocksdb-read.csv
-Output File :  ./samples/charts/sbk-file-rocksdb-read.xlsx
-SBK logo image found: /Users/kmg/projects/sbk-charts/images/sbk-logo.png
-xlsx file : ./samples/charts/sbk-file-rocksdb-read.xlsx created
-Time Unit : NANOSECONDS
-Reading : FILE, ROCKSDB
-file : ./samples/charts/sbk-file-rocksdb-read.xlsx updated with graphs
-AI is not enabled!. you can use the subcommands [huggingface lmstudio noai ollama] to enable it.
-
+```bash
+./sbk-charts \
+  -i samples/charts/sbk-file-read.csv,samples/charts/sbk-rocksdb-read.csv \
+  -o file-vs-rocksdb.xlsx
 ```
-you can see the sample [fil read in csv](./samples/charts/sbk-file-read.csv) and the [rocksdb red in csv](./samples/charts/sbk-rocksdb-read.csv) as input files and the generated output file is [file and rocksdb read comparesion](./samples/charts/sbk-file-rocksdb-read.xlsx)
 
-## Python Virtual Environment Setup
+Use the default output name:
 
-### Prerequisites
-- Python 3.10 or higher
-- pip (Python package installer)
-
-### Setup Instructions
-
-#### Setup with Python virtual environment 
-
+```bash
+./sbk-charts -i samples/charts/sbk-file-read.csv
+# Creates out.xlsx
 ```
-#create the env
+
+Show the available AI backends:
+
+```bash
+./sbk-charts -h
+```
+
+Show options for one backend. The required input is only present so the top-level parser can run:
+
+```bash
+./sbk-charts -i samples/charts/sbk-file-read.csv gemini -h
+```
+
+## AI analysis
+
+Selecting an AI backend adds four narratives to the Summary sheet:
+
+1. throughput analysis;
+2. latency analysis;
+3. total transferred MB analysis;
+4. percentile-histogram analysis.
+
+AI output can be incomplete or wrong. Treat it as an explanation aid and verify important conclusions against the workbook charts and source data.
+
+| Backend | Runs where | Credential or service | Default model |
+|---|---|---|---|
+| `anthropic` | Cloud | `ANTHROPIC_API_KEY` | `anthropic-sonnet-4-20250514` |
+| `gemini` | Cloud | `GEMINI_API_KEY` | `gemini-2.5-flash` |
+| `huggingface` | Cloud | `HUGGINGFACE_API_TOKEN` | `meta-llama/Llama-3.1-8B-Instruct` |
+| `lmstudio` | Local server | Running LM Studio | Server-selected model |
+| `ollama` | Local server | Running Ollama | `llama3.1` |
+| `pytorchllm` | Local process | PyTorch and model files | `openai/gpt-oss-20b` |
+| `noai` | Local placeholder | None | No model; writes placeholder results |
+
+The model names above are code defaults, not a promise that a provider still offers a model. Use the backend-specific model option when needed.
+
+### Gemini example
+
+```bash
+export GEMINI_API_KEY="your-key"
+./sbk-charts -i input.csv -o report.xlsx \
+  gemini --gemini-model gemini-2.5-flash
+```
+
+### Anthropic example
+
+```bash
+export ANTHROPIC_API_KEY="your-key"
+./sbk-charts -i input.csv -o report.xlsx \
+  anthropic --anthropic-max-tokens 4096
+```
+
+### Hugging Face example
+
+```bash
+export HUGGINGFACE_API_TOKEN="your-token"
+./sbk-charts -i input.csv -o report.xlsx \
+  huggingface --model_id meta-llama/Llama-3.1-8B-Instruct
+```
+
+### Ollama example
+
+Start Ollama and download a model first:
+
+```bash
+ollama pull llama3.1
+ollama serve
+```
+
+Then run:
+
+```bash
+./sbk-charts -i input.csv -o report.xlsx \
+  ollama --ollama-model llama3.1
+```
+
+### LM Studio example
+
+Start the LM Studio server and load a model, then run:
+
+```bash
+./sbk-charts -i input.csv -o report.xlsx -nothreads \
+  lmstudio --url http://localhost:1234/api/v0
+```
+
+### PyTorch example
+
+The default model is very large. Choose a model that fits your machine and prefer sequential analysis on a single GPU:
+
+```bash
+./sbk-charts -i input.csv -o report.xlsx -secs 1800 -nothreads \
+  pytorchllm --pt-model <hugging-face-model-id> --pt-device cpu
+```
+
+See [AI backend documentation](src/custom_ai/README.md) for every backend flag and setup note.
+
+## Interactive chat
+
+Chat mode starts after charts and the four AI analyses are complete. It loads benchmark statistics into the built-in in-memory retrieval layer and adds relevant measurements to each question sent to the selected backend.
+
+```bash
+./sbk-charts -i input.csv -o report.xlsx -chat ollama
+```
+
+Type a question, then press Enter on an empty line to submit it. Press Control-D to leave chat. Example questions:
+
+- Which storage system has the highest records per second?
+- Compare average and p99 latency across the runs.
+- Which run has the most timeout events?
+- Is higher throughput associated with worse tail latency here?
+
+The default retrieval implementation is local and does not require ChromaDB. It helps ground the prompt, but it does not guarantee a correct answer.
+
+## How the source launcher selects an environment
+
+The Linux/macOS and Windows launchers read shared settings from [`sbk-charts.ini`](sbk-charts.ini).
+
+```mermaid
+flowchart TD
+    A[Start launcher] --> B{Explicit SBK_CHARTS_VENV set?}
+    B -- Yes --> C{Explicit venv works?}
+    C -- Yes --> H[Run sbk-charts]
+    C -- No --> E{Named Conda environment works?}
+    B -- No --> D{Remembered active or project environment works?}
+    D -- Yes --> H
+    D -- No --> E
+    E -- Yes --> H
+    E -- No --> F{Can a virtual environment be created?}
+    F -- Yes --> H
+    F -- No --> G{Can a Conda environment be created?}
+    G -- Yes --> H
+    G -- No --> I[Exit with an explanation]
+    H --> J[Remember validated environment]
+```
+
+Useful overrides:
+
+| Variable | Purpose |
+|---|---|
+| `SBK_CHARTS_VENV` | Use a specific virtual-environment directory. |
+| `SBK_CHARTS_CONDA_ENV` | Use a different Conda environment name. |
+| `SBK_CHARTS_STATE_FILE` | Store the last-validated-environment record elsewhere. |
+
+The default state file is `.sbk-charts-runtime` in the project root. Delete that small file if you deliberately want the launcher to forget its last validated choice.
+
+## Manual development setup
+
+Use this when you want direct control instead of launcher-managed setup:
+
+```bash
 python3 -m venv venv-sbk-charts
-
-#set the env
 source venv-sbk-charts/bin/activate
-
-# install required packages
-pip install -e .
-
-# build the sbk-charts
-python3 -m build  
-``` 
-
-to deactivate from the venv 
-
-```
-# deactivate the venv
-deactivate
+python -m pip install --upgrade pip
+python -m pip install -e .
+./sbk-charts -h
 ```
 
-#### Setup with conda
+On Windows PowerShell, activate with:
 
+```powershell
+.\venv-sbk-charts\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e .
 ```
-# Create a new conda environment with Python 3.14 or higher
-conda create -n conda-sbk-charts python=3.14 -y
 
-# Activate the environment
-conda activate conda-sbk-charts
+Conda is also supported:
 
-# Install pip if not already installed
-conda install pip -y
+```bash
+conda create -n sbk-charts python=3.12 -y
+conda activate sbk-charts
+python -m pip install -e .
+```
 
-# Install the project in editable mode using pip
-pip install -e .
+Build the wheel and source distribution:
 
-# Build the sbk-charts package
+```bash
 python -m build
 ```
 
-To deactivate
+## Portable distributions
 
-```
-conda deactivate
-```
+Release automation can build self-contained archives for Linux x86-64, macOS Apple silicon, and Windows x86-64. These archives bundle Python and dependencies, so the destination machine does not need Python, pip, venv, or Conda.
 
-## Generative AI-Powered Analysis
+Read [Portable distributions](docs/PORTABLE.md) for supported targets, checksum verification, execution, and local build instructions.
 
-SBK Charts includes AI-powered analysis descriptions to provide deeper insights into your storage benchmark results.
-As of today, The analysis is performed using the Hugging Face model and includes:
+## Troubleshooting
 
-### Available AI Analyses
+### A backend is missing from help
 
-1. **Throughput Analysis**
-   - Analyzes MB/s and records/s metrics
-   - Identifies performance patterns and anomalies
-   - Compares performance across different storage systems
-
-2. **Latency Analysis**
-   - Examines latency distributions
-   - Highlights tail latency patterns
-   - Provides comparative analysis between different storage configurations
-
-3. **Total MB Analysis**
-   - Analyzes total data transferred
-   - Identifies throughput patterns over time
-   - Compares data transfer efficiency
-
-4. **Percentile Histogram Analysis**
-   - Detailed analysis of latency percentiles
-   - Identifies performance bottlenecks
-   - Compares percentile distributions across storage systems
-
-## AI Backends
-
-SBK Charts supports multiple AI backends for analysis:
-
-1. **LM Studio** - For local AI inference with LM Studio
-2. **Ollama** - For running local LLMs through the Ollama API
-3. **Hugging Face** - For cloud-based AI analysis (default)
-
-### LM Studio Setup
-
-1. Install [LM Studio](https://lmstudio.ai/)
-2. Download and host a suitable model (e.g., Mistral 7B, Llama 3.1)
-3. Start the LM Studio server
-
-Example usage:
-```bash
-sbk-charts -i input.csv -o output.xlsx lmstudio 
-```
-
-### Ollama Setup
-
-1. Install [Ollama](https://ollama.com/)
-2. Pull required models:
-   ```bash
-   ollama pull llama3.1
-   ```
-
-Example usage:
-```bash
-sbk-charts -i input.csv -o output.xlsx ollama
-```
-
-For more details, see the documentation in [custom AI models](src/custom_ai/README.md)
-
-## Interactive Chat Mode
-
-SBK Charts provides an interactive chat mode that allows you to query your CSV data using AI-powered analysis with a RAG (Retrieval-Augmented Generation) pipeline.
-
-### Chat Mode Features
-
-- **Natural Language Queries**: Ask questions about your storage benchmark data in plain English
-- **RAG Pipeline**: Uses advanced retrieval to provide context-aware answers based on your CSV data
-- **Multiline Support**: Type complex queries across multiple lines
-- **Interactive Interface**: Real-time conversation with AI about your data
-- **Data Context**: AI has access to all storage statistics from your benchmark results
-
-### Using Chat Mode
-
-To start an interactive chat session:
+Plugin discovery skips a backend when importing its Python module fails. Run:
 
 ```bash
-sbk-charts -i input.csv -o output.xlsx -chat huggingface
+venv-sbk-charts/bin/python -c \
+  "from src.ai.discover import discover_custom_ai_classes; print(discover_custom_ai_classes())"
 ```
 
-Or with other AI backends:
+The import message printed before the dictionary identifies the missing package or failing module.
+
+### The launcher keeps selecting the wrong environment
+
+Use `SBK_CHARTS_VENV` for a specific virtual environment, `SBK_CHARTS_CONDA_ENV` for a specific Conda name, or remove `.sbk-charts-runtime` to clear the remembered choice. A remembered environment is reused only while its Python and installed sbk-charts version remain valid.
+
+### Chart generation stops after printing the time unit
+
+All compared R sheets must use the same latency time unit. Compare runs with matching units or normalize the source data first.
+
+### AI analysis times out
+
+Increase the budget, use a faster model, or run sequentially for resource-heavy local models:
 
 ```bash
-# Using Ollama
-sbk-charts -i input.csv -o output.xlsx -chat ollama
-
-# Using LM Studio
-sbk-charts -i input.csv -o output.xlsx -chat lmstudio
+./sbk-charts -i input.csv -o report.xlsx -secs 600 -nothreads ollama
 ```
 
-### Chat Interface
+### PyTorch cannot be installed in a virtual environment
 
-Once in chat mode:
+PyTorch wheels vary by Python version, operating system, and processor. The self-bootstrap launcher tries Conda after virtual-environment installation fails. You can also use a supported Python version explicitly through `SBK_CHARTS_VENV`, or use a portable build for your platform.
 
-1. **Type your query** and press **Enter twice** to submit
-2. **Multiline queries** are supported - just press Enter twice when done typing
-3. **Press Ctrl+D** to exit chat mode
-4. **AI responses** appear after processing with status indicators
+## Documentation map
 
-### Example Queries
-
-You can ask questions like:
-
-- "Which storage system performs better for read operations?"
-- "Compare the throughput between FILE and ROCKSDB storage systems"
-- "What is the best storage system for high IOPS workloads?"
-- "Show me the latency analysis for all storage systems"
-- "Which storage has the lowest tail latency?"
-
-### Chat Mode Workflow
-
-1. **Initialization**: The chat mode initializes a RAG pipeline with your storage statistics
-2. **Context Loading**: All performance data from your CSV files is made available to the AI
-3. **Interactive Loop**: Ask questions and receive AI-powered insights
-4. **Smart Responses**: AI uses the RAG pipeline to provide accurate, context-aware answers
-
-### Technical Details
-
-- **RAG Pipeline**: Uses Simple RAG for maximum compatibility without external dependencies
-- **Data Ingestion**: Automatically processes storage statistics from all worksheets
-- **Threaded Processing**: AI responses run in separate threads for non-blocking interaction
-- **Error Handling**: Graceful handling of AI backend errors and timeouts
+| Reader or task | Document |
+|---|---|
+| New user | This README |
+| Developer learning the internals | [Architecture and internals](docs/ARCHITECTURE.md) |
+| Human or software-agent contributor | [AGENTS.md](AGENTS.md) |
+| Common implementation tasks | [Agent and contributor recipes](docs/AGENT_RECIPES.md) |
+| Designing a new AI backend | [Plugin specification template](docs/PLUGIN_SPECIFICATION.md) |
+| Runtime and release configuration ownership | [Runtime and artifact policy](docs/POLICY.md) |
+| Standalone release archives | [Portable distributions](docs/PORTABLE.md) |
+| AI backend setup and flags | [AI backends](src/custom_ai/README.md) |
 
 ## Contributing
 
-We welcome and appreciate contributions from the open-source community!
-Whether you're interested in improving the code, enhancing documentation, or adding new AI backend models, your contributions help make SBK Charts better for everyone.
+Create a feature branch, make a focused change, run the verification commands in [AGENTS.md](AGENTS.md), and open a pull request that explains the behavior change and test results. Do not commit generated workbooks, virtual environments, build directories, wheels, API keys, or model files.
 
-### How to Contribute
+Report bugs and feature requests through [GitHub Issues](https://github.com/kmgowda/sbk-charts/issues). Include the command, operating system, Python version, selected environment, complete error text, and a small reproducible CSV when possible.
 
-1. **Fork the repository** and create your feature branch (`git checkout -b feature/amazing-feature`)
-2. **Commit your changes** with clear, descriptive messages
-3. **Push to the branch** (`git push origin feature/amazing-feature`)
-4. **Open a Pull Request** with a clear description of your changes
+## License
 
-### Areas Needing Contributions
-
-#### 1. Code Improvements
-- Performance optimizations
-- Bug fixes
-- New features and enhancements
-- Test coverage improvements
-
-#### 2. Documentation
-- Improve existing documentation
-- Add usage examples
-- Create tutorials or guides
-- Translate documentation to other languages
-
-#### 3. AI Model Integrations
-We're particularly interested in expanding our AI capabilities. You can help by:
-- Adding support for new AI providers (e.g., OpenAI, Anthropic, local LLMs)
-- Improving prompt engineering for better analysis
-- Adding new types of performance analysis
-- Supporting more benchmark result formats
-
-### Setting Up for Development
-Set up the development environment as described in the [Python Virtual Environment Setup](#python-virtual-environment-setup) section
-
-### Code Style
-
-- Follow [PEP 8](https://www.python.org/dev/peps/pep-0008/) for Python code
-- Use type hints for better code clarity
-- Write docstrings for all public functions and classes
-- Keep commits atomic and focused
-
-### Reporting Issues
-
-Found a bug or have a feature request? Please open an issue on our [GitHub Issues](https://github.com/kmgowda/sbk-charts/issues) page with:
-- A clear description of the issue
-- Steps to reproduce
-- Expected vs actual behavior
-- Any relevant screenshots or logs
-
-### License
-
-By contributing, you agree that your contributions will be licensed under the [Apache License 2.0](LICENSE).
-
-
-### Release format
-
-Release Number : .<2 digits year>.<2 digits month>.
-Example: 1.25.6.0
-Major number - 1
-Year - 25 (2025)
-Mont - 6 (Jun)
-Minor Number - 0
-
----
+sbk-charts is licensed under the [Apache License 2.0](LICENSE).

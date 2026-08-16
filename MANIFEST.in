@@ -3,6 +3,7 @@ include sbk-charts sbk-charts.ps1 sbk-charts.bat
 recursive-include scripts *.py
 include src/main/banner.txt
 include src/images/sbk-logo.png
+recursive-include src/custom_ai *.md
 recursive-include samples *
 recursive-include docs *
 recursive-include .devin *

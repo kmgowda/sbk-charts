@@ -1,187 +1,61 @@
-<!--
-Copyright (c) KMG. All Rights Reserved.
+# PyTorchLLM backend
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+The `pytorchllm` command loads a Hugging Face causal language model directly in the sbk-charts Python process through Transformers and PyTorch. It offers local inference but has the highest memory and startup requirements.
 
-    http://www.apache.org/licenses/LICENSE-2.0
--->
-# PyTorch LLM Implementation for SBK Charts
+## Resource warning
 
-This document describes the PyTorch LLM implementation for SBK Charts, which enables local AI-powered analysis of storage benchmark results using PyTorch and Hugging Face models.
+The code default is `openai/gpt-oss-20b`, a large model that does not fit many developer machines. Model memory depends on parameter count, data type, device, and loading behavior. Choose a smaller compatible model unless you know the default fits.
 
-## Overview
+The backend automatically chooses CUDA, then Apple MPS, then CPU. You can override that choice.
 
-The PyTorch LLM implementation allows SBK Charts to leverage local language models through PyTorch's inference capabilities.
-This implementation is particularly useful for users who want to run AI analysis locally without relying on external APIs.
-This implementation is based on the Hugging Face Transformers library and PyTorch.
-you can train the model by providing '--pt-train' option, but the default model : 'openai/gpt-oss-20b' consumes more than 200GB RAM.
+## Run
 
-## Implementation Details
-
-The PyTorch LLM implementation is located in the `src/custom_ai/pytorch_llm` directory and extends the base AI interface defined in `src/genai/genai.py`.
-
-### Key Features
-
-1. **Local Model Inference**: Runs entirely on your hardware using PyTorch
-2. **Hugging Face Integration**: Supports any Causal Language Model from the Hugging Face Hub
-3. **Hardware Acceleration**: Automatically utilizes CUDA, MPS, or CPU based on availability
-4. **Memory Efficient**: Uses 16-bit or 32-bit precision based on hardware support
-5. **Configurable Parameters**: Adjust model parameters like temperature and top-p sampling
-
-## Prerequisites
-
-### Python Dependencies
-
-- PyTorch (with CUDA support recommended for GPU acceleration)
-- Transformers library from Hugging Face
-- A compatible pre-trained language model (e.g., from Hugging Face Hub)
-
-### Hardware Requirements
-
-- CPU: Modern x86-64 or ARM processor
-- RAM: At least 32GB (128GB+ recommended for larger models)
-- GPU: NVIDIA GPU with CUDA support recommended for better performance
-- Disk Space: 10GB+ for model storage (varies by model size)
-
-## Installation
-
-1. Install PyTorch (with CUDA if available):
-   ```bash
-   # For CUDA 11.8
-   pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-   
-   # For CPU-only
-   # pip3 install torch torchvision torchaudio
-   ```
-
-2. Install the Transformers library:
-   ```bash
-   pip install transformers
-   ```
-
-3. (Optional) Install additional dependencies for specific models:
-   ```bash
-   pip install accelerate bitsandbytes
-   ```
-
-## Configuration
-
-The implementation supports the following configuration options:
-
-- **Model**: Any Hugging Face model ID or local path (default: `openai/gpt-oss-20b`)
-- **Device**: Automatically detects CUDA/MPS/CPU (can be overridden)
-- **Max Length**: Maximum sequence length for generation (default: 2048)
-- **Temperature**: Controls randomness (default: 0.4)
-- **Top-p**: Nucleus sampling parameter (default: 0.9)
-
-## Usage
-
-### Basic Usage
+Use a model that fits the machine and run the analyses sequentially on one accelerator:
 
 ```bash
-# Process a single CSV file with default settings
-sbk-charts -i input.csv -o output.xlsx pytorch_llm
-
-# Process multiple CSV files
-sbk-charts -i file1.csv,file2.csv -o output.xlsx pytorch_llm
+./sbk-charts -i input.csv -o pytorch-report.xlsx \
+  -secs 1800 -nothreads \
+  pytorchllm \
+  --pt-model <hugging-face-model-id-or-local-path> \
+  --pt-device cpu
 ```
 
-### Advanced Options
+Configuration example:
 
 ```bash
-# Specify a different model
-sbk-charts -i input.csv -o output.xlsx pytorch_llm --pt-model mistralai/Mistral-7B-v0.1
-
-# Adjust generation parameters
-sbk-charts -i input.csv -o output.xlsx pytorch_llm \
-    --pt-temperature 0.7 \
-    --pt-top-p 0.95 \
-    --pt-max-length 1024
-
-# Force CPU usage
-sbk-charts -i input.csv -o output.xlsx pytorch_llm --pt-device cpu
+./sbk-charts -i input.csv -o pytorch-report.xlsx \
+  -secs 1800 -nothreads \
+  pytorchllm \
+  --pt-model <model> \
+  --pt-device mps \
+  --pt-max-length 1024 \
+  --pt-temperature 0.4 \
+  --pt-top-p 0.9
 ```
 
-## Example Commands
+| Flag | Code default |
+|---|---|
+| `--pt-model` | `openai/gpt-oss-20b` |
+| `--pt-train` | Disabled |
+| `--pt-device` | CUDA, otherwise MPS, otherwise CPU |
+| `--pt-max-length` | `2048` |
+| `--pt-temperature` | `0.4` |
+| `--pt-top-p` | `0.9` |
 
-```bash
-# Process file with default settings
-sbk-charts -i ./samples/charts/sbk-file-read.csv -o ./samples/charts/sbk-file-read-pytorch.xlsx pytorch_llm
+`--pt-train` changes model state and can require substantially more memory and time. Use it only when you understand the plugin's training and local-save behavior.
 
-# Use a smaller model with custom parameters
-sbk-charts -i ./samples/charts/sbk-file-read.csv -o ./samples/charts/sbk-file-read-mistral.xlsx pytorch_llm \
-    --pt-model mistralai/Mistral-7B-v0.1 \
-    --pt-temperature 0.5 \
-    --pt-max-length 1024
+## How it works
 
-# Process multiple files
-sbk-charts -i ./samples/charts/sbk-file-read.csv,./samples/charts/sbk-rocksdb-read.csv \
-    -o ./samples/charts/sbk-combined-pytorch.xlsx pytorch_llm
-```
+The plugin first looks for a saved model under its `saved_models` directory. Otherwise it downloads the selected model and tokenizer through Transformers. It moves the model to the chosen device, generates responses for shared prompts, and releases model references and accelerator caches during cleanup.
 
-## Model Management
-
-### Using Local Models
-
-1. Download a model from Hugging Face Hub:
-   ```bash
-   from transformers import AutoModelForCausalLM, AutoTokenizer
-   
-   model_name = "mistralai/Mistral-7B-v0.1"
-   model = AutoModelForCausalLM.from_pretrained(model_name)
-   tokenizer = AutoTokenizer.from_pretrained(model_name)
-   
-   # Save locally
-   save_path = "./saved_models/mistral-7b"
-   model.save_pretrained(save_path)
-   tokenizer.save_pretrained(save_path)
-   ```
-
-2. Use the local model:
-   ```bash
-   sbk-charts -i input.csv -o output.xlsx pytorch_llm --pt-model ./saved_models/mistral-7b
-   ```
-
-## Performance Tips
-
-1. **Use GPU Acceleration**: Ensure CUDA is properly installed for best performance
-2. **Quantization**: For large models, consider 4-bit or 8-bit quantization
-3. **Batch Processing**: Process multiple files in a single command when possible
-4. **Model Size**: Choose an appropriately sized model for your hardware
-5. **Execution time**: choose the execution time at least 30 minutes ; you can use the parameter '-secs' parameter
+Model downloads require network access unless a local path or populated cache is used. Generated or downloaded model files must not be committed.
 
 ## Troubleshooting
 
-### Common Issues
+- Out of memory: select a smaller model, reduce `--pt-max-length`, use CPU if practical, and keep `-nothreads` enabled.
+- Unsupported PyTorch distribution: use a Python/platform combination with a matching wheel or let the source launcher fall back to Conda.
+- MPS or CUDA failure: verify the installed PyTorch build supports the accelerator, or pass `--pt-device cpu`.
+- Model access failure: authenticate with Hugging Face when required and accept gated-model terms.
+- Very slow execution: increase `-secs`; CPU inference for large models can take much longer than the default budget.
 
-1. **Out of Memory (OOM) Errors**:
-   - Reduce `--pt-max-length`
-   - Use a smaller model
-   - Enable gradient checkpointing
-   - Use quantization
-
-2. **Model Loading Issues**:
-   - Ensure the model name is correct
-   - Check internet connection if downloading
-   - Verify disk space is available
-
-3. **CUDA Errors**:
-   - Check CUDA installation: `nvidia-smi`
-   - Ensure PyTorch was installed with CUDA support
-   - Try reducing batch size or model size
-
-## Directory Structure
-
-```
-src/
-└── custom_ai/
-    └── pytorch_llm/
-        ├── __init__.py
-        ├── pytorch_llm.py      # Main implementation
-        └── README.md           # This document
-```
-## License
-
-Apache License 2.0
+Local execution keeps prompts on the machine after any required model download, subject to the behavior of installed libraries and configured caches.

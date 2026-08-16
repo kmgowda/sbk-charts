@@ -125,6 +125,17 @@ class PortableReleaseTest(unittest.TestCase):
         )
         self.assertEqual(set(self.policy.portable.targets), set(self.policy.portable.archive_formats))
         self.assertEqual(set(self.policy.portable.targets), set(self.policy.portable.runners))
+        backend_guides = {
+            "src/custom_ai/README.md",
+            "src/custom_ai/anthropic/README.md",
+            "src/custom_ai/gemini/README.md",
+            "src/custom_ai/hugging_face/README.md",
+            "src/custom_ai/lm_studio/README.md",
+            "src/custom_ai/no_ai/README.md",
+            "src/custom_ai/ollama/README.md",
+            "src/custom_ai/pytorch_llm/README.md",
+        }
+        self.assertTrue(backend_guides.issubset(self.policy.portable.bundle_paths))
         self.assertTrue(POLICY_FILE.is_file())
 
         matrix = github_matrix(self.policy)

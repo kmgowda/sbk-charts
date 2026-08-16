@@ -1,185 +1,45 @@
-# Fix Common Issues
+# Diagnose common sbk-charts problems
 
-## Overview
-This skill provides solutions to common issues encountered when working with sbk-charts.
+Use this skill for missing plugins, bootstrap failures, chart failures, AI timeouts, and packaging errors. Diagnose before editing.
 
-## When to use this skill
-Use this skill when:
-- Encountering import errors
-- Plugin not appearing in help output
-- Chart generation failures
-- AI analysis not working
-- Build/packaging issues
+## Backend missing from help
 
-## Common Issues and Solutions
-
-### Plugin Not Appearing in Help Output
-
-**Symptom:**
 ```bash
-sbk-charts -h
-# Plugin is missing from the list
+venv-sbk-charts/bin/python -c \
+  "from src.ai.discover import discover_custom_ai_classes; print(discover_custom_ai_classes())"
+venv-sbk-charts/bin/python -c \
+  "import src.custom_ai.<directory>.<module>"
 ```
 
-**Cause:** Import error during plugin discovery. The discoverer silently swallows ImportError.
+Fix the missing dependency, changed SDK import, or code error. Discovery intentionally skips only the broken backend.
 
-**Solution:**
+## Launcher selects or repairs an environment repeatedly
+
+Inspect `.sbk-charts-runtime`, `SBK_CHARTS_VENV`, `SBK_CHARTS_CONDA_ENV`, and `SBK_CHARTS_STATE_FILE`. A remembered environment is reused only when Python is supported, the installed distribution version matches source, the application imports, and dependency validation passes.
+
+Run `./sbk-charts -h` and read the printed OS, interpreter, environment kind, and prefix. Do not remove validation merely to hide a real dependency conflict.
+
+## Charts are missing
+
+Check that the workbook contains matching `R<digits>` and `T<digits>` sheets, required exact headers, and one latency time unit across compared R sheets. Use `get_columns_from_worksheet()` rather than assumed column positions.
+
+## AI analysis times out or exhausts memory
+
 ```bash
-python3 -c "from src.ai.discover import discover_custom_ai_classes; print(discover_custom_ai_classes())"
-```
-Look for import errors in the output. Common causes:
-- Missing dependency in `requirements.txt`
-- Incorrect import path in the plugin
-- Syntax error in plugin code
-
-### Import Error: No module named 'google.ai' (or similar)
-
-**Symptom:**
-```
-Importing module src.custom_ai.gemini.gemini failed with error : No module named 'google.ai'
+./sbk-charts -i input.csv -o /tmp/analysis.xlsx \
+  -secs 600 -nothreads <backend>
 ```
 
-**Cause:** Import path mismatch. The package name in `requirements.txt` doesn't match the import path.
+Check provider/service health. For PyTorch, choose a smaller model and confirm device, RAM, accelerator memory, disk, and wheel compatibility.
 
-**Solution:**
-1. Check `requirements.txt` for the package name
-2. Check the plugin's import statements
-3. Update the import to match the actual package:
-   - `google-genai` uses `google.generativeai` or `google.genai`
-   - NOT `google.ai.generativelanguage`
+## Logo or banner missing after installation
 
-### Chart Generation Fails with Header Offset Issues
+Check `sbk-charts.ini` package data, `setup.py`, `MANIFEST.in`, and file paths relative to module `__file__`. Build wheel and sdist, inspect their contents, then test a fresh installation from outside the repository.
 
-**Symptom:**
-Charts are misaligned or data is read from wrong rows.
+## RAG gives generic context
 
-**Cause:** Dynamic header row offset not handled correctly in chart generation.
+Confirm storage statistics exist and ingestion produced documents. All-zero metrics are intentionally skipped. Test retrieval output directly before blaming the model. The default application uses Simple RAG, not ChromaDB.
 
-**Solution:**
-Ensure chart generation uses `get_columns_from_worksheet()` to get actual column positions, not hardcoded row numbers.
+## Reporting
 
-### Logo or Banner Not Found
-
-**Symptom:**
-```
-SBK logo Image not found: ./images/sbk-logo.png
-```
-
-**Cause:** Relative paths don't work when running from different directories or after installation.
-
-**Solution:**
-Use `__file__`-relative paths:
-```python
-img_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'images', 'sbk-logo.png')
-```
-
-### Build Fails with ModuleNotFoundError
-
-**Symptom:**
-```
-ModuleNotFoundError: No module named 'src'
-```
-
-**Cause:** `setup.py` imports from the source package during build phase.
-
-**Solution:**
-Read version from file instead of importing:
-```python
-def get_version():
-    version_file = os.path.join(os.path.dirname(__file__), 'src', 'version', 'sbk_version.py')
-    with open(version_file, 'r') as f:
-        content = f.read()
-        match = re.search(r"__sbk_version__\s*=\s*['\"]([^'\"]+)['\"]", content)
-        if match:
-            return match.group(1)
-    raise RuntimeError("Could not find version")
-```
-
-### Assets Not Bundled in Wheel
-
-**Symptom:**
-Logo or banner.txt missing from the wheel after build.
-
-**Cause:** Incorrect `package_data` configuration or missing `pyproject.toml`.
-
-**Solution:**
-1. Ensure `pyproject.toml` exists with build backend specified
-2. Verify `package_data` keys match actual package names:
-   ```python
-   package_data={
-       'src.main': ['banner.txt'],
-       'src.images': ['sbk-logo.png'],
-   }
-   ```
-3. Add `include_package_data=True` in setup.py
-4. Ensure `MANIFEST.in` includes the files
-
-### AI Analysis Times Out
-
-**Symptom:**
-```
-Analysis timed out
-```
-
-**Cause:** Analysis exceeds the 120-second budget.
-
-**Solution:**
-- Increase timeout with `-secs` flag
-- Use a faster model
-- For GPU-bound plugins, use `-nothreads` flag
-- Check if the API is responding slowly
-
-### RAG Pipeline Returns Empty Results
-
-**Symptom:**
-Chat mode returns generic answers without specific data context.
-
-**Cause:** RAG ingestion skipped zero-valued metrics (intentional behavior).
-
-**Solution:**
-This is by design. Metrics with all-zero values are skipped to avoid polluting the index.
-
-### ThreadPoolExecutor OOM on GPU
-
-**Symptom:**
-Out of memory errors when using PyTorchLLM or other GPU-bound plugins.
-
-**Cause:** Multiple analyses trying to use GPU simultaneously.
-
-**Solution:**
-Use the `-nothreads` flag to run analyses sequentially:
-```bash
-sbk-charts -i input.csv pytorchllm -nothreads
-```
-
-## Debugging Tips
-
-### Enable verbose output
-```bash
-sbk-charts -i input.csv -o output.xlsx --verbose
-```
-
-### Check Python path
-```bash
-python3 -c "import sys; print('\n'.join(sys.path))"
-```
-
-### Verify package installation
-```bash
-pip list | grep sbk-charts
-pip show sbk-charts
-```
-
-### Test with minimal input
-Use the sample CSV to isolate the issue:
-```bash
-sbk-charts -i samples/charts/sbk-file-read.csv -o /tmp/test.xlsx
-```
-
-## When to Ask for Help
-If none of these solutions work:
-1. Check the GitHub Issues for similar problems
-2. Create a minimal reproducible example
-3. Include the exact error message
-4. Specify your Python version and environment
-5. Open a new issue on GitHub
+Record the exact command, OS, Python executable/version, environment kind/path, complete error, and smallest reproducible input. State whether the issue is code, dependency availability, credential/service state, hardware capacity, or an untested platform.

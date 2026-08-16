@@ -1,86 +1,31 @@
-# Build and Verify sbk-charts
+# Build and verify sbk-charts
 
-## Overview
-This skill provides guidance for building and verifying the sbk-charts package, ensuring all assets are properly bundled and the application works end-to-end.
+Use this skill for packaging, release preparation, launcher changes, or a full regression check.
 
-## When to use this skill
-Use this skill when:
-- Building the package for distribution (wheel/tarball)
-- Verifying that assets (logo, banner.txt) are bundled
-- Testing end-to-end functionality after build
-- Preparing for a release
+## Standard verification
 
-## Build Process
-
-### 1. Clean previous builds
 ```bash
-rm -rf dist/ build/ sbk_charts.egg-info/
+venv-sbk-charts/bin/python -m unittest discover -s tests -v
+./sbk-charts -h
+./sbk-charts -i samples/charts/sbk-file-read.csv \
+  -o /tmp/sbk-charts-verify.xlsx
+venv-sbk-charts/bin/python -c \
+  "import openpyxl; w=openpyxl.load_workbook('/tmp/sbk-charts-verify.xlsx'); print(w.sheetnames)"
+venv-sbk-charts/bin/python -m flake8 . \
+  --count --select=E9,F63,F7,F82 --show-source --statistics
+git diff --check
 ```
 
-### 2. Build the package
+## Package verification
+
 ```bash
-python -m build
-```
-This creates:
-- `dist/sbk_charts-<version>-py3-none-any.whl`
-- `dist/sbk_charts-<version>.tar.gz`
-
-### 3. Verify bundled assets
-```bash
-# Check wheel contents
-unzip -l dist/sbk_charts-<version>-py3-none-any.whl | grep -E "banner|sbk-logo"
-
-# Check tarball contents
-tar -tzf dist/sbk_charts-<version>.tar.gz | grep -E "banner|sbk-logo"
+venv-sbk-charts/bin/python -m build
+unzip -l dist/sbk_charts-<version>-py3-none-any.whl
+tar -tzf dist/sbk_charts-<version>.tar.gz
 ```
 
-Expected output:
-```
-src/images/sbk-logo.png
-src/main/banner.txt
-```
+Confirm the banner, logo, policy file, source launchers, scripts, documentation, and developer skills appear in the artifact type where `setup.py` and `MANIFEST.in` intend them.
 
-## End-to-End Verification
+For release confidence, install the wheel into a fresh temporary virtual environment and run it from outside the repository. For portable changes, install `requirements-portable.txt`, run `scripts/build_portable.py` on a native target, verify the checksum and manifest, extract the whole bundle, and run the sample.
 
-### Test with a fresh virtual environment
-```bash
-# Create fresh venv
-python3 -m venv /tmp/venv-test
-/tmp/venv-test/bin/pip install dist/sbk_charts-<version>-py3-none-any.whl
-
-# Run from different directory
-cd /tmp
-/tmp/venv-test/bin/sbk-charts -i <path-to-sample-csv> -o /tmp/test-output.xlsx
-```
-
-### Verify output
-- Banner should display correctly
-- Logo should be inserted in the SBK sheet
-- Output xlsx should be created successfully
-- Exit code should be 0
-
-## Common Issues
-
-### Logo or banner not found
-- Check that `src/images/__init__.py` exists
-- Verify `setup.py` has correct `package_data` configuration
-- Ensure `pyproject.toml` is present with build backend specified
-
-### Build fails with import error
-- This is likely the version import issue in setup.py
-- The fix is to read version from file instead of importing
-- Verify setup.py uses the `get_version()` function
-
-### Files missing in wheel
-- Check `MANIFEST.in` includes the files
-- Verify `include_package_data=True` in setup.py
-- Ensure package keys in `package_data` match actual package names (e.g., `src.main` not `main`)
-
-## Release Checklist
-- [ ] Version updated in `src/version/sbk_version.py`
-- [ ] Changes committed to git
-- [ ] Clean build performed
-- [ ] Assets verified in wheel and tarball
-- [ ] End-to-end test passed with fresh install
-- [ ] Git tag created
-- [ ] Release published on GitHub
+Do not delete or overwrite unrelated existing artifacts. Do not claim an operating system, provider, or visual check that was not performed.
