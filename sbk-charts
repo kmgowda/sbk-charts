@@ -321,46 +321,83 @@ create_managed_environment() {
     local temporary_environment python_path stale_environment
     shift
     [ -n "$EXPECTED_FINGERPRINT" ] || return 1
-    [ -r "$LOCK_FILE" ] || fail "Dependency lock not found: $LOCK_FILE"
+    [ -r "$LOCK_FILE" ] || return 1
 
     acquire_bootstrap_lock
     try_managed_environment "$environment_dir" "$EXPECTED_FINGERPRINT" "$@"
 
     if [ -n "${SBK_CHARTS_UV:-}" ]; then
         BOOTSTRAP_MANAGER_PATH="$SBK_CHARTS_UV"
-        [ -x "$BOOTSTRAP_MANAGER_PATH" ] || fail "SBK_CHARTS_UV is not executable: $BOOTSTRAP_MANAGER_PATH"
+        if [ ! -x "$BOOTSTRAP_MANAGER_PATH" ]; then
+            log "SBK_CHARTS_UV is not executable: $BOOTSTRAP_MANAGER_PATH"
+            release_bootstrap_lock
+            trap - EXIT HUP INT TERM
+            return 1
+        fi
     else
         prepare_bootstrap_manager || {
             log "Could not download and verify the pinned runtime manager. Use a portable release or install Python/Conda."
             release_bootstrap_lock
+            trap - EXIT HUP INT TERM
             return 1
         }
     fi
 
     log "Installing managed Python $MANAGED_PYTHON"
-    env UV_PYTHON_INSTALL_DIR="$MANAGED_RUNTIME_ROOT/python" \
+    if ! env UV_PYTHON_INSTALL_DIR="$MANAGED_RUNTIME_ROOT/python" \
         UV_CACHE_DIR="$MANAGED_RUNTIME_ROOT/cache" \
         "$BOOTSTRAP_MANAGER_PATH" python install --install-dir "$MANAGED_RUNTIME_ROOT/python" \
-        "$MANAGED_PYTHON" || fail "Could not install managed Python $MANAGED_PYTHON"
+        "$MANAGED_PYTHON"; then
+        log "Could not install managed Python $MANAGED_PYTHON; trying legacy Python/Conda"
+        release_bootstrap_lock
+        trap - EXIT HUP INT TERM
+        return 1
+    fi
 
     temporary_environment="$(mktemp -d \
         "$MANAGED_RUNTIME_ROOT/.env-$EXPECTED_FINGERPRINT.XXXXXX")" \
-        || fail "Could not allocate a temporary managed environment"
-    env UV_PYTHON_INSTALL_DIR="$MANAGED_RUNTIME_ROOT/python" \
+        || {
+            log "Could not allocate a temporary managed environment; trying legacy Python/Conda"
+            release_bootstrap_lock
+            trap - EXIT HUP INT TERM
+            return 1
+        }
+    if ! env UV_PYTHON_INSTALL_DIR="$MANAGED_RUNTIME_ROOT/python" \
         UV_CACHE_DIR="$MANAGED_RUNTIME_ROOT/cache" UV_LINK_MODE=copy \
         "$BOOTSTRAP_MANAGER_PATH" venv --managed-python --seed \
-        --python "$MANAGED_PYTHON" "$temporary_environment" \
-        || fail "Could not create managed environment"
+        --python "$MANAGED_PYTHON" "$temporary_environment"; then
+        log "Could not create managed environment; trying legacy Python/Conda"
+        rm -rf "$temporary_environment"
+        release_bootstrap_lock
+        trap - EXIT HUP INT TERM
+        return 1
+    fi
     python_path="$temporary_environment/bin/python"
-    env UV_CACHE_DIR="$MANAGED_RUNTIME_ROOT/cache" UV_LINK_MODE=copy \
+    if ! env UV_CACHE_DIR="$MANAGED_RUNTIME_ROOT/cache" UV_LINK_MODE=copy \
         "$BOOTSTRAP_MANAGER_PATH" pip install --python "$python_path" \
-        --require-hashes --requirement "$LOCK_FILE" \
-        || fail "Could not install locked $SELECTED_PROFILE dependencies"
-    env UV_CACHE_DIR="$MANAGED_RUNTIME_ROOT/cache" UV_LINK_MODE=copy \
+        --require-hashes --requirement "$LOCK_FILE"; then
+        log "Could not install locked $SELECTED_PROFILE dependencies; trying legacy Python/Conda"
+        rm -rf "$temporary_environment"
+        release_bootstrap_lock
+        trap - EXIT HUP INT TERM
+        return 1
+    fi
+    if ! env UV_CACHE_DIR="$MANAGED_RUNTIME_ROOT/cache" UV_LINK_MODE=copy \
         "$BOOTSTRAP_MANAGER_PATH" pip install --python "$python_path" \
-        --no-build-isolation --no-deps --editable "$PROJECT_ROOT" \
-        || fail "Could not install $APP_NAME"
-    environment_is_ready "$python_path" || fail "Managed environment self-check failed"
+        --no-build-isolation --no-deps --editable "$PROJECT_ROOT"; then
+        log "Could not install $APP_NAME; trying legacy Python/Conda"
+        rm -rf "$temporary_environment"
+        release_bootstrap_lock
+        trap - EXIT HUP INT TERM
+        return 1
+    fi
+    if ! environment_is_ready "$python_path"; then
+        log "Managed environment self-check failed; trying legacy Python/Conda"
+        rm -rf "$temporary_environment"
+        release_bootstrap_lock
+        trap - EXIT HUP INT TERM
+        return 1
+    fi
 
     if [ -e "$environment_dir" ]; then
         stale_environment="$environment_dir.stale-$$"

@@ -436,7 +436,12 @@ if ($ExpectedFingerprint) {
 }
 
 if (-not $env:SBK_CHARTS_VENV) {
-    Start-ManagedEnvironment $ManagedEnvironment $ApplicationArguments
+    try {
+        Start-ManagedEnvironment $ManagedEnvironment $ApplicationArguments
+    } catch {
+        Write-LauncherMessage "Managed environment setup failed: $($_.Exception.Message)"
+        Write-LauncherMessage "Trying legacy Python/Conda"
+    }
 }
 
 $VenvPath = if ($env:SBK_CHARTS_VENV) { $env:SBK_CHARTS_VENV } else { $DefaultVenv }

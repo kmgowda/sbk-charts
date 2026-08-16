@@ -392,6 +392,7 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn("managed-bootstrap-unix:", workflow)
         self.assertIn("managed-bootstrap-windows:", workflow)
         self.assertIn('UV_OFFLINE: "true"', workflow)
+        self.assertIn("python -m build --wheel --sdist", workflow)
         self.assertNotIn("actions/checkout@v", workflow)
         self.assertNotIn("actions/setup-python@v", workflow)
         self.assertEqual(workflow.count("actions/checkout@"), workflow.count("persist-credentials: false"))
