@@ -6,9 +6,12 @@ from __future__ import annotations
 import argparse
 import ast
 import configparser
+import importlib
 import json
 import re
+import sys
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version as distribution_version
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -174,6 +177,25 @@ def load_requirements(path: Path) -> list[str]:
     return requirements
 
 
+def environment_matches_policy(policy: ProjectPolicy, root: Path = ROOT) -> bool:
+    """Return whether the installed application matches the checked-out source."""
+    try:
+        installed_version = distribution_version(policy.application.distribution_name)
+    except PackageNotFoundError:
+        return False
+    if installed_version != application_version(policy, root):
+        return False
+
+    root_string = str(root)
+    if root_string not in sys.path:
+        sys.path.insert(0, root_string)
+    try:
+        importlib.import_module(policy.application.module)
+    except Exception:
+        return False
+    return True
+
+
 def github_matrix(policy: ProjectPolicy) -> dict[str, list[dict[str, str]]]:
     """Return the native portable build matrix declared by project policy."""
     return {
@@ -192,9 +214,12 @@ def main() -> int:
     """Expose policy-derived values needed by automation."""
     parser = argparse.ArgumentParser(description=__doc__)
     outputs = parser.add_mutually_exclusive_group(required=True)
+    outputs.add_argument("--environment-ready", action="store_true")
     outputs.add_argument("--github-matrix", action="store_true")
     outputs.add_argument("--minimum-python", action="store_true")
     selected = parser.parse_args()
+    if selected.environment_ready:
+        return 0 if environment_matches_policy(load_policy()) else 1
     if selected.github_matrix:
         print(json.dumps(github_matrix(load_policy()), separators=(",", ":")))
         return 0

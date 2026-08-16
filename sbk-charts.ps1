@@ -7,6 +7,7 @@ $ApplicationArguments = @($args)
 
 $ProjectRoot = $PSScriptRoot
 $PolicyFile = Join-Path $ProjectRoot "sbk-charts.ini"
+$PolicyReader = Join-Path $ProjectRoot "scripts\project_policy.py"
 
 function Read-ProjectPolicy {
     param([string] $Path)
@@ -81,7 +82,7 @@ function Test-SupportedPython {
 
 function Test-EnvironmentReady {
     param([string] $PythonPath)
-    & $PythonPath -c "import importlib, sys; from importlib.metadata import version; version(sys.argv[1]); importlib.import_module(sys.argv[2])" $DistributionName $AppModule 2>$null
+    & $PythonPath $PolicyReader --environment-ready 2>$null
     if ($LASTEXITCODE -ne 0) {
         return $false
     }

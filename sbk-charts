@@ -70,8 +70,8 @@ last_output_line() {
 }
 
 environment_is_ready() {
-    "$1" -c 'import importlib, sys; from importlib.metadata import version; version(sys.argv[1]); importlib.import_module(sys.argv[2])' \
-        "$DISTRIBUTION_NAME" "$APP_MODULE" >/dev/null 2>&1 && "$1" -m pip check >/dev/null 2>&1
+    "$1" "$PROJECT_ROOT/scripts/project_policy.py" --environment-ready >/dev/null 2>&1 && \
+        "$1" -m pip check >/dev/null 2>&1
 }
 
 install_project() {

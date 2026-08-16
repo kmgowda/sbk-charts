@@ -13,6 +13,7 @@ from scripts import build_portable, sbk_charts_portable_entry
 from scripts.project_policy import (
     POLICY_FILE,
     application_version,
+    environment_matches_policy,
     github_matrix,
     load_policy,
     load_requirements,
@@ -202,6 +203,24 @@ class PortableReleaseTest(unittest.TestCase):
                 load_requirements(requirements_file),
             )
 
+    def test_environment_policy_rejects_stale_installed_metadata(self):
+        with (
+            patch("scripts.project_policy.application_version", return_value="2.0.0"),
+            patch("scripts.project_policy.distribution_version", return_value="1.0.0"),
+            patch("scripts.project_policy.importlib.import_module") as import_module,
+        ):
+            self.assertFalse(environment_matches_policy(self.policy))
+        import_module.assert_not_called()
+
+    def test_environment_policy_accepts_matching_application(self):
+        with (
+            patch("scripts.project_policy.application_version", return_value="2.0.0"),
+            patch("scripts.project_policy.distribution_version", return_value="2.0.0"),
+            patch("scripts.project_policy.importlib.import_module") as import_module,
+        ):
+            self.assertTrue(environment_matches_policy(self.policy))
+        import_module.assert_called_once_with(self.policy.application.module)
+
     def test_launchers_and_ci_consume_runtime_policy(self):
         bash_launcher = (build_portable.ROOT / "sbk-charts").read_text(encoding="utf-8")
         powershell_launcher = (build_portable.ROOT / "sbk-charts.ps1").read_text(encoding="utf-8")
@@ -209,7 +228,9 @@ class PortableReleaseTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("policy_value runtime minimum_python", bash_launcher)
+        self.assertIn("scripts/project_policy.py\" --environment-ready", bash_launcher)
         self.assertIn('"runtime.minimum_python"', powershell_launcher)
+        self.assertIn("$PolicyReader --environment-ready", powershell_launcher)
         self.assertNotIn('MINIMUM_PYTHON="3.10"', bash_launcher)
         self.assertNotIn('$MinimumPython = "3.10"', powershell_launcher)
         self.assertIn("scripts/project_policy.py --minimum-python", workflow)
