@@ -138,6 +138,19 @@ def application_version(policy: ProjectPolicy, root: Path = ROOT) -> str:
     raise RuntimeError(f"Could not find __sbk_version__ in {version_file}")
 
 
+def load_requirements(path: Path) -> list[str]:
+    """Read requirement entries while preserving URL fragment identifiers."""
+    requirements: list[str] = []
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        line = re.split(r"\s+#", line, maxsplit=1)[0].strip()
+        if line:
+            requirements.append(line)
+    return requirements
+
+
 def github_matrix(policy: ProjectPolicy) -> dict[str, list[dict[str, str]]]:
     """Return the native portable build matrix declared by project policy."""
     return {

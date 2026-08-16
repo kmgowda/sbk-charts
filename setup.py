@@ -37,12 +37,7 @@ package_dir = project_root
 
 # Read the canonical runtime requirements; a missing file is a packaging error.
 req_file = os.path.join(package_dir, *project_policy.application.runtime_requirements.split('/'))
-with open(req_file, encoding='utf-8') as requirements_file:
-    required = [
-        line.strip()
-        for line in requirements_file
-        if line.strip() and not line.lstrip().startswith('#')
-    ]
+required = policy_reader.load_requirements(Path(req_file))
 
 setup(
     name=project_policy.application.distribution_name,

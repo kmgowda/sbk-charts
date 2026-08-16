@@ -13,7 +13,7 @@ import sys
 import tarfile
 import tempfile
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePath
 
 from scripts.project_policy import ProjectPolicy, application_version, load_policy
 
@@ -63,6 +63,11 @@ def copy_bundle_paths(bundle: Path, policy: ProjectPolicy) -> None:
             shutil.copy2(source, destination)
         else:
             raise FileNotFoundError(f"Portable bundle path does not exist: {source}")
+
+
+def zip_member_name(bundle_name: str, relative_path: PurePath) -> str:
+    """Return a ZIP-standard member name for paths from any host OS."""
+    return f"{bundle_name}/{relative_path.as_posix()}"
 
 
 def build_bundle(output_directory: Path, policy: ProjectPolicy = POLICY) -> Path:
@@ -147,7 +152,7 @@ def build_bundle(output_directory: Path, policy: ProjectPolicy = POLICY) -> Path
             with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as output:
                 for path in sorted(bundle.rglob("*")):
                     if path.is_file():
-                        output.write(path, Path(bundle_name) / path.relative_to(bundle))
+                        output.write(path, zip_member_name(bundle_name, path.relative_to(bundle)))
         elif archive_format == "tar.gz":
             archive = output_directory / f"{bundle_name}.tar.gz"
             with tarfile.open(archive, "w:gz") as output:

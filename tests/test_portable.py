@@ -6,11 +6,17 @@ import tempfile
 import unittest
 import zipfile
 from dataclasses import replace
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from unittest.mock import patch
 
 from scripts import build_portable, sbk_charts_portable_entry
-from scripts.project_policy import POLICY_FILE, application_version, github_matrix, load_policy
+from scripts.project_policy import (
+    POLICY_FILE,
+    application_version,
+    github_matrix,
+    load_policy,
+    load_requirements,
+)
 
 
 class PortableReleaseTest(unittest.TestCase):
@@ -97,6 +103,14 @@ class PortableReleaseTest(unittest.TestCase):
                     source.namelist(),
                 )
 
+    def test_windows_zip_member_names_use_posix_separators(self):
+        member = build_portable.zip_member_name(
+            "sbk-charts-version-windows-amd64",
+            PureWindowsPath("docs") / "POLICY.md",
+        )
+        self.assertEqual("sbk-charts-version-windows-amd64/docs/POLICY.md", member)
+        self.assertNotIn("\\", member)
+
     def test_central_policy_defines_runtime_and_artifact_metadata(self):
         self.assertEqual("3.10", self.policy.runtime.minimum_python)
         self.assertEqual("venv-sbk-charts", self.policy.runtime.virtual_environment_names[0])
@@ -128,6 +142,23 @@ class PortableReleaseTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, str(version_path)):
                 application_version(selected_policy, root)
 
+    def test_requirements_strip_comments_but_preserve_url_fragments(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            requirements_file = Path(temporary) / "requirements.txt"
+            requirements_file.write_text(
+                "# comment\n"
+                "package>=1.0  # explanation\n"
+                "archive @ https://example.test/archive.whl#sha256=abc123\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                [
+                    "package>=1.0",
+                    "archive @ https://example.test/archive.whl#sha256=abc123",
+                ],
+                load_requirements(requirements_file),
+            )
+
     def test_launchers_and_ci_consume_runtime_policy(self):
         bash_launcher = (build_portable.ROOT / "sbk-charts").read_text(encoding="utf-8")
         powershell_launcher = (build_portable.ROOT / "sbk-charts.ps1").read_text(encoding="utf-8")
@@ -140,6 +171,8 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertNotIn('$MinimumPython = "3.10"', powershell_launcher)
         self.assertIn("scripts/project_policy.py --minimum-python", workflow)
         self.assertIn("needs.policy.outputs.minimum_python", workflow)
+        self.assertNotIn("actions/checkout@v", workflow)
+        self.assertNotIn("actions/setup-python@v", workflow)
 
     def test_packaging_consumes_application_metadata(self):
         setup_source = (build_portable.ROOT / "setup.py").read_text(encoding="utf-8")
