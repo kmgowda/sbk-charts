@@ -141,6 +141,22 @@ python_is_supported() {
         "$MINIMUM_PYTHON" >/dev/null 2>&1
 }
 
+python_can_create_venv() {
+    local python_path="$1"
+    local probe_root probe_python status
+    probe_root="$(mktemp -d "${TMPDIR:-/tmp}/sbk-charts-venv-probe.XXXXXX")" || return 1
+    probe_python="$probe_root/venv/bin/python"
+    status=0
+    "$python_path" -m venv "$probe_root/venv" >/dev/null 2>&1 || status=1
+    if [ "$status" -eq 0 ]; then
+        [ -x "$probe_python" ] && \
+            "$probe_python" -m ensurepip --version >/dev/null 2>&1 && \
+            "$probe_python" -m pip --version >/dev/null 2>&1 || status=1
+    fi
+    rm -rf "$probe_root"
+    return "$status"
+}
+
 last_output_line() {
     awk 'END { sub(/^[[:space:]]+/, ""); sub(/[[:space:]]+$/, ""); print }'
 }
@@ -164,8 +180,7 @@ environment_is_ready() {
         "$1" "$PROJECT_ROOT/scripts/project_policy.py" --environment-ready >/dev/null 2>&1 \
             || return 1
     fi
-    \
-        "$1" -m pip check >/dev/null 2>&1
+    "$1" -m pip check >/dev/null 2>&1 || return 1
 }
 
 install_project() {
@@ -312,22 +327,39 @@ prepare_bootstrap_manager() {
     archive_path="$temporary_dir/$archive_name"
     archive_url="$BOOTSTRAP_DOWNLOAD_BASE_URL/$BOOTSTRAP_MANAGER_VERSION/$archive_name"
     log "Downloading pinned $BOOTSTRAP_MANAGER $BOOTSTRAP_MANAGER_VERSION for $MANAGED_TARGET"
-    download_file "$archive_url" "$archive_path" || return 1
-    [ "$(sha256_file "$archive_path" 2>/dev/null || true)" = "$archive_sha" ] || {
-        log "Downloaded bootstrap manager failed SHA-256 verification"
+    if ! download_file "$archive_url" "$archive_path"; then
+        rm -rf "$temporary_dir"
         return 1
-    }
+    fi
+    if [ "$(sha256_file "$archive_path" 2>/dev/null || true)" != "$archive_sha" ]; then
+        log "Downloaded bootstrap manager failed SHA-256 verification"
+        rm -rf "$temporary_dir"
+        return 1
+    fi
     case "$archive_name" in
-        *.tar.gz) tar -xzf "$archive_path" -C "$temporary_dir" || return 1 ;;
-        *) return 1 ;;
+        *.tar.gz)
+            if ! tar -xzf "$archive_path" -C "$temporary_dir"; then
+                rm -rf "$temporary_dir"
+                return 1
+            fi
+            ;;
+        *)
+            rm -rf "$temporary_dir"
+            return 1
+            ;;
     esac
     extracted_tool="$(find "$temporary_dir" -type f -name "$BOOTSTRAP_MANAGER" -perm -u+x 2>/dev/null | head -n 1)"
-    [ -n "$extracted_tool" ] || return 1
-    mkdir -p "$tool_dir"
-    cp "$extracted_tool" "$BOOTSTRAP_MANAGER_PATH" || return 1
-    chmod 755 "$BOOTSTRAP_MANAGER_PATH" || return 1
+    if [ -z "$extracted_tool" ] || ! mkdir -p "$tool_dir" || \
+        ! cp "$extracted_tool" "$BOOTSTRAP_MANAGER_PATH" || \
+        ! chmod 755 "$BOOTSTRAP_MANAGER_PATH"; then
+        rm -rf "$temporary_dir"
+        return 1
+    fi
     printf '%s\n' "$archive_sha" > "$tool_dir/archive.sha256"
-    sha256_file "$BOOTSTRAP_MANAGER_PATH" > "$tool_dir/binary.sha256" || return 1
+    if ! sha256_file "$BOOTSTRAP_MANAGER_PATH" > "$tool_dir/binary.sha256"; then
+        rm -rf "$temporary_dir"
+        return 1
+    fi
     rm -rf "$temporary_dir"
 }
 
@@ -487,23 +519,26 @@ if command -v conda >/dev/null 2>&1; then
     fi
 fi
 
+if [ -z "${SBK_CHARTS_VENV:-}" ] && [ -n "$EXPECTED_FINGERPRINT" ]; then
+    create_managed_environment "$managed_environment" "$@"
+fi
+
 system_python=""
 while IFS= read -r python_command
 do
     if command -v "$python_command" >/dev/null 2>&1; then
         candidate="$(command -v "$python_command")"
         if python_is_supported "$candidate"; then
-            system_python="$candidate"
-            break
+            if python_can_create_venv "$candidate"; then
+                system_python="$candidate"
+                break
+            fi
+            log "Python candidate $candidate cannot create a working venv; trying the next candidate"
         fi
     fi
 done <<EOF
 $(printf '%s\n' "$UNIX_PYTHON_COMMANDS" | tr ',' '\n' | awk '{ gsub(/^[[:space:]]+|[[:space:]]+$/, ""); if (length) print }')
 EOF
-
-if [ -z "${SBK_CHARTS_VENV:-}" ] && [ -n "$EXPECTED_FINGERPRINT" ]; then
-    create_managed_environment "$managed_environment" "$@"
-fi
 
 venv_dir="${SBK_CHARTS_VENV:-$DEFAULT_VENV}"
 if [ -n "$system_python" ]; then

@@ -369,6 +369,8 @@ When `SBK_CHARTS_VENV` is not set, the selection order is:
 
 When `SBK_CHARTS_VENV` is set, the launcher tries that explicit path first and skips remembered, active, and project-local candidates. If it cannot use the explicit venv, it continues with the named Conda and environment-creation paths.
 
+Legacy environment creation checks Python candidates in policy order. A candidate is selected only after it creates a temporary venv whose `ensurepip` and `pip` commands work; failed probes are removed before the next interpreter is tried. Bootstrap-manager downloads and unpublished managed environments are also temporary and are removed on failure.
+
 An environment is reusable only when it has a supported Python, the installed distribution version matches the source version, the application and selected backend import, and the dependency check succeeds. A managed environment also must match the fingerprint of target, exact Python, selected profile, and lock contents. Creation is serialized by a bootstrap lock with a policy-controlled wait timeout and published by directory rename only after self-validation. The lock is released before the application process replaces the launcher. The successful runtime is written atomically to `.sbk-charts-runtime` immediately before the application starts.
 
 The static backend registry lets `--help` and core chart generation run without importing optional provider SDKs. Selecting a backend changes the dependency profile and imports only that implementation. Exact, hashed environments live in `requirements-lock/`; human-maintained inputs live in `requirements.txt` and `requirements-ai/`.

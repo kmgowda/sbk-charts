@@ -393,6 +393,10 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn("policy_value runtime bootstrap_lock_timeout_seconds", bash_launcher)
         self.assertIn("--require-hashes --requirement", bash_launcher)
         self.assertIn("venv --relocatable --managed-python", bash_launcher)
+        self.assertIn("python_can_create_venv", bash_launcher)
+        self.assertIn("cannot create a working venv; trying the next candidate", bash_launcher)
+        self.assertIn('rm -rf "$temporary_dir"', bash_launcher)
+        self.assertNotIn("\n    \\\n        \"$1\" -m pip check", bash_launcher)
         self.assertIn("Trying remembered managed environment", bash_launcher)
         self.assertIn('--remember-environment "$environment_kind" "$environment_prefix"', bash_launcher)
         self.assertIn(
@@ -415,6 +419,16 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn('"runtime.bootstrap_lock_timeout_seconds"', powershell_launcher)
         self.assertIn("--require-hashes --requirement", powershell_launcher)
         self.assertIn("venv --relocatable --managed-python", powershell_launcher)
+        self.assertIn("Test-PythonLauncherVenv", powershell_launcher)
+        self.assertIn("[int]::TryParse", powershell_launcher)
+        self.assertIn(
+            "if ($TemporaryEnvironment -and (Test-Path -LiteralPath $TemporaryEnvironment))",
+            powershell_launcher,
+        )
+        self.assertIn(
+            "if ($TemporaryDirectory -and (Test-Path -LiteralPath $TemporaryDirectory))",
+            powershell_launcher,
+        )
         self.assertIn("Trying remembered managed environment", powershell_launcher)
         self.assertIn("--remember-environment $EnvironmentKind", powershell_launcher)
         self.assertIn(
@@ -436,6 +450,9 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn("needs.policy.outputs.minimum_python", workflow)
         self.assertIn("managed-bootstrap-unix:", workflow)
         self.assertIn("managed-bootstrap-windows:", workflow)
+        self.assertIn("Skip a Python interpreter with broken venv support", workflow)
+        self.assertIn("Skip a Python launcher with broken venv support", workflow)
+        self.assertIn("Clean an unpublished managed environment after failure", workflow)
         self.assertIn('UV_OFFLINE: "true"', workflow)
         self.assertIn("python -m build --wheel --sdist", workflow)
         self.assertNotIn("actions/checkout@v", workflow)

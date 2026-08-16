@@ -53,10 +53,13 @@ $MinimumPython = Get-RequiredPolicyValue $Policy "runtime.minimum_python"
 $ManagedPython = Get-RequiredPolicyValue $Policy "runtime.managed_python"
 $ManagedRuntimeName = Get-RequiredPolicyValue $Policy "runtime.managed_runtime_directory"
 $LockDirectoryName = Get-RequiredPolicyValue $Policy "runtime.lock_directory"
-$BootstrapLockTimeoutSeconds = [int](
-    Get-RequiredPolicyValue $Policy "runtime.bootstrap_lock_timeout_seconds"
+$BootstrapLockTimeoutValue = Get-RequiredPolicyValue $Policy "runtime.bootstrap_lock_timeout_seconds"
+$BootstrapLockTimeoutSeconds = 0
+$BootstrapLockTimeoutIsValid = [int]::TryParse(
+    $BootstrapLockTimeoutValue,
+    [ref] $BootstrapLockTimeoutSeconds
 )
-if ($BootstrapLockTimeoutSeconds -lt 1) {
+if (-not $BootstrapLockTimeoutIsValid -or $BootstrapLockTimeoutSeconds -lt 1) {
     throw "Bootstrap lock timeout must be at least one second"
 }
 $BootstrapManager = Get-RequiredPolicyValue $Policy "bootstrap.manager"
@@ -132,6 +135,32 @@ function Test-SupportedPython {
     }
     & $PythonPath -c "import sys; required=tuple(map(int, sys.argv[1].split('.'))); raise SystemExit(0 if sys.version_info >= required else 1)" $MinimumPython 2>$null
     return $LASTEXITCODE -eq 0
+}
+
+function Test-PythonLauncherVenv {
+    param(
+        [string] $CommandPath,
+        [string[]] $Prefix
+    )
+    $ProbeRoot = Join-Path ([System.IO.Path]::GetTempPath()) `
+        "sbk-charts-venv-probe-$([guid]::NewGuid().ToString('N'))"
+    $ProbeEnvironment = Join-Path $ProbeRoot "venv"
+    try {
+        New-Item -ItemType Directory -Force -Path $ProbeRoot | Out-Null
+        $CreateArguments = @($Prefix) + @("-m", "venv", $ProbeEnvironment)
+        & $CommandPath @CreateArguments *> $null
+        if ($LASTEXITCODE -ne 0) { return $false }
+        $ProbePython = Join-Path $ProbeEnvironment "Scripts\python.exe"
+        if (-not (Test-Path -LiteralPath $ProbePython -PathType Leaf)) { return $false }
+        & $ProbePython -m ensurepip --version *> $null
+        if ($LASTEXITCODE -ne 0) { return $false }
+        & $ProbePython -m pip --version *> $null
+        return $LASTEXITCODE -eq 0
+    } finally {
+        if (Test-Path -LiteralPath $ProbeRoot) {
+            Remove-Item -LiteralPath $ProbeRoot -Recurse -Force
+        }
+    }
 }
 
 function Test-EnvironmentReady {
@@ -241,35 +270,41 @@ function Get-BootstrapManager {
         if ($ActualBinarySha -eq $ExpectedBinarySha) { return $ToolPath }
     }
 
-    $TemporaryDirectory = Join-Path $ManagedRuntimeRoot ".tool-$([guid]::NewGuid().ToString('N'))"
-    New-Item -ItemType Directory -Force -Path $TemporaryDirectory | Out-Null
-    $ArchivePath = Join-Path $TemporaryDirectory $ArchiveName
-    $ArchiveUrl = "$BootstrapDownloadBaseUrl/$BootstrapManagerVersion/$ArchiveName"
-    Write-LauncherMessage "Downloading pinned $BootstrapManager $BootstrapManagerVersion for $ManagedTarget"
-    for ($DownloadAttempt = 1; $DownloadAttempt -le 3; $DownloadAttempt++) {
-        try {
-            Invoke-WebRequest -UseBasicParsing -Uri $ArchiveUrl -OutFile $ArchivePath
-            break
-        } catch {
-            if ($DownloadAttempt -eq 3) { throw }
-            Start-Sleep -Seconds $DownloadAttempt
+    $TemporaryDirectory = $null
+    try {
+        $TemporaryDirectory = Join-Path $ManagedRuntimeRoot ".tool-$([guid]::NewGuid().ToString('N'))"
+        New-Item -ItemType Directory -Force -Path $TemporaryDirectory | Out-Null
+        $ArchivePath = Join-Path $TemporaryDirectory $ArchiveName
+        $ArchiveUrl = "$BootstrapDownloadBaseUrl/$BootstrapManagerVersion/$ArchiveName"
+        Write-LauncherMessage "Downloading pinned $BootstrapManager $BootstrapManagerVersion for $ManagedTarget"
+        for ($DownloadAttempt = 1; $DownloadAttempt -le 3; $DownloadAttempt++) {
+            try {
+                Invoke-WebRequest -UseBasicParsing -Uri $ArchiveUrl -OutFile $ArchivePath
+                break
+            } catch {
+                if ($DownloadAttempt -eq 3) { throw }
+                Start-Sleep -Seconds $DownloadAttempt
+            }
+        }
+        $ActualSha = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($ActualSha -ne $ArchiveSha) {
+            throw "Downloaded bootstrap manager failed SHA-256 verification"
+        }
+        Expand-Archive -LiteralPath $ArchivePath -DestinationPath $TemporaryDirectory -Force
+        $ExtractedTool = Get-ChildItem -LiteralPath $TemporaryDirectory -Filter "$BootstrapManager.exe" `
+            -File -Recurse | Select-Object -First 1
+        if (-not $ExtractedTool) { throw "Bootstrap manager executable is missing from $ArchiveName" }
+        New-Item -ItemType Directory -Force -Path $ToolDirectory | Out-Null
+        Copy-Item -LiteralPath $ExtractedTool.FullName -Destination $ToolPath -Force
+        Set-Content -LiteralPath $ChecksumMarker -Value $ArchiveSha -Encoding ASCII
+        $BinarySha = (Get-FileHash -LiteralPath $ToolPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        Set-Content -LiteralPath $BinaryChecksumMarker -Value $BinarySha -Encoding ASCII
+        return $ToolPath
+    } finally {
+        if ($TemporaryDirectory -and (Test-Path -LiteralPath $TemporaryDirectory)) {
+            Remove-Item -LiteralPath $TemporaryDirectory -Recurse -Force
         }
     }
-    $ActualSha = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($ActualSha -ne $ArchiveSha) {
-        throw "Downloaded bootstrap manager failed SHA-256 verification"
-    }
-    Expand-Archive -LiteralPath $ArchivePath -DestinationPath $TemporaryDirectory -Force
-    $ExtractedTool = Get-ChildItem -LiteralPath $TemporaryDirectory -Filter "$BootstrapManager.exe" `
-        -File -Recurse | Select-Object -First 1
-    if (-not $ExtractedTool) { throw "Bootstrap manager executable is missing from $ArchiveName" }
-    New-Item -ItemType Directory -Force -Path $ToolDirectory | Out-Null
-    Copy-Item -LiteralPath $ExtractedTool.FullName -Destination $ToolPath -Force
-    Set-Content -LiteralPath $ChecksumMarker -Value $ArchiveSha -Encoding ASCII
-    $BinarySha = (Get-FileHash -LiteralPath $ToolPath -Algorithm SHA256).Hash.ToLowerInvariant()
-    Set-Content -LiteralPath $BinaryChecksumMarker -Value $BinarySha -Encoding ASCII
-    Remove-Item -LiteralPath $TemporaryDirectory -Recurse -Force
-    return $ToolPath
 }
 
 function Start-ManagedEnvironment {
@@ -305,6 +340,7 @@ function Start-ManagedEnvironment {
     }
     if (-not $LockAcquired) { throw "Timed out waiting for bootstrap lock $LockPath" }
     Set-Content -LiteralPath (Join-Path $LockPath "pid") -Value $PID -Encoding ASCII
+    $TemporaryEnvironment = $null
     try {
         if (Test-Path -LiteralPath (Join-Path $EnvironmentPrefix "Scripts\python.exe")) {
             Use-EnvironmentPrefix -EnvironmentPrefix $EnvironmentPrefix -EnvironmentKind "managed" `
@@ -342,7 +378,11 @@ function Start-ManagedEnvironment {
         }
         New-Item -ItemType Directory -Force -Path (Split-Path $EnvironmentPrefix) | Out-Null
         Move-Item -LiteralPath $TemporaryEnvironment -Destination $EnvironmentPrefix
+        $TemporaryEnvironment = $null
     } finally {
+        if ($TemporaryEnvironment -and (Test-Path -LiteralPath $TemporaryEnvironment)) {
+            Remove-Item -LiteralPath $TemporaryEnvironment -Recurse -Force
+        }
         if (Test-Path -LiteralPath $LockPath) {
             Remove-Item -LiteralPath $LockPath -Recurse -Force
         }
@@ -479,8 +519,11 @@ foreach ($Launcher in $PythonLaunchers) {
     )
     & $Command.Source @ProbeArguments 2>$null
     if ($LASTEXITCODE -eq 0) {
-        $SupportedLauncher = @{ Command = $Command.Source; Prefix = @($Launcher.Prefix) }
-        break
+        if (Test-PythonLauncherVenv -CommandPath $Command.Source -Prefix @($Launcher.Prefix)) {
+            $SupportedLauncher = @{ Command = $Command.Source; Prefix = @($Launcher.Prefix) }
+            break
+        }
+        Write-LauncherMessage "Python candidate $($Command.Source) cannot create a working venv; trying the next candidate"
     }
 }
 

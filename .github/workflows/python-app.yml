@@ -52,6 +52,30 @@ jobs:
       run: python -m unittest discover -s tests -p "test_portable.py"
     - name: Build wheel and source distribution
       run: python -m build --wheel --sdist
+    - name: Skip a Python interpreter with broken venv support
+      shell: bash
+      run: |
+        working_python="$(command -v python)"
+        fake_bin="$RUNNER_TEMP/fake-python-bin"
+        probe_tmp="$RUNNER_TEMP/venv-probes"
+        mkdir -p "$fake_bin" "$probe_tmp"
+        cat > "$fake_bin/python3.12" <<'EOF'
+        #!/usr/bin/env bash
+        if [ "${1:-}" = "-c" ]; then
+            exit 0
+        fi
+        exit 1
+        EOF
+        chmod +x "$fake_bin/python3.12"
+        ln -s "$working_python" "$fake_bin/python3.11"
+        PATH="$fake_bin:$PATH" \
+        TMPDIR="$probe_tmp" \
+        SBK_CHARTS_VENV="$RUNNER_TEMP/legacy-venv" \
+        SBK_CHARTS_STATE_FILE="$RUNNER_TEMP/legacy-state" \
+            ./sbk-charts -h > legacy-help.txt 2> legacy-runtime.txt
+        grep -q "Environment: venv" legacy-help.txt
+        grep -q "cannot create a working venv; trying the next candidate" legacy-runtime.txt
+        test -z "$(find "$probe_tmp" -mindepth 1 -maxdepth 1 -print -quit)"
 #    - name: Test with pytest
 #      run: |
 #        pytest
@@ -86,6 +110,69 @@ jobs:
       env:
         SBK_CHARTS_VENV: ${{ github.workspace }}\venv-sbk-charts
       run: sbk-charts.bat -h
+    - name: Skip a Python launcher with broken venv support
+      shell: pwsh
+      run: |
+        $FakeBin = Join-Path $env:RUNNER_TEMP "fake-python-bin"
+        $ProbeTemp = Join-Path $env:RUNNER_TEMP "venv-probes"
+        New-Item -ItemType Directory -Force -Path $FakeBin, $ProbeTemp | Out-Null
+        @'
+        @echo off
+        if "%~2"=="-c" exit /b 0
+        exit /b 1
+        '@ | Set-Content -LiteralPath (Join-Path $FakeBin "py.cmd") -Encoding ASCII
+        $env:PATH = "$FakeBin;$env:PATH"
+        $env:TEMP = $ProbeTemp
+        $env:TMP = $ProbeTemp
+        $env:SBK_CHARTS_VENV = Join-Path $env:RUNNER_TEMP "legacy-venv"
+        $env:SBK_CHARTS_STATE_FILE = Join-Path $env:RUNNER_TEMP "legacy-state"
+        .\sbk-charts.ps1 -h 1> legacy-help.txt 2> legacy-runtime.txt
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        if (-not (Select-String -Quiet -Path legacy-help.txt -Pattern "Environment: venv")) {
+          throw "The working Python launcher was not selected"
+        }
+        if (-not (Select-String -Quiet -Path legacy-runtime.txt -Pattern "cannot create a working venv")) {
+          throw "The broken Python launcher was not skipped"
+        }
+        if (Get-ChildItem -LiteralPath $ProbeTemp -Force | Select-Object -First 1) {
+          throw "A venv probe directory was not cleaned"
+        }
+    - name: Clean an unpublished managed environment after failure
+      shell: pwsh
+      run: |
+        $SavedVenv = Join-Path $env:RUNNER_TEMP "saved-project-venv"
+        Move-Item -LiteralPath .\venv-sbk-charts -Destination $SavedVenv
+        $FakeUv = Join-Path $env:RUNNER_TEMP "failing-uv.cmd"
+        @'
+        @echo off
+        if "%~1"=="python" exit /b 0
+        if not "%~1"=="venv" exit /b 1
+        set "last="
+        :next
+        if "%~1"=="" goto create
+        set "last=%~1"
+        shift
+        goto next
+        :create
+        mkdir "%last%"
+        exit /b 1
+        '@ | Set-Content -LiteralPath $FakeUv -Encoding ASCII
+        $FailedRuntime = Join-Path $env:RUNNER_TEMP "failed-managed-runtime"
+        $env:SBK_CHARTS_UV = $FakeUv
+        $env:SBK_CHARTS_RUNTIME_ROOT = $FailedRuntime
+        $env:SBK_CHARTS_STATE_FILE = Join-Path $env:RUNNER_TEMP "managed-failure-state"
+        Remove-Item Env:SBK_CHARTS_VENV -ErrorAction SilentlyContinue
+        .\sbk-charts.ps1 -h 1> failure-help.txt 2> failure-runtime.txt
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        if (-not (Select-String -Quiet -Path failure-help.txt -Pattern "Environment: venv")) {
+          throw "Legacy venv fallback did not run after managed failure"
+        }
+        if (Get-ChildItem -LiteralPath $FailedRuntime -Filter ".env-*" -Force | Select-Object -First 1) {
+          throw "An unpublished managed environment was not cleaned"
+        }
+        if (Test-Path -LiteralPath (Join-Path $FailedRuntime "bootstrap.lock")) {
+          throw "The bootstrap lock was not cleaned"
+        }
 
   managed-bootstrap-unix:
     name: Managed bootstrap (${{ matrix.name }})
