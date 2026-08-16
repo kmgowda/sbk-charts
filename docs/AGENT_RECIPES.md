@@ -228,7 +228,7 @@ Do not add ChromaDB as a required dependency merely because the alternative impl
 
 Relevant files are `sbk-charts`, `sbk-charts.ps1`, `sbk-charts.bat`, `sbk-charts.ini`, and `scripts/project_policy.py`.
 
-Preserve the main selection priorities. An explicit venv is tried first. Otherwise the launcher tries remembered, active, project-local, and named Conda environments before the fingerprinted managed environment. On a supported target it then verifies pinned `uv`, installs the exact managed Python, installs the selected hashed lock, self-checks, publishes atomically, and remembers it. Legacy venv/Conda creation remains a fallback for unsupported managed targets. Validate Unix `bin/python`, Windows `Scripts\python.exe`, fingerprints, profiles, locking, checksum rejection, first-run creation, and second-run offline reuse.
+Preserve the selection stages. An explicit venv is tried first. Without that override, remembered, active, and project-local environments are preferred. Existing fingerprinted-managed and named-Conda environments are then considered; their relative order differs between Bash and PowerShell, but remembered state is first on both. Managed creation is attempted only when no explicit venv override is set. If it is unsupported or fails, legacy venv/Conda preparation remains available. A system Python candidate must prove it can create a temporary venv with working `ensurepip` and `pip` before selection. Validate Unix `bin/python`, Windows `Scripts\python.exe`, fingerprints, profiles, locking and timeout errors, checksum rejection, cleanup of failed temporary paths, first-run creation, and second-run offline reuse.
 
 Required checks include:
 
@@ -238,7 +238,7 @@ bash -n sbk-charts
 venv-sbk-charts/bin/python -m unittest discover -s tests -v
 ```
 
-Test the changed selection branch, runtime detail output, state persistence, and argument forwarding. Windows changes require a real Windows PowerShell/batch smoke test before release approval.
+Test the changed selection branch, runtime detail output, state persistence, and argument forwarding. Include a broken-first-interpreter regression when changing legacy fallback. Windows state tests must cover a legacy profile without a managed fingerprint because Windows PowerShell 5.1 drops empty native-command arguments. Windows changes require a real Windows PowerShell/batch smoke test before release approval.
 
 ## 12. Change centralized policy
 

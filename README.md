@@ -63,9 +63,9 @@ Windows Command Prompt:
 sbk-charts.bat -i samples\charts\sbk-file-read.csv -o out.xlsx
 ```
 
-On first use, the source launcher reuses a valid existing environment when possible. Otherwise it downloads a pinned, checksum-verified `uv`, installs the project-managed Python 3.12.10, and creates a locked environment under `.sbk-runtime/`. This works even when Python, venv, and Conda are absent. The first bootstrap needs HTTPS access to GitHub Releases and the Python package index.
+On first use, the source launcher reuses a valid existing environment when possible. Otherwise, on a supported target, it downloads a pinned, checksum-verified `uv`, installs the project-managed Python 3.12.10, and creates a locked environment under `.sbk-runtime/`. This works even when Python, venv, and Conda are absent. The first bootstrap needs HTTPS access to GitHub Releases and the Python package index. If managed setup is unsupported or fails, the launcher removes unpublished temporary files and tries usable system Python interpreters and Conda before it gives up.
 
-Later runs validate and reuse the saved environment without downloading anything. The launcher prints the operating system, exact Python executable, Python version, and whether it selected a managed, virtual, or Conda environment. Core chart generation installs only core packages. Selecting an AI backend creates or reuses that backend's dependency profile, so PyTorch and cloud SDKs are not required for normal chart generation.
+Later runs validate and reuse the saved environment without downloading anything when it is still compatible with the application, selected profile, and dependency lock. The launcher prints the operating system, exact Python executable, Python version, and whether it selected a managed, virtual, or Conda environment. Core chart generation installs only core packages. Selecting an AI backend creates or reuses that backend's dependency profile, so PyTorch and cloud SDKs are not required for normal chart generation.
 
 ## Command-line syntax
 
@@ -237,15 +237,15 @@ flowchart TD
     A[Start launcher] --> B{Explicit SBK_CHARTS_VENV set?}
     B -- Yes --> C{Explicit venv works?}
     C -- Yes --> H[Validated environment]
-    C -- No --> E{Named Conda environment works?}
+    C -- No --> E{Existing managed or named Conda environment works?}
     B -- No --> D{Remembered active or project environment works?}
     D -- Yes --> H
     D -- No --> E
     E -- Yes --> H
-    E -- No --> F{Managed target supported?}
+    E -- No --> F{Managed creation allowed and target supported?}
     F -- Yes --> G[Verify uv and install exact Python plus locked profile]
     G --> H
-    F -- No --> I{Can legacy venv or Conda be prepared?}
+    F -- No --> I{Can a venv-capable Python or Conda be prepared?}
     I -- Yes --> H
     I -- No --> L[Use a supported portable release]
     H --> J[Remember environment and report runtime]
@@ -263,6 +263,8 @@ Useful overrides:
 | `SBK_CHARTS_UV` | Use a pre-downloaded `uv` executable. Mainly useful for offline provisioning and tests. |
 
 The default state file is `.sbk-charts-runtime` in the project root. It records environment kind, prefix, dependency profile, and fingerprint. Delete that small file if you deliberately want the launcher to forget its last validated choice. Managed files remain under `.sbk-runtime/` and can still be found by fingerprint.
+
+`SBK_CHARTS_VENV` is a strict preference. The launcher first tries that directory and, if needed, may create a normal venv there from a working system Python. While the override is set, it does not create a new managed environment. It can still reuse an already-valid managed or named Conda environment and can fall back to Conda if the requested venv cannot be prepared.
 
 ## Manual development setup
 
@@ -320,6 +322,10 @@ python -c \
 ### The launcher keeps selecting the wrong environment
 
 Use `SBK_CHARTS_VENV` for a specific virtual environment, `SBK_CHARTS_CONDA_ENV` for a specific Conda name, or remove `.sbk-charts-runtime` to clear the remembered choice. A managed environment is reused only when its target, exact Python, selected dependency profile, lock fingerprint, application import, and package check remain valid.
+
+### Managed bootstrap fails or repeatedly leaves no usable environment
+
+The launcher checks system Python candidates in the order configured in `sbk-charts.ini`. A version-compatible interpreter is skipped if it cannot create a temporary venv with working `ensurepip` and `pip`; the launcher then tries the next candidate. Temporary interpreter probes, failed `uv` downloads, and unpublished managed environments are removed automatically. Another bootstrap process may hold the lock for up to the configured timeout, currently 300 seconds. If setup still fails, keep the complete launcher messages and check network access to GitHub Releases and the package index, free disk space, proxy settings, and the selected backend's wheel availability.
 
 ### Chart generation stops after printing the time unit
 

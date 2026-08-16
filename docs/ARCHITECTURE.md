@@ -357,17 +357,17 @@ There are three source launchers:
 
 They use native shell logic to read `sbk-charts.ini` because Python may not exist yet. A supported launcher can download a pinned, SHA-256-verified `uv`, use it to install an exact project-managed Python, and build an environment from a hashed lock. After choosing Python, the launcher uses `scripts/project_policy.py` for shared validation, runtime reporting, and remembered-environment state.
 
-When `SBK_CHARTS_VENV` is not set, the selection order is:
+When `SBK_CHARTS_VENV` is not set, runtime selection happens in stages:
 
-1. last validated environment from the state file;
-2. active virtual or Conda environment;
-3. known project-local virtual environments;
-4. the configured existing Conda environment;
-5. the fingerprinted project-managed environment;
-6. creation of the project-managed Python and locked environment;
-7. legacy creation of a virtual or Conda environment on unsupported managed targets.
+1. try the last validated environment from the state file;
+2. try the active virtual or Conda environment and known project-local virtual environments;
+3. try reusable fingerprinted-managed and configured named-Conda environments;
+4. on a supported managed target, create the exact managed Python and locked environment;
+5. if managed setup is unsupported or fails, probe system Python candidates for venv support and then prepare the named Conda environment.
 
-When `SBK_CHARTS_VENV` is set, the launcher tries that explicit path first and skips remembered, active, and project-local candidates. If it cannot use the explicit venv, it continues with the named Conda and environment-creation paths.
+The two native implementations differ only within stage 3: Bash checks the fingerprinted managed directory before the named Conda environment, while PowerShell checks the named Conda environment first. The remembered state remains the first preference on both, so a previously successful choice is reused consistently.
+
+When `SBK_CHARTS_VENV` is set, the launcher tries that explicit path first and skips remembered, active, and project-local candidates. It does not create a new managed environment while the override is set. If the explicit venv is unusable, it may reuse an existing managed or named Conda environment, create the requested normal venv with a suitable system Python, or fall back to Conda.
 
 Legacy environment creation checks Python candidates in policy order. A candidate is selected only after it creates a temporary venv whose `ensurepip` and `pip` commands work; failed probes are removed before the next interpreter is tried. Bootstrap-manager downloads and unpublished managed environments are also temporary and are removed on failure.
 
@@ -417,14 +417,18 @@ Portable archives are checksummed but not code-signed or notarized.
 
 ## 16. Tests and CI
 
-`tests/test_portable.py` covers policy parsing and validation, safe requirements parsing, AST version lookup, portable argument forwarding, archive creation, Windows ZIP names, environment validation, runtime details, remembered state, and launcher/workflow contracts.
+`tests/test_portable.py` covers policy parsing and validation, safe requirements parsing, AST version lookup, portable argument forwarding, archive creation, Windows ZIP names, environment validation, runtime details, remembered state including profile-only legacy state, and launcher/workflow contracts.
 
 The main CI workflow:
 
 - reads the minimum Python version from policy;
 - runs flake8 syntax and undefined-name checks;
 - runs the portable-policy unit tests;
-- creates a Windows virtual environment and smoke-tests both Windows launchers.
+- verifies package builds and the Bash launcher on Linux;
+- verifies fresh and offline managed bootstrap on Linux, macOS Apple silicon, and Windows;
+- creates a Windows virtual environment and smoke-tests both Windows launchers;
+- verifies that launchers skip a version-compatible Python that cannot create a working venv;
+- verifies failed bootstrap downloads and unpublished environments do not leave temporary directories.
 
 The portable workflow:
 
@@ -473,11 +477,11 @@ Detailed procedures and acceptance checks are in [AGENT_RECIPES.md](AGENT_RECIPE
 
 | Failure | Expected behavior |
 |---|---|
-| No supported Python and no usable Conda | Launcher exits with an explanation. |
+| No managed runtime can be provisioned and no venv-capable Python or usable Conda exists | Launcher exits with an explanation. |
 | Environment is stale or dependencies fail validation | Launcher attempts repair or another environment. |
 | Input CSV cannot be read | Sheet creation fails; no valid report can be produced. |
 | Compared latency units differ | Graph generation is skipped to avoid invalid charts. |
-| One plugin cannot import | It is omitted; other plugins remain available. |
+| A selected plugin cannot import | Its command remains visible through the lazy registry; startup reports the backend import failure without importing unrelated plugins. |
 | AI credential or service is unavailable | Backend returns readable failure text; charts remain usable. |
 | AI exceeds its time budget | Missing results are marked timed out. |
 | Chat retrieval finds little context | The backend still receives the question, but its answer may be more general. |

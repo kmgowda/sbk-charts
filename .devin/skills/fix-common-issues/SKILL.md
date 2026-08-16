@@ -19,6 +19,8 @@ Inspect `.sbk-charts-runtime`, `.sbk-runtime/`, `SBK_CHARTS_VENV`, `SBK_CHARTS_C
 
 Run `./sbk-charts -h` and read the printed OS, interpreter, environment kind, and prefix. Do not remove validation merely to hide a real dependency conflict.
 
+If legacy fallback selects no Python, test every configured candidate instead of stopping at the first version-compatible executable. Each candidate must create a temporary venv with working `ensurepip` and `pip`. Failed probes, `.tool.*` downloads, and unpublished `.env-*` directories should be removed automatically. On Windows, also verify the CMD shim remembers a backend profile when the legacy environment has no managed fingerprint.
+
 ## Charts are missing
 
 Check that the workbook contains matching `R<digits>` and `T<digits>` sheets, required exact headers, and one latency time unit across compared R sheets. Use `get_columns_from_worksheet()` rather than assumed column positions.

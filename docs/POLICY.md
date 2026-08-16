@@ -130,6 +130,10 @@ profile=core
 
 The write is atomic. The remembered environment is a preference, not proof that the previous workbook operation completed and not an unconditional trust decision. It is validated again before reuse.
 
+Managed records carry both fingerprint and profile. Legacy venv and Conda records have an empty fingerprint but still retain the selected profile. `project_policy.py --remember-environment` therefore accepts three values for the default core profile, four values for a profile without a fingerprint, or five values for fingerprint plus profile. The four-value form is required by Windows PowerShell 5.1 because it can discard an empty argument passed to a native Python process.
+
+Bootstrap policy also controls the maximum lock wait. Both launchers remove failed Python-venv probes, incomplete runtime-manager downloads, and unpublished managed environments. A supported Python version alone is insufficient for legacy setup: the interpreter must successfully create a temporary venv with working `ensurepip` and `pip` before it is selected.
+
 ## How to change policy safely
 
 1. Identify every consumer with `rg`.
