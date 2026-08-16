@@ -118,7 +118,7 @@ The stage order is an architectural invariant. Chart code expects R/T sheets to 
 - `-nothreads`;
 - `-chat`.
 
-It reads a static lightweight registry and creates one argparse subcommand per backend without importing provider SDKs. A new backend requires a registry descriptor whose flags match the implementation's `parse_args()` contract.
+It reads a static lightweight registry and creates one argparse subcommand per backend without importing provider SDKs. Each descriptor explicitly provides the command name, implementation module and class, and argument-registration function. Those flags must match the implementation's `parse_args()` contract.
 
 ```mermaid
 flowchart TD
@@ -252,19 +252,19 @@ Metadata columns such as ID, Header, Type, Storage, Action, and Latency Time Uni
 `src/ai/registry.py` declares the stable command name, implementation module, class, and CLI argument builder for each backend. It does not import optional provider modules. `load_backend_class()` imports only the command selected by the user:
 
 ```text
-Gemini      -> gemini
-HuggingFace -> huggingface
-LmStudio    -> lmstudio
-PyTorchLLM  -> pytorchllm
+gemini      -> Gemini
+huggingface -> HuggingFace
+lmstudio    -> LmStudio
+pytorchllm  -> PyTorchLLM
 ```
 
-This keeps `sbk-charts -h` and core chart generation independent of optional SDKs. A missing package produces an error only when its backend is selected. `src/ai/discover.py` remains a developer diagnostic, not the runtime command registry.
+This keeps `sbk-charts -h` and core chart generation independent of optional SDKs. `SbkAI.parse_args()` imports only the selected descriptor's implementation, so a missing package fails after selection rather than hiding commands from help. `src/ai/discover.py` remains a developer diagnostic, not the runtime command registry.
 
 ### 10.2 Interface
 
 `SbkGenAI` defines lifecycle hooks, model description, four analysis methods, and chat response behavior. A backend normally implements:
 
-- `add_args(parser)` and `parse_args(args)`;
+- descriptor-owned argument registration and implementation-owned `parse_args(args)`;
 - `open(args)` and `close(args)` when it owns resources;
 - `get_model_description()`;
 - `get_throughput_analysis()`;
@@ -369,7 +369,7 @@ When `SBK_CHARTS_VENV` is not set, the selection order is:
 
 When `SBK_CHARTS_VENV` is set, the launcher tries that explicit path first and skips remembered, active, and project-local candidates. If it cannot use the explicit venv, it continues with the named Conda and environment-creation paths.
 
-An environment is reusable only when it has a supported Python, the installed distribution version matches the source version, the application and selected backend import, and the dependency check succeeds. A managed environment also must match the fingerprint of target, exact Python, selected profile, and lock contents. Creation is serialized by a bootstrap lock and published by directory rename only after self-validation. The successful runtime is written atomically to `.sbk-charts-runtime` immediately before the application starts.
+An environment is reusable only when it has a supported Python, the installed distribution version matches the source version, the application and selected backend import, and the dependency check succeeds. A managed environment also must match the fingerprint of target, exact Python, selected profile, and lock contents. Creation is serialized by a bootstrap lock with a policy-controlled wait timeout and published by directory rename only after self-validation. The lock is released before the application process replaces the launcher. The successful runtime is written atomically to `.sbk-charts-runtime` immediately before the application starts.
 
 The static backend registry lets `--help` and core chart generation run without importing optional provider SDKs. Selecting a backend changes the dependency profile and imports only that implementation. Exact, hashed environments live in `requirements-lock/`; human-maintained inputs live in `requirements.txt` and `requirements-ai/`.
 

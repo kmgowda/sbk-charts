@@ -53,6 +53,12 @@ $MinimumPython = Get-RequiredPolicyValue $Policy "runtime.minimum_python"
 $ManagedPython = Get-RequiredPolicyValue $Policy "runtime.managed_python"
 $ManagedRuntimeName = Get-RequiredPolicyValue $Policy "runtime.managed_runtime_directory"
 $LockDirectoryName = Get-RequiredPolicyValue $Policy "runtime.lock_directory"
+$BootstrapLockTimeoutSeconds = [int](
+    Get-RequiredPolicyValue $Policy "runtime.bootstrap_lock_timeout_seconds"
+)
+if ($BootstrapLockTimeoutSeconds -lt 1) {
+    throw "Bootstrap lock timeout must be at least one second"
+}
 $BootstrapManager = Get-RequiredPolicyValue $Policy "bootstrap.manager"
 $BootstrapManagerVersion = Get-RequiredPolicyValue $Policy "bootstrap.manager_version"
 $BootstrapDownloadBaseUrl = Get-RequiredPolicyValue $Policy "bootstrap.download_base_url"
@@ -280,7 +286,7 @@ function Start-ManagedEnvironment {
     New-Item -ItemType Directory -Force -Path $ManagedRuntimeRoot | Out-Null
     $LockPath = Join-Path $ManagedRuntimeRoot "bootstrap.lock"
     $LockAcquired = $false
-    for ($Attempt = 0; $Attempt -lt 60 -and -not $LockAcquired; $Attempt++) {
+    for ($Attempt = 0; $Attempt -lt $BootstrapLockTimeoutSeconds -and -not $LockAcquired; $Attempt++) {
         try {
             New-Item -ItemType Directory -Path $LockPath -ErrorAction Stop | Out-Null
             $LockAcquired = $true
@@ -301,7 +307,8 @@ function Start-ManagedEnvironment {
     Set-Content -LiteralPath (Join-Path $LockPath "pid") -Value $PID -Encoding ASCII
     try {
         if (Test-Path -LiteralPath (Join-Path $EnvironmentPrefix "Scripts\python.exe")) {
-            Use-EnvironmentPrefix $EnvironmentPrefix "managed" $Arguments `
+            Use-EnvironmentPrefix -EnvironmentPrefix $EnvironmentPrefix -EnvironmentKind "managed" `
+                -Arguments $Arguments `
                 -PythonRelativePath "Scripts\python.exe" -EnvironmentFingerprint $ExpectedFingerprint `
                 -EnvironmentProfile $SelectedProfile -Managed
         }
@@ -318,7 +325,7 @@ function Start-ManagedEnvironment {
         if ($LASTEXITCODE -ne 0) { throw "Could not install managed Python $ManagedPython" }
         $TemporaryEnvironment = Join-Path $ManagedRuntimeRoot `
             ".env-$ExpectedFingerprint-$([guid]::NewGuid().ToString('N'))"
-        & $UvPath venv --managed-python --seed --python $ManagedPython $TemporaryEnvironment
+        & $UvPath venv --relocatable --managed-python --seed --python $ManagedPython $TemporaryEnvironment
         if ($LASTEXITCODE -ne 0) { throw "Could not create managed environment" }
         $ManagedPythonPath = Join-Path $TemporaryEnvironment "Scripts\python.exe"
         & $UvPath pip install --python $ManagedPythonPath --require-hashes --requirement $LockFile
@@ -340,7 +347,8 @@ function Start-ManagedEnvironment {
             Remove-Item -LiteralPath $LockPath -Recurse -Force
         }
     }
-    Use-EnvironmentPrefix $EnvironmentPrefix "managed" $Arguments `
+    Use-EnvironmentPrefix -EnvironmentPrefix $EnvironmentPrefix -EnvironmentKind "managed" `
+        -Arguments $Arguments `
         -PythonRelativePath "Scripts\python.exe" -EnvironmentFingerprint $ExpectedFingerprint `
         -EnvironmentProfile $SelectedProfile -Managed
     throw "Managed environment could not start $AppName"
@@ -369,16 +377,19 @@ if (-not $env:SBK_CHARTS_VENV) {
         $PreferredFingerprint -eq $ExpectedFingerprint -and
         $PreferredProfile -eq $SelectedProfile) {
         Write-LauncherMessage "Trying remembered managed environment $PreferredPrefix"
-        Use-EnvironmentPrefix $PreferredPrefix "managed" $ApplicationArguments `
+        Use-EnvironmentPrefix -EnvironmentPrefix $PreferredPrefix -EnvironmentKind "managed" `
+            -Arguments $ApplicationArguments `
             -PythonRelativePath "Scripts\python.exe" -EnvironmentFingerprint $ExpectedFingerprint `
             -EnvironmentProfile $SelectedProfile -Managed
     } elseif ($PreferredPrefix -and $PreferredKind -eq "venv") {
         Write-LauncherMessage "Trying remembered venv environment $PreferredPrefix"
-        Use-EnvironmentPrefix $PreferredPrefix "venv" $ApplicationArguments `
+        Use-EnvironmentPrefix -EnvironmentPrefix $PreferredPrefix -EnvironmentKind "venv" `
+            -Arguments $ApplicationArguments `
             -PythonRelativePath "Scripts\python.exe" -EnvironmentProfile $SelectedProfile
     } elseif ($PreferredPrefix -and $PreferredKind -eq "conda") {
         Write-LauncherMessage "Trying remembered Conda environment $PreferredPrefix"
-        Use-EnvironmentPrefix $PreferredPrefix "conda" $ApplicationArguments `
+        Use-EnvironmentPrefix -EnvironmentPrefix $PreferredPrefix -EnvironmentKind "conda" `
+            -Arguments $ApplicationArguments `
             -EnvironmentProfile $SelectedProfile
     }
 }
@@ -399,19 +410,22 @@ foreach ($EnvironmentPrefix in $EnvironmentCandidates) {
         continue
     }
     $SeenCandidates[$CandidateKey] = $true
-    Use-EnvironmentPrefix $EnvironmentPrefix "venv" $ApplicationArguments `
+    Use-EnvironmentPrefix -EnvironmentPrefix $EnvironmentPrefix -EnvironmentKind "venv" `
+        -Arguments $ApplicationArguments `
         -PythonRelativePath "Scripts\python.exe" -EnvironmentProfile $SelectedProfile
 }
 
 if (-not $env:SBK_CHARTS_VENV) {
-    Use-EnvironmentPrefix $env:CONDA_PREFIX "conda" $ApplicationArguments `
+    Use-EnvironmentPrefix -EnvironmentPrefix $env:CONDA_PREFIX -EnvironmentKind "conda" `
+        -Arguments $ApplicationArguments `
         -EnvironmentProfile $SelectedProfile
 
     $ProjectEnvironmentCandidates = @($VirtualEnvironmentNames | ForEach-Object {
         Join-Path $ProjectRoot $_
     })
     foreach ($EnvironmentPrefix in $ProjectEnvironmentCandidates) {
-        Use-EnvironmentPrefix $EnvironmentPrefix "venv" $ApplicationArguments `
+        Use-EnvironmentPrefix -EnvironmentPrefix $EnvironmentPrefix -EnvironmentKind "venv" `
+            -Arguments $ApplicationArguments `
             -PythonRelativePath "Scripts\python.exe" -EnvironmentProfile $SelectedProfile
     }
 }
@@ -423,21 +437,23 @@ if ($CondaCommand) {
     if ($LASTEXITCODE -eq 0 -and $CondaPrefixOutput) {
         $NamedCondaEnvironmentExists = $true
         $CondaPrefix = [string](@($CondaPrefixOutput) | Select-Object -Last 1)
-        Use-EnvironmentPrefix $CondaPrefix.Trim() "conda" $ApplicationArguments `
+        Use-EnvironmentPrefix -EnvironmentPrefix ($CondaPrefix.Trim()) -EnvironmentKind "conda" `
+            -Arguments $ApplicationArguments `
             -EnvironmentProfile $SelectedProfile
     }
 }
 
 $ManagedEnvironment = Join-Path (Join-Path $ManagedRuntimeRoot "envs") $ExpectedFingerprint
 if ($ExpectedFingerprint) {
-    Use-EnvironmentPrefix $ManagedEnvironment "managed" $ApplicationArguments `
+    Use-EnvironmentPrefix -EnvironmentPrefix $ManagedEnvironment -EnvironmentKind "managed" `
+        -Arguments $ApplicationArguments `
         -PythonRelativePath "Scripts\python.exe" -EnvironmentFingerprint $ExpectedFingerprint `
         -EnvironmentProfile $SelectedProfile -Managed
 }
 
-if (-not $env:SBK_CHARTS_VENV) {
+if (-not $env:SBK_CHARTS_VENV -and $ExpectedFingerprint) {
     try {
-        Start-ManagedEnvironment $ManagedEnvironment $ApplicationArguments
+        Start-ManagedEnvironment -EnvironmentPrefix $ManagedEnvironment -Arguments $ApplicationArguments
     } catch {
         Write-LauncherMessage "Managed environment setup failed: $($_.Exception.Message)"
         Write-LauncherMessage "Trying legacy Python/Conda"
@@ -497,7 +513,8 @@ if ($CondaCommand) {
     }
     $CondaPrefixOutput = & $CondaCommand.Source run --name $CondaEnvironmentName python -c "import sys; print(sys.prefix)"
     $CondaPrefix = [string](@($CondaPrefixOutput) | Select-Object -Last 1)
-    Use-EnvironmentPrefix $CondaPrefix.Trim() "conda" $ApplicationArguments `
+    Use-EnvironmentPrefix -EnvironmentPrefix ($CondaPrefix.Trim()) -EnvironmentKind "conda" `
+        -Arguments $ApplicationArguments `
         -EnvironmentProfile $SelectedProfile
 }
 

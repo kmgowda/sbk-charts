@@ -42,6 +42,7 @@ Defines:
 
 - minimum supported Python;
 - exact managed Python and managed runtime directory;
+- maximum wait for another process to finish managed bootstrap;
 - default Conda environment name;
 - remembered-environment state filename;
 - project virtual-environment names;

@@ -31,7 +31,7 @@ src/custom_ai/<plugin_name>/
     README.md
 ```
 
-The module must define one concrete `SbkGenAI` subclass. Directory and module names use lower snake case; the class uses PascalCase. Discovery lowercases the class name to make the command.
+The module must define one concrete `SbkGenAI` subclass. Directory and module names use lower snake case, and the class uses PascalCase. The explicit registry key defines the command; it is not derived from the class name.
 
 Register plugin flags in the lightweight descriptor and consume them in `parse_args()`. Do not import the optional SDK from the registry.
 

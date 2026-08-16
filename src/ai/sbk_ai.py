@@ -26,6 +26,7 @@ Key Features:
 - Threaded execution for parallel analysis
 - Configurable timeouts and error handling
 """
+import argparse
 import time
 from typing import final
 import threading
@@ -136,7 +137,7 @@ class SbkAI:
         no_threads (bool): Flag to disable threaded execution for debugging purposes, default False
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Initialize the SbkAI analysis engine.
 
@@ -155,7 +156,7 @@ class SbkAI:
         self.chat_mode = False
         self.rag_pipeline = None
 
-    def add_args(self, parser):
+    def add_args(self, parser: argparse.ArgumentParser) -> None:
         """
         Add command-line arguments for AI configuration to the argument parser.
 
@@ -186,7 +187,7 @@ class SbkAI:
                 traceback.print_exc()
 
 
-    def parse_args(self, args):
+    def parse_args(self, args: argparse.Namespace) -> None:
         """
         Parse command-line arguments and configure the AI instance.
 

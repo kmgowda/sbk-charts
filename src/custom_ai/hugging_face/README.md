@@ -46,6 +46,6 @@ Each analysis creates an `InferenceClient` for the selected model and token, sen
 - Missing token: check the exact environment-variable spelling.
 - Access denied or gated model: accept the model's terms or select a model your token can access.
 - Model does not support chat completion: choose a compatible instruct/chat model.
-- Backend missing from help: reinstall `huggingface_hub` through project requirements and run discovery.
+- Backend import failure after selection: reinstall `huggingface_hub` through the backend requirements and run the direct-load command in the parent [AI backend guide](../README.md).
 
 Benchmark prompt data is sent to Hugging Face or the inference provider serving the chosen model. Review current provider policy before use.

@@ -104,13 +104,20 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       with:
         persist-credentials: false
-    - name: Create managed environment
+    - name: Create and concurrently reuse managed environment
       shell: bash
       run: |
-        ./sbk-charts -h > first-help.txt
+        ./sbk-charts -h > first-help.txt 2> first-runtime.txt &
+        first_pid=$!
+        ./sbk-charts -h > concurrent-help.txt 2> concurrent-runtime.txt &
+        concurrent_pid=$!
+        wait "$first_pid"
+        wait "$concurrent_pid"
         grep -q "Environment: managed" first-help.txt
+        grep -q "Environment: managed" concurrent-help.txt
         grep -q "^kind=managed$" .sbk-charts-runtime
         grep -q "^profile=core$" .sbk-charts-runtime
+        test ! -e .sbk-runtime/bootstrap.lock
     - name: Reuse managed environment without network
       shell: bash
       env:

@@ -51,6 +51,6 @@ Provider model availability changes. If the default is unavailable to your accou
 - Missing-key messages: confirm the variable exists in the same shell that starts sbk-charts.
 - Authentication or model errors: verify the key, account access, and exact model ID.
 - Rate or timeout errors: increase `-secs` when the provider call is slow, but also check provider limits.
-- Backend missing from help: reinstall dependencies and run the discovery command in the parent [AI backend guide](../README.md).
+- Backend import failure after selection: reinstall dependencies and run the direct-load command in the parent [AI backend guide](../README.md).
 
 Do not paste keys into issues, workbooks, logs, or committed files.

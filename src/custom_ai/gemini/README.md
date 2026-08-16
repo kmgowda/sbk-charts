@@ -50,6 +50,6 @@ Model availability is controlled by Google and may vary by account or region. Ov
 - Model unavailable: pass a model available to your account with `--gemini-model`.
 - Quota or network failure: inspect the returned provider error and current account quota.
 - Import error for `google.genai`: reinstall the project requirements in the selected launcher environment.
-- Backend missing from help: run the discovery command in the parent [AI backend guide](../README.md).
+- Backend import failure after selection: run the direct-load command in the parent [AI backend guide](../README.md).
 
 Do not enable debug output that prints credentials or complete sensitive benchmark prompts.

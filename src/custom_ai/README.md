@@ -94,11 +94,11 @@ Local backends avoid a cloud provider only when the server and model are actuall
 
 If no backend command is selected, chart creation completes and the program prints that AI is disabled. If a selected backend lacks a key, service, model, or resource, each analysis should return readable failure text and the workbook should still be saved.
 
-If a command is missing from `./sbk-charts -h`, its Python module probably failed to import:
+Help is generated from lightweight descriptors and does not import backend implementations. If a selected backend fails to import, load that backend directly to see the original error:
 
 ```bash
 venv-sbk-charts/bin/python -c \
-  "from src.ai.discover import discover_custom_ai_classes; print(discover_custom_ai_classes())"
+  "from src.ai.registry import load_backend_class; print(load_backend_class('<backend>'))"
 ```
 
 ## Detailed guides

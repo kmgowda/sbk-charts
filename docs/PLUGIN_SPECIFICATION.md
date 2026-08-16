@@ -40,7 +40,7 @@ Plugin arguments are registered by a lightweight descriptor in `src/ai/registry.
 - Directory: `<lower_snake_case>`
 - Module: `<lower_snake_case>.py`
 - Class: `<PascalCase>`
-- CLI command: `<lowercase class name>`
+- CLI command and registry key: `<explicit command name>`
 - One-sentence purpose: <what service or runtime it connects to>
 - Status: draft | reviewed | implemented
 
@@ -179,7 +179,7 @@ Do not expose credentials in exceptions or logs. Expected provider failures shou
 
 ## 14. Verification
 
-- [ ] Discovery lists the command.
+- [ ] The registry descriptor lists the command without importing the optional SDK.
 - [ ] Backend help lists every flag.
 - [ ] Missing configuration fails clearly and workbook saving completes.
 - [ ] Valid configuration completes all four analyses on the sample CSV.

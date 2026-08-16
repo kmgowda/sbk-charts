@@ -42,6 +42,7 @@ RUNTIME_STATE_NAME="$(policy_value runtime runtime_state_file)"
 VIRTUAL_ENVIRONMENT_NAMES="$(policy_value runtime virtual_environment_names)"
 MANAGED_RUNTIME_NAME="$(policy_value runtime managed_runtime_directory)"
 LOCK_DIRECTORY_NAME="$(policy_value runtime lock_directory)"
+BOOTSTRAP_LOCK_TIMEOUT_SECONDS="$(policy_value runtime bootstrap_lock_timeout_seconds)"
 UNIX_PYTHON_COMMANDS="$(policy_value runtime unix_python_commands)"
 BOOTSTRAP_MANAGER="$(policy_value bootstrap manager)"
 BOOTSTRAP_MANAGER_VERSION="$(policy_value bootstrap manager_version)"
@@ -52,11 +53,16 @@ if [ -z "$APP_NAME" ] || [ -z "$DISTRIBUTION_NAME" ] || [ -z "$APP_MODULE" ] || 
     [ -z "$DEFAULT_CONDA_ENV" ] || \
     [ -z "$RUNTIME_STATE_NAME" ] || [ -z "$VIRTUAL_ENVIRONMENT_NAMES" ] || \
     [ -z "$MANAGED_RUNTIME_NAME" ] || [ -z "$LOCK_DIRECTORY_NAME" ] || \
+    [ -z "$BOOTSTRAP_LOCK_TIMEOUT_SECONDS" ] || \
     [ -z "$UNIX_PYTHON_COMMANDS" ] || [ -z "$BOOTSTRAP_MANAGER" ] || \
     [ -z "$BOOTSTRAP_MANAGER_VERSION" ] || [ -z "$BOOTSTRAP_DOWNLOAD_BASE_URL" ]; then
     printf '%s\n' "sbk-charts: ERROR: Runtime policy is incomplete: $POLICY_FILE" >&2
     exit 1
 fi
+
+case "$BOOTSTRAP_LOCK_TIMEOUT_SECONDS" in
+    *[!0-9]*|0) printf '%s\n' "sbk-charts: ERROR: Invalid bootstrap lock timeout" >&2; exit 1 ;;
+esac
 
 CONDA_ENV_NAME="${SBK_CHARTS_CONDA_ENV:-$DEFAULT_CONDA_ENV}"
 DEFAULT_VENV_NAME="$(printf '%s\n' "$VIRTUAL_ENVIRONMENT_NAMES" | awk -F, '{ gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1); print $1 }')"
@@ -221,17 +227,25 @@ try_conda_prefix() {
     run_application "$python_path" "conda" "$environment_dir" "" "$SELECTED_PROFILE" "$@"
 }
 
-try_managed_environment() {
+managed_environment_is_ready() {
     local environment_dir="$1"
     local expected_fingerprint="$2"
     local python_path
-    shift 2
     [ -n "$environment_dir" ] || return 1
     [ -n "$expected_fingerprint" ] || return 1
     python_path="$environment_dir/bin/python"
     [ -x "$python_path" ] || return 1
     python_is_supported "$python_path" || return 1
-    environment_is_ready "$python_path" || return 1
+    environment_is_ready "$python_path"
+}
+
+try_managed_environment() {
+    local environment_dir="$1"
+    local expected_fingerprint="$2"
+    local python_path
+    shift 2
+    managed_environment_is_ready "$environment_dir" "$expected_fingerprint" || return 1
+    python_path="$environment_dir/bin/python"
     log "Reusing managed environment $environment_dir"
     run_application "$python_path" "managed" "$environment_dir" \
         "$expected_fingerprint" "$SELECTED_PROFILE" "$@"
@@ -256,7 +270,8 @@ acquire_bootstrap_lock() {
             rmdir "$BOOTSTRAP_LOCK_DIR" 2>/dev/null || true
             continue
         fi
-        [ "$attempts" -lt 60 ] || fail "Timed out waiting for bootstrap lock $BOOTSTRAP_LOCK_DIR"
+        [ "$attempts" -lt "$BOOTSTRAP_LOCK_TIMEOUT_SECONDS" ] \
+            || fail "Timed out waiting for bootstrap lock $BOOTSTRAP_LOCK_DIR"
         sleep 1
     done
     printf '%s\n' "$$" > "$BOOTSTRAP_LOCK_DIR/pid"
@@ -324,7 +339,12 @@ create_managed_environment() {
     [ -r "$LOCK_FILE" ] || return 1
 
     acquire_bootstrap_lock
-    try_managed_environment "$environment_dir" "$EXPECTED_FINGERPRINT" "$@"
+    if managed_environment_is_ready "$environment_dir" "$EXPECTED_FINGERPRINT"; then
+        release_bootstrap_lock
+        trap - EXIT HUP INT TERM
+        try_managed_environment "$environment_dir" "$EXPECTED_FINGERPRINT" "$@"
+        fail "Managed environment passed validation but could not start $APP_NAME"
+    fi
 
     if [ -n "${SBK_CHARTS_UV:-}" ]; then
         BOOTSTRAP_MANAGER_PATH="$SBK_CHARTS_UV"
@@ -364,7 +384,7 @@ create_managed_environment() {
         }
     if ! env UV_PYTHON_INSTALL_DIR="$MANAGED_RUNTIME_ROOT/python" \
         UV_CACHE_DIR="$MANAGED_RUNTIME_ROOT/cache" UV_LINK_MODE=copy \
-        "$BOOTSTRAP_MANAGER_PATH" venv --managed-python --seed \
+        "$BOOTSTRAP_MANAGER_PATH" venv --relocatable --managed-python --seed \
         --python "$MANAGED_PYTHON" "$temporary_environment"; then
         log "Could not create managed environment; trying legacy Python/Conda"
         rm -rf "$temporary_environment"
@@ -481,7 +501,7 @@ done <<EOF
 $(printf '%s\n' "$UNIX_PYTHON_COMMANDS" | tr ',' '\n' | awk '{ gsub(/^[[:space:]]+|[[:space:]]+$/, ""); if (length) print }')
 EOF
 
-if [ -z "${SBK_CHARTS_VENV:-}" ]; then
+if [ -z "${SBK_CHARTS_VENV:-}" ] && [ -n "$EXPECTED_FINGERPRINT" ]; then
     create_managed_environment "$managed_environment" "$@"
 fi
 

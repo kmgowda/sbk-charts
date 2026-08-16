@@ -53,6 +53,7 @@ class RuntimePolicy:
     virtual_environment_names: tuple[str, ...]
     managed_runtime_directory: str
     lock_directory: str
+    bootstrap_lock_timeout_seconds: int
     unix_python_commands: tuple[str, ...]
     windows_python_launchers: tuple[str, ...]
 
@@ -114,6 +115,7 @@ def load_policy(path: Path = POLICY_FILE) -> ProjectPolicy:
         virtual_environment_names=_items(runtime_section["virtual_environment_names"]),
         managed_runtime_directory=runtime_section["managed_runtime_directory"],
         lock_directory=runtime_section["lock_directory"],
+        bootstrap_lock_timeout_seconds=runtime_section.getint("bootstrap_lock_timeout_seconds"),
         unix_python_commands=_items(runtime_section["unix_python_commands"]),
         windows_python_launchers=_items(runtime_section["windows_python_launchers"]),
     )
@@ -164,6 +166,8 @@ def load_policy(path: Path = POLICY_FILE) -> ProjectPolicy:
         raise ValueError(f"Unsupported portable hash algorithm: {portable.hash_algorithm}")
     if not runtime.virtual_environment_names:
         raise ValueError("At least one virtual environment name is required")
+    if runtime.bootstrap_lock_timeout_seconds < 1:
+        raise ValueError("Bootstrap lock timeout must be at least one second")
     if set(bootstrap.archives) != set(bootstrap.checksums):
         raise ValueError("Every bootstrap archive must have exactly one SHA-256 checksum")
     if bootstrap.manager != "uv":

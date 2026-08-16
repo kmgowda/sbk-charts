@@ -169,9 +169,9 @@ The four standard prompts live in `src/genai/genai.py`. A change there affects e
 
 `StorageStat` is frozen. Build its regular and total mappings before construction and treat them as read-only after construction.
 
-### Fail one plugin, not the application
+### Fail one selected backend, not the application
 
-Discovery intentionally catches import failures so one missing optional provider does not hide other backends. Preserve that isolation and make the failure message useful.
+The lightweight registry must not import provider SDKs. A missing optional dependency should fail with a useful message only after its backend is selected; it must not break help or core chart generation.
 
 ### Zero-only RAG metrics are skipped
 
@@ -189,18 +189,18 @@ The simple retrieval layer intentionally ignores all-zero metrics. This avoids i
 - Use exact SBK CSV header constants from `src/charts/constants.py`; never repeat strings such as `MB/Sec` inline.
 - Use sheet constants from `src/sheets/constants.py`.
 - Keep plugin directory and module names lower snake case.
-- The plugin class uses PascalCase; its lowercased class name becomes the subcommand.
+- The plugin class uses PascalCase. The explicit key in `src/ai/registry.py` defines its subcommand.
 - Prefix plugin flags with the backend name when possible.
 - Pin normal dependencies with compatible-release constraints (`~=`) unless a package has a documented reason for another form.
 - Preserve Apache 2.0 headers. Do not modify `LICENSE` without explicit approval.
 
 ## 9. Plugin rules
 
-A backend lives at `src/custom_ai/<directory>/<directory>.py` and subclasses `SbkGenAI`. Discovery is automatic. Do not add a registration list and do not edit `src/parser/sbk_parser.py` for plugin-only flags.
+A backend lives at `src/custom_ai/<directory>/<directory>.py` and subclasses `SbkGenAI`. Register it with a lightweight descriptor in `src/ai/registry.py`; do not edit `src/parser/sbk_parser.py` for plugin-only flags. The descriptor defines the command, implementation module and class, and plugin-specific flags without importing the implementation or its optional SDK.
 
 Every production backend should:
 
-- expose its configuration in `add_args()` and consume it in `parse_args()`;
+- declare its flags in the registry descriptor and consume them in `parse_args()`;
 - return `(True, text)` or `(False, readable_error)`;
 - implement all four canonical analyses;
 - implement chat response behavior if chat is supported;

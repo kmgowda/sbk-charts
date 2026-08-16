@@ -170,6 +170,7 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertEqual("3.12.10", self.policy.runtime.managed_python)
         self.assertEqual(".sbk-runtime", self.policy.runtime.managed_runtime_directory)
         self.assertEqual("requirements-lock", self.policy.runtime.lock_directory)
+        self.assertEqual(300, self.policy.runtime.bootstrap_lock_timeout_seconds)
         self.assertEqual("uv", self.policy.bootstrap.manager)
         self.assertRegex(self.policy.bootstrap.manager_version, r"^\d+\.\d+\.\d+$")
         self.assertTrue(set(self.policy.portable.targets).issubset(self.policy.bootstrap.archives))
@@ -200,12 +201,29 @@ class PortableReleaseTest(unittest.TestCase):
     def test_policy_rejects_invalid_bootstrap_checksum(self):
         with tempfile.TemporaryDirectory() as temporary:
             policy_file = Path(temporary) / "sbk-charts.ini"
-            source = POLICY_FILE.read_text(encoding="utf-8").replace(
-                "linux-amd64-sha256 = 68a509da24b06b4223a1c0175fb5eb5bc79342b76cbeff0cfe51ac3f5b17b6b2",
+            original = POLICY_FILE.read_text(encoding="utf-8")
+            source, replaced = re.subn(
+                r"linux-amd64-sha256 = [0-9a-f]{64}",
                 "linux-amd64-sha256 = not-a-checksum",
+                original,
             )
+            self.assertEqual(1, replaced, "linux-amd64 checksum entry not found")
             policy_file.write_text(source, encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "invalid SHA-256"):
+                load_policy(policy_file)
+
+    def test_policy_rejects_nonpositive_bootstrap_lock_timeout(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            policy_file = Path(temporary) / "sbk-charts.ini"
+            original = POLICY_FILE.read_text(encoding="utf-8")
+            source, replaced = re.subn(
+                r"bootstrap_lock_timeout_seconds = \d+",
+                "bootstrap_lock_timeout_seconds = 0",
+                original,
+            )
+            self.assertEqual(1, replaced, "bootstrap lock timeout entry not found")
+            policy_file.write_text(source, encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "at least one second"):
                 load_policy(policy_file)
 
     def test_version_resolution_ignores_non_module_assignments_and_text(self):
@@ -342,11 +360,17 @@ class PortableReleaseTest(unittest.TestCase):
             self.assertIn("--hash=sha256:", contents)
 
     def test_backend_registry_is_lazy_and_complete(self):
+        descriptor_modules_before = {
+            descriptor.module for descriptor in BACKENDS.values() if descriptor.module in sys.modules
+        }
         self.assertEqual(
             {"anthropic", "gemini", "huggingface", "lmstudio", "noai", "ollama", "pytorchllm"},
             set(BACKENDS),
         )
-        self.assertFalse(any(descriptor.module in sys.modules for descriptor in BACKENDS.values()))
+        descriptor_modules_after = {
+            descriptor.module for descriptor in BACKENDS.values() if descriptor.module in sys.modules
+        }
+        self.assertEqual(descriptor_modules_before, descriptor_modules_after)
 
     def test_invalid_remembered_environment_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -366,9 +390,19 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn('--runtime-details "$environment_kind" "$environment_prefix"', bash_launcher)
         self.assertIn("policy_value runtime runtime_state_file", bash_launcher)
         self.assertIn("policy_value runtime managed_python", bash_launcher)
+        self.assertIn("policy_value runtime bootstrap_lock_timeout_seconds", bash_launcher)
         self.assertIn("--require-hashes --requirement", bash_launcher)
+        self.assertIn("venv --relocatable --managed-python", bash_launcher)
         self.assertIn("Trying remembered managed environment", bash_launcher)
         self.assertIn('--remember-environment "$environment_kind" "$environment_prefix"', bash_launcher)
+        self.assertIn(
+            'if [ -z "${SBK_CHARTS_VENV:-}" ] && [ -n "$EXPECTED_FINGERPRINT" ]; then',
+            bash_launcher,
+        )
+        self.assertNotIn(
+            'acquire_bootstrap_lock\n    try_managed_environment',
+            bash_launcher,
+        )
         self.assertLess(
             bash_launcher.index("Trying remembered Conda environment"),
             bash_launcher.index('try_virtual_environment "${VIRTUAL_ENV:-}"'),
@@ -378,9 +412,20 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn("--runtime-details $EnvironmentKind $EnvironmentPrefix", powershell_launcher)
         self.assertIn('"runtime.runtime_state_file"', powershell_launcher)
         self.assertIn('"runtime.managed_python"', powershell_launcher)
+        self.assertIn('"runtime.bootstrap_lock_timeout_seconds"', powershell_launcher)
         self.assertIn("--require-hashes --requirement", powershell_launcher)
+        self.assertIn("venv --relocatable --managed-python", powershell_launcher)
         self.assertIn("Trying remembered managed environment", powershell_launcher)
         self.assertIn("--remember-environment $EnvironmentKind", powershell_launcher)
+        self.assertIn(
+            "if (-not $env:SBK_CHARTS_VENV -and $ExpectedFingerprint)",
+            powershell_launcher,
+        )
+        environment_calls = re.findall(
+            r"^\s+Use-EnvironmentPrefix .+$", powershell_launcher, flags=re.MULTILINE
+        )
+        self.assertTrue(environment_calls)
+        self.assertTrue(all("-EnvironmentPrefix" in call for call in environment_calls))
         self.assertLess(
             powershell_launcher.index("Trying remembered Conda environment"),
             powershell_launcher.index("$EnvironmentCandidates ="),
