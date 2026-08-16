@@ -24,7 +24,7 @@ The main pipeline is fixed:
 CSV files -> R/T sheets -> Summary and charts -> optional AI text -> optional chat
 ```
 
-The source launchers can create or reuse a virtual or Conda environment. Portable releases bundle Python and dependencies.
+On supported targets, source launchers can install an exact managed Python and locked dependency profile without preinstalled Python, venv, or Conda. They also reuse valid virtual and Conda environments. Portable releases bundle Python and dependencies.
 
 ## 2. Read the right document
 
@@ -48,7 +48,7 @@ The source launchers can create or reuse a virtual or Conda environment. Portabl
 | `src/charts/` | Summary, charts, themes, CSV header constants | Adding or changing workbook visuals |
 | `src/stat/` | Frozen `StorageStat` | Changing the AI-facing statistics shape |
 | `src/genai/` | Shared AI interface and prompts | Changing every backend's analysis contract or prompt |
-| `src/ai/` | Plugin discovery, scheduling, Excel AI text, chat | Changing AI execution or layout |
+| `src/ai/` | Lazy backend registry, scheduling, Excel AI text, chat | Changing AI execution or layout |
 | `src/rag/` | Retrieval and grounding | Changing chat context selection |
 | `src/custom_ai/<name>/` | One AI adapter | Adding or fixing one backend |
 | `src/version/` | Canonical version | Cutting an approved release |
@@ -79,16 +79,16 @@ The simplest source setup is:
 python3 -m venv venv-sbk-charts
 source venv-sbk-charts/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e .
+python -m pip install -e . -r requirements-dev.txt
 ```
 
-You can also let `./sbk-charts` bootstrap the environment. Reusing its managed interpreter keeps verification consistent:
+You can also let `./sbk-charts` bootstrap and validate an application environment. Run tests with the explicit development interpreter you installed above:
 
 ```bash
 venv-sbk-charts/bin/python -m unittest discover -s tests -v
 ```
 
-Do not add a runtime dependency without adding it to `requirements.txt`. Keep portable-only build tools in `requirements-portable.txt`.
+Put core runtime dependencies in `requirements.txt`, managed build backends in `requirements-bootstrap.txt`, backend-only dependencies in `requirements-ai/<backend>.txt`, contributor tools in `requirements-dev.txt`, and portable build tools in `requirements-portable.txt`. Regenerate affected exact hashed files in `requirements-lock/` whenever a runtime input changes.
 
 ## 6. Definition of done
 
@@ -169,9 +169,9 @@ The four standard prompts live in `src/genai/genai.py`. A change there affects e
 
 `StorageStat` is frozen. Build its regular and total mappings before construction and treat them as read-only after construction.
 
-### Fail one plugin, not the application
+### Fail one selected backend, not the application
 
-Discovery intentionally catches import failures so one missing optional provider does not hide other backends. Preserve that isolation and make the failure message useful.
+The lightweight registry must not import provider SDKs. A missing optional dependency should fail with a useful message only after its backend is selected; it must not break help or core chart generation.
 
 ### Zero-only RAG metrics are skipped
 
@@ -189,18 +189,18 @@ The simple retrieval layer intentionally ignores all-zero metrics. This avoids i
 - Use exact SBK CSV header constants from `src/charts/constants.py`; never repeat strings such as `MB/Sec` inline.
 - Use sheet constants from `src/sheets/constants.py`.
 - Keep plugin directory and module names lower snake case.
-- The plugin class uses PascalCase; its lowercased class name becomes the subcommand.
+- The plugin class uses PascalCase. The explicit key in `src/ai/registry.py` defines its subcommand.
 - Prefix plugin flags with the backend name when possible.
 - Pin normal dependencies with compatible-release constraints (`~=`) unless a package has a documented reason for another form.
 - Preserve Apache 2.0 headers. Do not modify `LICENSE` without explicit approval.
 
 ## 9. Plugin rules
 
-A backend lives at `src/custom_ai/<directory>/<directory>.py` and subclasses `SbkGenAI`. Discovery is automatic. Do not add a registration list and do not edit `src/parser/sbk_parser.py` for plugin-only flags.
+A backend lives at `src/custom_ai/<directory>/<directory>.py` and subclasses `SbkGenAI`. Register it with a lightweight descriptor in `src/ai/registry.py`; do not edit `src/parser/sbk_parser.py` for plugin-only flags. The descriptor defines the command, implementation module and class, and plugin-specific flags without importing the implementation or its optional SDK.
 
 Every production backend should:
 
-- expose its configuration in `add_args()` and consume it in `parse_args()`;
+- declare its flags in the registry descriptor and consume them in `parse_args()`;
 - return `(True, text)` or `(False, readable_error)`;
 - implement all four canonical analyses;
 - implement chat response behavior if chat is supported;
@@ -208,14 +208,14 @@ Every production backend should:
 - document authentication, model, threading, and resource needs;
 - clean up sessions or model resources in `close()` when necessary.
 
-If a backend disappears from `-h`, run:
+If a selected backend fails to import, run:
 
 ```bash
 venv-sbk-charts/bin/python -c \
-  "from src.ai.discover import discover_custom_ai_classes; print(discover_custom_ai_classes())"
+  "from src.ai.registry import load_backend_class; print(load_backend_class('<backend>'))"
 ```
 
-Then import the missing module directly for a traceback.
+Help is registry-driven and should not import optional SDKs. Import the selected module directly for a traceback.
 
 ## 10. Chart rules
 
@@ -239,6 +239,8 @@ When changing policy:
 - update [docs/POLICY.md](docs/POLICY.md);
 - smoke-test Linux/macOS Bash and Windows PowerShell/batch paths as applicable.
 
+Launcher changes must preserve temporary-path cleanup and fallback behavior. A system Python candidate is usable only when it can create a temporary venv with working `ensurepip` and `pip`. An explicit `SBK_CHARTS_VENV` disables creation of a new managed environment. Windows PowerShell 5.1 can drop empty native-command arguments, so legacy state persistence uses the policy helper's profile-without-fingerprint form.
+
 The version is declared once in `src/version/sbk_version.py`. Do not copy it into examples that will become stale; use `<version>` in release procedures.
 
 ## 12. Mermaid rules
@@ -261,6 +263,7 @@ Never commit:
 
 - `out.xlsx` or other generated reports;
 - `venv-sbk-charts/`, `.venv/`, or Conda environments;
+- `.sbk-runtime/` managed Python, tools, environments, and caches;
 - `dist/`, `build/`, wheels, source archives, or portable archives;
 - downloaded model files or caches;
 - `.sbk-charts-runtime`;
@@ -285,7 +288,7 @@ Do not claim Windows, macOS, GPU, provider API, or portable-runtime testing if i
 | Add or reorder charts | `src/charts/multicharts.py` | Workbook order and chart recipe |
 | Fix CSV conversion | `src/sheets/` | Architecture section 6 |
 | Add an AI backend | `src/custom_ai/` | Plugin specification and plugin recipe |
-| Fix missing backend imports | plugin and `requirements.txt` | Discovery section and troubleshooting recipe |
+| Fix backend imports | plugin, registry, optional requirements and lock | AI section and troubleshooting recipe |
 | Change AI text layout | `src/ai/sbk_ai.py` | Summary two-writer rule |
 | Change prompt content | `src/genai/genai.py` | Canonical-prompt rule |
 | Improve chat grounding | `src/rag/sbk_rag.py` | Architecture section 12 |

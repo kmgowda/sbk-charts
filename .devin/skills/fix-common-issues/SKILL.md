@@ -2,22 +2,24 @@
 
 Use this skill for missing plugins, bootstrap failures, chart failures, AI timeouts, and packaging errors. Diagnose before editing.
 
-## Backend missing from help
+## Selected backend fails to import
 
 ```bash
 venv-sbk-charts/bin/python -c \
-  "from src.ai.discover import discover_custom_ai_classes; print(discover_custom_ai_classes())"
+  "from src.ai.registry import load_backend_class; print(load_backend_class('<backend>'))"
 venv-sbk-charts/bin/python -c \
   "import src.custom_ai.<directory>.<module>"
 ```
 
-Fix the missing dependency, changed SDK import, or code error. Discovery intentionally skips only the broken backend.
+Help uses the lazy registry and should list every declared backend without its SDK installed. Fix the selected profile, changed SDK import, or code error.
 
 ## Launcher selects or repairs an environment repeatedly
 
-Inspect `.sbk-charts-runtime`, `SBK_CHARTS_VENV`, `SBK_CHARTS_CONDA_ENV`, and `SBK_CHARTS_STATE_FILE`. A remembered environment is reused only when Python is supported, the installed distribution version matches source, the application imports, and dependency validation passes.
+Inspect `.sbk-charts-runtime`, `.sbk-runtime/`, `SBK_CHARTS_VENV`, `SBK_CHARTS_CONDA_ENV`, and launcher overrides. A managed environment also requires the current profile and lock fingerprint. Test first-run creation and a second run with network access disabled.
 
 Run `./sbk-charts -h` and read the printed OS, interpreter, environment kind, and prefix. Do not remove validation merely to hide a real dependency conflict.
+
+If legacy fallback selects no Python, test every configured candidate instead of stopping at the first version-compatible executable. Each candidate must create a temporary venv with working `ensurepip` and `pip`. Failed probes, `.tool.*` downloads, and unpublished `.env-*` directories should be removed automatically. On Windows, also verify the CMD shim remembers a backend profile when the legacy environment has no managed fingerprint.
 
 ## Charts are missing
 

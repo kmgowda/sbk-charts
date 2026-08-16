@@ -62,7 +62,7 @@ sequenceDiagram
     participant Plugin as Selected AI plugin
 
     User->>Main: input CSV paths and output XLSX path
-    Main->>AI: discover plugins and add CLI subcommands
+    Main->>AI: register lightweight backend subcommands
     Main->>Sheets: create_sheets
     Sheets->>Book: write R1 T1 R2 T2 sheets
     Main->>Charts: create_graphs
@@ -96,7 +96,7 @@ The stage order is an architectural invariant. Chart code expects R/T sheets to 
 | `src/charts/` | Data lookup, tables, all charts, Summary sheet | `SbkCharts`, `SbkMultiCharts` |
 | `src/stat/` | Immutable AI-facing data transfer object | `StorageStat` |
 | `src/genai/` | Backend interface and shared prompts | `SbkGenAI` |
-| `src/ai/` | Discovery, execution, timeout, Excel AI layout, chat | `SbkAI` |
+| `src/ai/` | Lazy registry, execution, timeout, Excel AI layout, chat | `SbkAI`, `BACKENDS` |
 | `src/rag/` | Retrieval for chat and prompt grounding | `SbkSimpleRAGPipeline`, optional `SbkRAGPipeline` |
 | `src/custom_ai/` | Provider and local-model adapters | Seven `SbkGenAI` subclasses |
 | `src/version/` | Canonical release version | `__sbk_version__` |
@@ -118,15 +118,15 @@ The stage order is an architectural invariant. Chart code expects R/T sheets to 
 - `-nothreads`;
 - `-chat`.
 
-It then discovers backend classes and creates one argparse subcommand for each class. Every plugin owns its own `add_args()` and `parse_args()` methods. A new backend therefore does not require an edit to the base parser.
+It reads a static lightweight registry and creates one argparse subcommand per backend without importing provider SDKs. Each descriptor explicitly provides the command name, implementation module and class, and argument-registration function. Those flags must match the implementation's `parse_args()` contract.
 
 ```mermaid
 flowchart TD
     A[get_sbk_parser] --> B[Base input and output options]
     B --> C[SbkAI.add_args]
-    D[discover_custom_ai_classes] --> C
+    D[Static BACKENDS registry] --> C
     C --> E[Global AI options]
-    C --> F[One subparser per plugin class]
+    C --> F[One subparser per backend descriptor]
     F --> G[Plugin-specific options]
     G --> H[argparse Namespace]
 ```
@@ -247,24 +247,24 @@ Metadata columns such as ID, Header, Type, Storage, Action, and Latency Time Uni
 
 ## 10. AI plugin system
 
-### 10.1 Discovery
+### 10.1 Lazy registry
 
-`discover_custom_ai_classes()` recursively imports modules below `src.custom_ai`. It selects concrete classes that directly or indirectly inherit `SbkGenAI`. The lowercase class name becomes the command:
+`src/ai/registry.py` declares the stable command name, implementation module, class, and CLI argument builder for each backend. It does not import optional provider modules. `load_backend_class()` imports only the command selected by the user:
 
 ```text
-Gemini      -> gemini
-HuggingFace -> huggingface
-LmStudio    -> lmstudio
-PyTorchLLM  -> pytorchllm
+gemini      -> Gemini
+huggingface -> HuggingFace
+lmstudio    -> LmStudio
+pytorchllm  -> PyTorchLLM
 ```
 
-If a plugin import raises an exception, discovery prints the error and continues. This protects unrelated backends, but it means the failing backend disappears from help output.
+This keeps `sbk-charts -h` and core chart generation independent of optional SDKs. `SbkAI.parse_args()` imports only the selected descriptor's implementation, so a missing package fails after selection rather than hiding commands from help. `src/ai/discover.py` remains a developer diagnostic, not the runtime command registry.
 
 ### 10.2 Interface
 
 `SbkGenAI` defines lifecycle hooks, model description, four analysis methods, and chat response behavior. A backend normally implements:
 
-- `add_args(parser)` and `parse_args(args)`;
+- descriptor-owned argument registration and implementation-owned `parse_args(args)`;
 - `open(args)` and `close(args)` when it owns resources;
 - `get_model_description()`;
 - `get_throughput_analysis()`;
@@ -355,28 +355,37 @@ There are three source launchers:
 - `sbk-charts.ps1` for PowerShell;
 - `sbk-charts.bat`, which delegates to PowerShell for Command Prompt users.
 
-They use native shell logic to read `sbk-charts.ini` because Python may not exist yet. After choosing Python, they use `scripts/project_policy.py` for shared validation, runtime reporting, and remembered-environment state.
+They use native shell logic to read `sbk-charts.ini` because Python may not exist yet. A supported launcher can download a pinned, SHA-256-verified `uv`, use it to install an exact project-managed Python, and build an environment from a hashed lock. After choosing Python, the launcher uses `scripts/project_policy.py` for shared validation, runtime reporting, and remembered-environment state.
 
-When `SBK_CHARTS_VENV` is not set, the selection order is:
+When `SBK_CHARTS_VENV` is not set, runtime selection happens in stages:
 
-1. last validated environment from the state file;
-2. active virtual or Conda environment;
-3. known project-local virtual environments;
-4. the configured existing Conda environment;
-5. a newly created virtual environment;
-6. a newly created Conda environment.
+1. try the last validated environment from the state file;
+2. try the active virtual or Conda environment and known project-local virtual environments;
+3. try reusable fingerprinted-managed and configured named-Conda environments;
+4. on a supported managed target, create the exact managed Python and locked environment;
+5. if managed setup is unsupported or fails, probe system Python candidates for venv support and then prepare the named Conda environment.
 
-When `SBK_CHARTS_VENV` is set, the launcher tries that explicit path first and skips remembered, active, and project-local candidates. If it cannot use the explicit venv, it continues with the named Conda and environment-creation paths.
+The two native implementations differ only within stage 3: Bash checks the fingerprinted managed directory before the named Conda environment, while PowerShell checks the named Conda environment first. The remembered state remains the first preference on both, so a previously successful choice is reused consistently.
 
-An environment is reusable only when it has a supported Python, the installed distribution version matches the source version, the application module imports, and the dependency check succeeds. The selected validated venv or Conda runtime is written atomically to `.sbk-charts-runtime` immediately before the application process starts.
+When `SBK_CHARTS_VENV` is set, the launcher tries that explicit path first and skips remembered, active, and project-local candidates. It does not create a new managed environment while the override is set. If the explicit venv is unusable, it may reuse an existing managed or named Conda environment, create the requested normal venv with a suitable system Python, or fall back to Conda.
+
+Legacy environment creation checks Python candidates in policy order. A candidate is selected only after it creates a temporary venv whose `ensurepip` and `pip` commands work; failed probes are removed before the next interpreter is tried. Bootstrap-manager downloads and unpublished managed environments are also temporary and are removed on failure.
+
+An environment is reusable only when it has a supported Python, the installed distribution version matches the source version, the application and selected backend import, and the dependency check succeeds. A managed environment also must match the fingerprint of target, exact Python, selected profile, and lock contents. Creation is serialized by a bootstrap lock with a policy-controlled wait timeout and published by directory rename only after self-validation. The lock is released before the application process replaces the launcher. The successful runtime is written atomically to `.sbk-charts-runtime` immediately before the application starts.
+
+The static backend registry lets `--help` and core chart generation run without importing optional provider SDKs. Selecting a backend changes the dependency profile and imports only that implementation. Exact, hashed environments live in `requirements-lock/`; human-maintained inputs live in `requirements.txt` and `requirements-ai/`.
+
+Managed source targets cover glibc Linux x86-64/ARM64, macOS Intel/Apple silicon, and Windows x86-64/ARM64. Portable release targets are a smaller independent list.
 
 ## 14. Runtime and artifact policy
 
 `sbk-charts.ini` is the shared source of truth for values used by launchers, packaging, CI, and portable builds:
 
 - application and distribution identity;
-- Python minimum and interpreter search order;
+- Python minimum, exact managed Python, and interpreter search order;
 - environment names and runtime state filename;
+- pinned runtime manager downloads and checksums;
+- AI dependency-profile inputs and exact lock directory;
 - entry point, requirements file, version file, and package data;
 - portable targets, runners, formats, manifest, checksum, and bundle paths.
 
@@ -408,14 +417,18 @@ Portable archives are checksummed but not code-signed or notarized.
 
 ## 16. Tests and CI
 
-`tests/test_portable.py` covers policy parsing and validation, safe requirements parsing, AST version lookup, portable argument forwarding, archive creation, Windows ZIP names, environment validation, runtime details, remembered state, and launcher/workflow contracts.
+`tests/test_portable.py` covers policy parsing and validation, safe requirements parsing, AST version lookup, portable argument forwarding, archive creation, Windows ZIP names, environment validation, runtime details, remembered state including profile-only legacy state, and launcher/workflow contracts.
 
 The main CI workflow:
 
 - reads the minimum Python version from policy;
 - runs flake8 syntax and undefined-name checks;
 - runs the portable-policy unit tests;
-- creates a Windows virtual environment and smoke-tests both Windows launchers.
+- verifies package builds and the Bash launcher on Linux;
+- verifies fresh and offline managed bootstrap on Linux, macOS Apple silicon, and Windows;
+- creates a Windows virtual environment and smoke-tests both Windows launchers;
+- verifies that launchers skip a version-compatible Python that cannot create a working venv;
+- verifies failed bootstrap downloads and unpublished environments do not leave temporary directories.
 
 The portable workflow:
 
@@ -437,7 +450,7 @@ Preserve these rules unless a reviewed design explicitly changes them:
 4. Compared R sheets use one latency time unit.
 5. Exact CSV headers come from `src/charts/constants.py`.
 6. Shared analysis prompts live in `SbkGenAI`, not provider plugins.
-7. Plugin discovery failures do not stop unrelated plugins.
+7. Optional backend imports are lazy and do not stop help or unrelated backends.
 8. AI methods return `(bool, text)` and failures remain visible in the workbook.
 9. `StorageStat` is constructed completely and then treated as read-only.
 10. Summary layout changes account for both chart and AI writers.
@@ -451,7 +464,7 @@ Preserve these rules unless a reviewed design explicitly changes them:
 | Add a chart | `src/charts/multicharts.py` | `charts.py`, `constants.py`, `utils.py` |
 | Change workbook styling | `src/charts/charts.py` | Summary styling in `multicharts.py` and `sbk_ai.py` |
 | Change CSV split behavior | `src/sheets/sheets.py` | `sheets/constants.py`, every R/T caller |
-| Add an AI backend | `src/custom_ai/<name>/` | `genai.py`, `discover.py`, plugin spec |
+| Add an AI backend | plugin, registry, optional requirements and lock | `genai.py`, plugin spec |
 | Change all AI prompts | `src/genai/genai.py` | every backend's response limits |
 | Change AI scheduling | `src/ai/sbk_ai.py` | timeout and thread-safety behavior |
 | Change chat retrieval | `src/rag/sbk_rag.py` | `genai.py`, `sbk_ai.py` |
@@ -464,11 +477,11 @@ Detailed procedures and acceptance checks are in [AGENT_RECIPES.md](AGENT_RECIPE
 
 | Failure | Expected behavior |
 |---|---|
-| No supported Python and no usable Conda | Launcher exits with an explanation. |
+| No managed runtime can be provisioned and no venv-capable Python or usable Conda exists | Launcher exits with an explanation. |
 | Environment is stale or dependencies fail validation | Launcher attempts repair or another environment. |
 | Input CSV cannot be read | Sheet creation fails; no valid report can be produced. |
 | Compared latency units differ | Graph generation is skipped to avoid invalid charts. |
-| One plugin cannot import | It is omitted; other plugins remain available. |
+| A selected plugin cannot import | Its command remains visible through the lazy registry; startup reports the backend import failure without importing unrelated plugins. |
 | AI credential or service is unavailable | Backend returns readable failure text; charts remain usable. |
 | AI exceeds its time budget | Missing results are marked timed out. |
 | Chat retrieval finds little context | The backend still receives the question, but its answer may be more general. |

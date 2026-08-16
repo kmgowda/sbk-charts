@@ -1,4 +1,6 @@
-include README.md LICENSE requirements.txt requirements-portable.txt AGENTS.md sbk-charts.ini
+include README.md LICENSE requirements.txt requirements-bootstrap.txt requirements-dev.txt requirements-portable.txt AGENTS.md sbk-charts.ini
+recursive-include requirements-ai *.txt
+recursive-include requirements-lock *.txt
 include sbk-charts sbk-charts.ps1 sbk-charts.bat
 recursive-include scripts *.py
 include src/main/banner.txt

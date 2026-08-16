@@ -11,7 +11,7 @@ This is different from the repository launchers:
 
 | Delivery | Python on destination | First-run package download | Best for |
 |---|---|---|---|
-| Source launcher | Required, or Conda must be available | Usually yes | Development and source checkouts |
+| Source launcher | Not required on supported targets | Yes on first managed bootstrap | Development and source checkouts |
 | Portable archive | Not required | No for bundled application code | Fixed native deployment |
 | Wheel | Required | Installation downloads dependencies as needed | Existing Python environments |
 
@@ -107,7 +107,7 @@ Use a native machine matching the desired target. Start in an environment where 
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install . -r requirements-portable.txt
+python -m pip install ".[all-ai]" -r requirements-portable.txt
 python -m unittest discover -s tests -v
 python scripts/build_portable.py
 ```

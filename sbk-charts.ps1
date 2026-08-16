@@ -50,6 +50,21 @@ $AppName = Get-RequiredPolicyValue $Policy "application.name"
 $DistributionName = Get-RequiredPolicyValue $Policy "application.distribution_name"
 $AppModule = Get-RequiredPolicyValue $Policy "application.module"
 $MinimumPython = Get-RequiredPolicyValue $Policy "runtime.minimum_python"
+$ManagedPython = Get-RequiredPolicyValue $Policy "runtime.managed_python"
+$ManagedRuntimeName = Get-RequiredPolicyValue $Policy "runtime.managed_runtime_directory"
+$LockDirectoryName = Get-RequiredPolicyValue $Policy "runtime.lock_directory"
+$BootstrapLockTimeoutValue = Get-RequiredPolicyValue $Policy "runtime.bootstrap_lock_timeout_seconds"
+$BootstrapLockTimeoutSeconds = 0
+$BootstrapLockTimeoutIsValid = [int]::TryParse(
+    $BootstrapLockTimeoutValue,
+    [ref] $BootstrapLockTimeoutSeconds
+)
+if (-not $BootstrapLockTimeoutIsValid -or $BootstrapLockTimeoutSeconds -lt 1) {
+    throw "Bootstrap lock timeout must be at least one second"
+}
+$BootstrapManager = Get-RequiredPolicyValue $Policy "bootstrap.manager"
+$BootstrapManagerVersion = Get-RequiredPolicyValue $Policy "bootstrap.manager_version"
+$BootstrapDownloadBaseUrl = Get-RequiredPolicyValue $Policy "bootstrap.download_base_url"
 $DefaultCondaEnvironment = Get-RequiredPolicyValue $Policy "runtime.default_conda_environment"
 $RuntimeStateName = Get-RequiredPolicyValue $Policy "runtime.runtime_state_file"
 $VirtualEnvironmentNames = @(
@@ -71,6 +86,42 @@ $RuntimeStateFile = if ($env:SBK_CHARTS_STATE_FILE) {
 } else {
     Join-Path $ProjectRoot $RuntimeStateName
 }
+$ManagedRuntimeRoot = if ($env:SBK_CHARTS_RUNTIME_ROOT) {
+    $env:SBK_CHARTS_RUNTIME_ROOT
+} else {
+    Join-Path $ProjectRoot $ManagedRuntimeName
+}
+$SelectedBackend = ""
+$SelectedProfile = "core"
+$SelectedRequirements = ""
+foreach ($ApplicationArgument in $ApplicationArguments) {
+    $RequirementPath = [string] $Policy["ai.requirements.$ApplicationArgument"]
+    if ($RequirementPath) {
+        $SelectedBackend = $ApplicationArgument
+        $SelectedProfile = $ApplicationArgument
+        $SelectedRequirements = Join-Path $ProjectRoot $RequirementPath
+        break
+    }
+}
+$LockFile = Join-Path (Join-Path $ProjectRoot $LockDirectoryName) "$SelectedProfile.txt"
+$ManagedArchitecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+$ManagedTarget = if ($ManagedArchitecture -eq [System.Runtime.InteropServices.Architecture]::X64) {
+    "windows-amd64"
+} elseif ($ManagedArchitecture -eq [System.Runtime.InteropServices.Architecture]::Arm64) {
+    "windows-arm64"
+} else { "" }
+$ExpectedFingerprint = ""
+if ($ManagedTarget -and (Test-Path -LiteralPath $LockFile -PathType Leaf)) {
+    $FingerprintText = "$ManagedPython`n$ManagedTarget`n$SelectedProfile`n" + `
+        (Get-Content -LiteralPath $LockFile -Raw)
+    $Hasher = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $HashBytes = $Hasher.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($FingerprintText))
+        $ExpectedFingerprint = ([BitConverter]::ToString($HashBytes)).Replace("-", "").ToLowerInvariant()
+    } finally {
+        $Hasher.Dispose()
+    }
+}
 
 function Write-LauncherMessage {
     param([string] $Message)
@@ -86,9 +137,39 @@ function Test-SupportedPython {
     return $LASTEXITCODE -eq 0
 }
 
+function Test-PythonLauncherVenv {
+    param(
+        [string] $CommandPath,
+        [string[]] $Prefix
+    )
+    $ProbeRoot = Join-Path ([System.IO.Path]::GetTempPath()) `
+        "sbk-charts-venv-probe-$([guid]::NewGuid().ToString('N'))"
+    $ProbeEnvironment = Join-Path $ProbeRoot "venv"
+    try {
+        New-Item -ItemType Directory -Force -Path $ProbeRoot | Out-Null
+        $CreateArguments = @($Prefix) + @("-m", "venv", $ProbeEnvironment)
+        & $CommandPath @CreateArguments *> $null
+        if ($LASTEXITCODE -ne 0) { return $false }
+        $ProbePython = Join-Path $ProbeEnvironment "Scripts\python.exe"
+        if (-not (Test-Path -LiteralPath $ProbePython -PathType Leaf)) { return $false }
+        & $ProbePython -m ensurepip --version *> $null
+        if ($LASTEXITCODE -ne 0) { return $false }
+        & $ProbePython -m pip --version *> $null
+        return $LASTEXITCODE -eq 0
+    } finally {
+        if (Test-Path -LiteralPath $ProbeRoot) {
+            Remove-Item -LiteralPath $ProbeRoot -Recurse -Force
+        }
+    }
+}
+
 function Test-EnvironmentReady {
     param([string] $PythonPath)
-    & $PythonPath $PolicyReader --environment-ready 2>$null
+    if ($SelectedBackend) {
+        & $PythonPath $PolicyReader --environment-ready $SelectedBackend 2>$null
+    } else {
+        & $PythonPath $PolicyReader --environment-ready 2>$null
+    }
     if ($LASTEXITCODE -ne 0) {
         return $false
     }
@@ -111,6 +192,12 @@ function Install-Project {
     if ($LASTEXITCODE -ne 0) {
         return $false
     }
+    if ($SelectedRequirements) {
+        & $PythonPath -m pip install --requirement $SelectedRequirements
+        if ($LASTEXITCODE -ne 0) {
+            return $false
+        }
+    }
     return Test-EnvironmentReady $PythonPath
 }
 
@@ -119,10 +206,20 @@ function Start-Application {
         [string] $PythonPath,
         [string] $EnvironmentKind,
         [string] $EnvironmentPrefix,
+        [string] $EnvironmentFingerprint,
+        [string] $EnvironmentProfile,
         [string[]] $Arguments
     )
-    & $PythonPath $PolicyReader --remember-environment $EnvironmentKind `
-        $EnvironmentPrefix $RuntimeStateFile
+    if ($EnvironmentFingerprint) {
+        & $PythonPath $PolicyReader --remember-environment $EnvironmentKind `
+            $EnvironmentPrefix $RuntimeStateFile $EnvironmentFingerprint $EnvironmentProfile
+    }
+    else {
+        # Windows PowerShell 5.1 drops empty native-command arguments. Use the
+        # four-value form so a legacy environment can still remember its profile.
+        & $PythonPath $PolicyReader --remember-environment $EnvironmentKind `
+            $EnvironmentPrefix $RuntimeStateFile $EnvironmentProfile
+    }
     if ($LASTEXITCODE -ne 0) {
         Write-LauncherMessage "WARNING: Could not remember successful $EnvironmentKind environment $EnvironmentPrefix"
     }
@@ -139,7 +236,10 @@ function Use-EnvironmentPrefix {
         [string] $EnvironmentPrefix,
         [string] $EnvironmentKind,
         [string[]] $Arguments,
-        [string] $PythonRelativePath = "python.exe"
+        [string] $PythonRelativePath = "python.exe",
+        [string] $EnvironmentFingerprint = "",
+        [string] $EnvironmentProfile = "core",
+        [switch] $Managed
     )
     if (-not $EnvironmentPrefix) {
         return
@@ -148,11 +248,158 @@ function Use-EnvironmentPrefix {
     if (-not (Test-SupportedPython $PythonPath)) {
         return
     }
-    if (-not (Install-Project $PythonPath "$EnvironmentKind environment $EnvironmentPrefix")) {
-        return
+    if ($Managed) {
+        if (-not (Test-EnvironmentReady $PythonPath)) { return }
+        Write-LauncherMessage "Reusing managed environment $EnvironmentPrefix"
+    } else {
+        if (-not (Install-Project $PythonPath "$EnvironmentKind environment $EnvironmentPrefix")) {
+            return
+        }
     }
     Start-Application -PythonPath $PythonPath -EnvironmentKind $EnvironmentKind `
-        -EnvironmentPrefix $EnvironmentPrefix -Arguments $Arguments
+        -EnvironmentPrefix $EnvironmentPrefix -EnvironmentFingerprint $EnvironmentFingerprint `
+        -EnvironmentProfile $EnvironmentProfile -Arguments $Arguments
+}
+
+function Get-BootstrapManager {
+    $ArchiveName = Get-RequiredPolicyValue $Policy "bootstrap.$ManagedTarget-archive"
+    $ArchiveSha = Get-RequiredPolicyValue $Policy "bootstrap.$ManagedTarget-sha256"
+    $ToolDirectory = Join-Path (Join-Path $ManagedRuntimeRoot "tools") `
+        "$BootstrapManager-$BootstrapManagerVersion"
+    $ToolPath = Join-Path $ToolDirectory "$BootstrapManager.exe"
+    $ChecksumMarker = Join-Path $ToolDirectory "archive.sha256"
+    $BinaryChecksumMarker = Join-Path $ToolDirectory "binary.sha256"
+    if ((Test-Path -LiteralPath $ToolPath -PathType Leaf) -and
+        (Test-Path -LiteralPath $ChecksumMarker -PathType Leaf) -and
+        (Test-Path -LiteralPath $BinaryChecksumMarker -PathType Leaf) -and
+        ((Get-Content -LiteralPath $ChecksumMarker -Raw).Trim() -eq $ArchiveSha)) {
+        $ExpectedBinarySha = (Get-Content -LiteralPath $BinaryChecksumMarker -Raw).Trim()
+        $ActualBinarySha = (Get-FileHash -LiteralPath $ToolPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($ActualBinarySha -eq $ExpectedBinarySha) { return $ToolPath }
+    }
+
+    $TemporaryDirectory = $null
+    try {
+        $TemporaryDirectory = Join-Path $ManagedRuntimeRoot ".tool-$([guid]::NewGuid().ToString('N'))"
+        New-Item -ItemType Directory -Force -Path $TemporaryDirectory | Out-Null
+        $ArchivePath = Join-Path $TemporaryDirectory $ArchiveName
+        $ArchiveUrl = "$BootstrapDownloadBaseUrl/$BootstrapManagerVersion/$ArchiveName"
+        Write-LauncherMessage "Downloading pinned $BootstrapManager $BootstrapManagerVersion for $ManagedTarget"
+        for ($DownloadAttempt = 1; $DownloadAttempt -le 3; $DownloadAttempt++) {
+            try {
+                Invoke-WebRequest -UseBasicParsing -Uri $ArchiveUrl -OutFile $ArchivePath
+                break
+            } catch {
+                if ($DownloadAttempt -eq 3) { throw }
+                Start-Sleep -Seconds $DownloadAttempt
+            }
+        }
+        $ActualSha = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($ActualSha -ne $ArchiveSha) {
+            throw "Downloaded bootstrap manager failed SHA-256 verification"
+        }
+        Expand-Archive -LiteralPath $ArchivePath -DestinationPath $TemporaryDirectory -Force
+        $ExtractedTool = Get-ChildItem -LiteralPath $TemporaryDirectory -Filter "$BootstrapManager.exe" `
+            -File -Recurse | Select-Object -First 1
+        if (-not $ExtractedTool) { throw "Bootstrap manager executable is missing from $ArchiveName" }
+        New-Item -ItemType Directory -Force -Path $ToolDirectory | Out-Null
+        Copy-Item -LiteralPath $ExtractedTool.FullName -Destination $ToolPath -Force
+        Set-Content -LiteralPath $ChecksumMarker -Value $ArchiveSha -Encoding ASCII
+        $BinarySha = (Get-FileHash -LiteralPath $ToolPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        Set-Content -LiteralPath $BinaryChecksumMarker -Value $BinarySha -Encoding ASCII
+        return $ToolPath
+    } finally {
+        if ($TemporaryDirectory -and (Test-Path -LiteralPath $TemporaryDirectory)) {
+            Remove-Item -LiteralPath $TemporaryDirectory -Recurse -Force
+        }
+    }
+}
+
+function Start-ManagedEnvironment {
+    param([string] $EnvironmentPrefix, [string[]] $Arguments)
+    if (-not $ManagedTarget) {
+        Write-LauncherMessage "This Windows architecture has no managed runtime. Use a portable release or install Python/Conda."
+        return
+    }
+    if (-not $ExpectedFingerprint) { throw "Cannot calculate the managed environment fingerprint" }
+    if (-not (Test-Path -LiteralPath $LockFile -PathType Leaf)) {
+        throw "Dependency lock not found: $LockFile"
+    }
+
+    New-Item -ItemType Directory -Force -Path $ManagedRuntimeRoot | Out-Null
+    $LockPath = Join-Path $ManagedRuntimeRoot "bootstrap.lock"
+    $LockAcquired = $false
+    for ($Attempt = 0; $Attempt -lt $BootstrapLockTimeoutSeconds -and -not $LockAcquired; $Attempt++) {
+        try {
+            New-Item -ItemType Directory -Path $LockPath -ErrorAction Stop | Out-Null
+            $LockAcquired = $true
+        } catch {
+            $OwnerFile = Join-Path $LockPath "pid"
+            if (Test-Path -LiteralPath $OwnerFile -PathType Leaf) {
+                $OwnerPid = (Get-Content -LiteralPath $OwnerFile -Raw).Trim()
+                if ($OwnerPid -match '^\d+$' -and
+                    -not (Get-Process -Id ([int] $OwnerPid) -ErrorAction SilentlyContinue)) {
+                    Remove-Item -LiteralPath $LockPath -Recurse -Force
+                    continue
+                }
+            }
+            Start-Sleep -Seconds 1
+        }
+    }
+    if (-not $LockAcquired) { throw "Timed out waiting for bootstrap lock $LockPath" }
+    Set-Content -LiteralPath (Join-Path $LockPath "pid") -Value $PID -Encoding ASCII
+    $TemporaryEnvironment = $null
+    try {
+        if (Test-Path -LiteralPath (Join-Path $EnvironmentPrefix "Scripts\python.exe")) {
+            Use-EnvironmentPrefix -EnvironmentPrefix $EnvironmentPrefix -EnvironmentKind "managed" `
+                -Arguments $Arguments `
+                -PythonRelativePath "Scripts\python.exe" -EnvironmentFingerprint $ExpectedFingerprint `
+                -EnvironmentProfile $SelectedProfile -Managed
+        }
+        $UvPath = if ($env:SBK_CHARTS_UV) { $env:SBK_CHARTS_UV } else { Get-BootstrapManager }
+        if (-not (Test-Path -LiteralPath $UvPath -PathType Leaf)) {
+            throw "Bootstrap manager is not executable: $UvPath"
+        }
+        $PythonInstallDirectory = Join-Path $ManagedRuntimeRoot "python"
+        $env:UV_PYTHON_INSTALL_DIR = $PythonInstallDirectory
+        $env:UV_CACHE_DIR = Join-Path $ManagedRuntimeRoot "cache"
+        $env:UV_LINK_MODE = "copy"
+        Write-LauncherMessage "Installing managed Python $ManagedPython"
+        & $UvPath python install --install-dir $PythonInstallDirectory $ManagedPython
+        if ($LASTEXITCODE -ne 0) { throw "Could not install managed Python $ManagedPython" }
+        $TemporaryEnvironment = Join-Path $ManagedRuntimeRoot `
+            ".env-$ExpectedFingerprint-$([guid]::NewGuid().ToString('N'))"
+        & $UvPath venv --relocatable --managed-python --seed --python $ManagedPython $TemporaryEnvironment
+        if ($LASTEXITCODE -ne 0) { throw "Could not create managed environment" }
+        $ManagedPythonPath = Join-Path $TemporaryEnvironment "Scripts\python.exe"
+        & $UvPath pip install --python $ManagedPythonPath --require-hashes --requirement $LockFile
+        if ($LASTEXITCODE -ne 0) { throw "Could not install locked $SelectedProfile dependencies" }
+        & $UvPath pip install --python $ManagedPythonPath --no-build-isolation `
+            --no-deps --editable $ProjectRoot
+        if ($LASTEXITCODE -ne 0 -or -not (Test-EnvironmentReady $ManagedPythonPath)) {
+            throw "Managed environment self-check failed"
+        }
+        if (Test-Path -LiteralPath $EnvironmentPrefix) {
+            $StaleEnvironment = "$EnvironmentPrefix.stale-$PID"
+            Move-Item -LiteralPath $EnvironmentPrefix -Destination $StaleEnvironment
+            Write-LauncherMessage "Preserved incomplete managed environment as $StaleEnvironment"
+        }
+        New-Item -ItemType Directory -Force -Path (Split-Path $EnvironmentPrefix) | Out-Null
+        Move-Item -LiteralPath $TemporaryEnvironment -Destination $EnvironmentPrefix
+        $TemporaryEnvironment = $null
+    } finally {
+        if ($TemporaryEnvironment -and (Test-Path -LiteralPath $TemporaryEnvironment)) {
+            Remove-Item -LiteralPath $TemporaryEnvironment -Recurse -Force
+        }
+        if (Test-Path -LiteralPath $LockPath) {
+            Remove-Item -LiteralPath $LockPath -Recurse -Force
+        }
+    }
+    Use-EnvironmentPrefix -EnvironmentPrefix $EnvironmentPrefix -EnvironmentKind "managed" `
+        -Arguments $Arguments `
+        -PythonRelativePath "Scripts\python.exe" -EnvironmentFingerprint $ExpectedFingerprint `
+        -EnvironmentProfile $SelectedProfile -Managed
+    throw "Managed environment could not start $AppName"
 }
 
 function Read-RuntimeState {
@@ -172,13 +419,26 @@ if (-not $env:SBK_CHARTS_VENV) {
     $RuntimeState = Read-RuntimeState
     $PreferredKind = [string] $RuntimeState["kind"]
     $PreferredPrefix = [string] $RuntimeState["prefix"]
-    if ($PreferredPrefix -and $PreferredKind -eq "venv") {
+    $PreferredFingerprint = [string] $RuntimeState["fingerprint"]
+    $PreferredProfile = [string] $RuntimeState["profile"]
+    if ($PreferredPrefix -and $PreferredKind -eq "managed" -and
+        $PreferredFingerprint -eq $ExpectedFingerprint -and
+        $PreferredProfile -eq $SelectedProfile) {
+        Write-LauncherMessage "Trying remembered managed environment $PreferredPrefix"
+        Use-EnvironmentPrefix -EnvironmentPrefix $PreferredPrefix -EnvironmentKind "managed" `
+            -Arguments $ApplicationArguments `
+            -PythonRelativePath "Scripts\python.exe" -EnvironmentFingerprint $ExpectedFingerprint `
+            -EnvironmentProfile $SelectedProfile -Managed
+    } elseif ($PreferredPrefix -and $PreferredKind -eq "venv") {
         Write-LauncherMessage "Trying remembered venv environment $PreferredPrefix"
-        Use-EnvironmentPrefix $PreferredPrefix "venv" $ApplicationArguments `
-            -PythonRelativePath "Scripts\python.exe"
+        Use-EnvironmentPrefix -EnvironmentPrefix $PreferredPrefix -EnvironmentKind "venv" `
+            -Arguments $ApplicationArguments `
+            -PythonRelativePath "Scripts\python.exe" -EnvironmentProfile $SelectedProfile
     } elseif ($PreferredPrefix -and $PreferredKind -eq "conda") {
         Write-LauncherMessage "Trying remembered Conda environment $PreferredPrefix"
-        Use-EnvironmentPrefix $PreferredPrefix "conda" $ApplicationArguments
+        Use-EnvironmentPrefix -EnvironmentPrefix $PreferredPrefix -EnvironmentKind "conda" `
+            -Arguments $ApplicationArguments `
+            -EnvironmentProfile $SelectedProfile
     }
 }
 
@@ -198,19 +458,23 @@ foreach ($EnvironmentPrefix in $EnvironmentCandidates) {
         continue
     }
     $SeenCandidates[$CandidateKey] = $true
-    Use-EnvironmentPrefix $EnvironmentPrefix "venv" $ApplicationArguments `
-        -PythonRelativePath "Scripts\python.exe"
+    Use-EnvironmentPrefix -EnvironmentPrefix $EnvironmentPrefix -EnvironmentKind "venv" `
+        -Arguments $ApplicationArguments `
+        -PythonRelativePath "Scripts\python.exe" -EnvironmentProfile $SelectedProfile
 }
 
 if (-not $env:SBK_CHARTS_VENV) {
-    Use-EnvironmentPrefix $env:CONDA_PREFIX "conda" $ApplicationArguments
+    Use-EnvironmentPrefix -EnvironmentPrefix $env:CONDA_PREFIX -EnvironmentKind "conda" `
+        -Arguments $ApplicationArguments `
+        -EnvironmentProfile $SelectedProfile
 
     $ProjectEnvironmentCandidates = @($VirtualEnvironmentNames | ForEach-Object {
         Join-Path $ProjectRoot $_
     })
     foreach ($EnvironmentPrefix in $ProjectEnvironmentCandidates) {
-        Use-EnvironmentPrefix $EnvironmentPrefix "venv" $ApplicationArguments `
-            -PythonRelativePath "Scripts\python.exe"
+        Use-EnvironmentPrefix -EnvironmentPrefix $EnvironmentPrefix -EnvironmentKind "venv" `
+            -Arguments $ApplicationArguments `
+            -PythonRelativePath "Scripts\python.exe" -EnvironmentProfile $SelectedProfile
     }
 }
 
@@ -221,7 +485,26 @@ if ($CondaCommand) {
     if ($LASTEXITCODE -eq 0 -and $CondaPrefixOutput) {
         $NamedCondaEnvironmentExists = $true
         $CondaPrefix = [string](@($CondaPrefixOutput) | Select-Object -Last 1)
-        Use-EnvironmentPrefix $CondaPrefix.Trim() "conda" $ApplicationArguments
+        Use-EnvironmentPrefix -EnvironmentPrefix ($CondaPrefix.Trim()) -EnvironmentKind "conda" `
+            -Arguments $ApplicationArguments `
+            -EnvironmentProfile $SelectedProfile
+    }
+}
+
+$ManagedEnvironment = Join-Path (Join-Path $ManagedRuntimeRoot "envs") $ExpectedFingerprint
+if ($ExpectedFingerprint) {
+    Use-EnvironmentPrefix -EnvironmentPrefix $ManagedEnvironment -EnvironmentKind "managed" `
+        -Arguments $ApplicationArguments `
+        -PythonRelativePath "Scripts\python.exe" -EnvironmentFingerprint $ExpectedFingerprint `
+        -EnvironmentProfile $SelectedProfile -Managed
+}
+
+if (-not $env:SBK_CHARTS_VENV -and $ExpectedFingerprint) {
+    try {
+        Start-ManagedEnvironment -EnvironmentPrefix $ManagedEnvironment -Arguments $ApplicationArguments
+    } catch {
+        Write-LauncherMessage "Managed environment setup failed: $($_.Exception.Message)"
+        Write-LauncherMessage "Trying legacy Python/Conda"
     }
 }
 
@@ -244,8 +527,11 @@ foreach ($Launcher in $PythonLaunchers) {
     )
     & $Command.Source @ProbeArguments 2>$null
     if ($LASTEXITCODE -eq 0) {
-        $SupportedLauncher = @{ Command = $Command.Source; Prefix = @($Launcher.Prefix) }
-        break
+        if (Test-PythonLauncherVenv -CommandPath $Command.Source -Prefix @($Launcher.Prefix)) {
+            $SupportedLauncher = @{ Command = $Command.Source; Prefix = @($Launcher.Prefix) }
+            break
+        }
+        Write-LauncherMessage "Python candidate $($Command.Source) cannot create a working venv; trying the next candidate"
     }
 }
 
@@ -258,7 +544,8 @@ if ($SupportedLauncher) {
         if ((Test-SupportedPython $VenvPython) -and
             (Install-Project $VenvPython "virtual environment $VenvPath")) {
             Start-Application -PythonPath $VenvPython -EnvironmentKind "venv" `
-                -EnvironmentPrefix $VenvPath -Arguments $ApplicationArguments
+                -EnvironmentPrefix $VenvPath -EnvironmentFingerprint "" `
+                -EnvironmentProfile $SelectedProfile -Arguments $ApplicationArguments
         }
     }
     Write-LauncherMessage "Virtual environment setup failed; trying Conda"
@@ -277,7 +564,9 @@ if ($CondaCommand) {
     }
     $CondaPrefixOutput = & $CondaCommand.Source run --name $CondaEnvironmentName python -c "import sys; print(sys.prefix)"
     $CondaPrefix = [string](@($CondaPrefixOutput) | Select-Object -Last 1)
-    Use-EnvironmentPrefix $CondaPrefix.Trim() "conda" $ApplicationArguments
+    Use-EnvironmentPrefix -EnvironmentPrefix ($CondaPrefix.Trim()) -EnvironmentKind "conda" `
+        -Arguments $ApplicationArguments `
+        -EnvironmentProfile $SelectedProfile
 }
 
 if (-not $SupportedLauncher) {

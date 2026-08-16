@@ -39,6 +39,8 @@ jobs:
         cache: pip
         cache-dependency-path: |
           requirements.txt
+          requirements-bootstrap.txt
+          requirements-ai/*.txt
           requirements-portable.txt
     - name: Install CPU-only PyTorch for Linux portability
       if: runner.os == 'Linux'
@@ -46,7 +48,7 @@ jobs:
     - name: Install application and portable build tools
       run: |
         python -m pip install --upgrade pip
-        python -m pip install . -r requirements-portable.txt
+        python -m pip install ".[all-ai]" -r requirements-portable.txt
     - name: Test portable build support
       run: python -m unittest discover -s tests -p "test_portable.py"
     - name: Build portable archive

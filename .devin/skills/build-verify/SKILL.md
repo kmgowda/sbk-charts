@@ -28,4 +28,15 @@ Confirm the banner, logo, policy file, source launchers, scripts, documentation,
 
 For release confidence, install the wheel into a fresh temporary virtual environment and run it from outside the repository. For portable changes, install `requirements-portable.txt`, run `scripts/build_portable.py` on a native target, verify the checksum and manifest, extract the whole bundle, and run the sample.
 
+For source-launcher changes, also verify:
+
+- first-run managed creation with a fresh `SBK_CHARTS_RUNTIME_ROOT`;
+- second-run reuse with network access disabled;
+- fallback past a version-compatible Python that cannot create a working venv;
+- cleanup of failed `.tool.*`, venv-probe, and unpublished `.env-*` paths;
+- runtime-state kind, prefix, profile, and fingerprint;
+- PowerShell and CMD behavior on Windows through CI or a real Windows host.
+
+The managed checks can download a pinned runtime and dependencies. Use an isolated temporary runtime root and do not remove a user's existing `.sbk-runtime/` directory.
+
 Do not delete or overwrite unrelated existing artifacts. Do not claim an operating system, provider, or visual check that was not performed.

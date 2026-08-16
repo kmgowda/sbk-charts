@@ -41,8 +41,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install flake8 pytest
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        python -m pip install -r requirements.txt -r requirements-dev.txt
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
@@ -51,6 +50,32 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test portable build support
       run: python -m unittest discover -s tests -p "test_portable.py"
+    - name: Build wheel and source distribution
+      run: python -m build --wheel --sdist
+    - name: Skip a Python interpreter with broken venv support
+      shell: bash
+      run: |
+        working_python="$(command -v python)"
+        fake_bin="$RUNNER_TEMP/fake-python-bin"
+        probe_tmp="$RUNNER_TEMP/venv-probes"
+        mkdir -p "$fake_bin" "$probe_tmp"
+        cat > "$fake_bin/python3.12" <<'EOF'
+        #!/usr/bin/env bash
+        if [ "${1:-}" = "-c" ]; then
+            exit 0
+        fi
+        exit 1
+        EOF
+        chmod +x "$fake_bin/python3.12"
+        ln -s "$working_python" "$fake_bin/python3.11"
+        PATH="$fake_bin:$PATH" \
+        TMPDIR="$probe_tmp" \
+        SBK_CHARTS_VENV="$RUNNER_TEMP/legacy-venv" \
+        SBK_CHARTS_STATE_FILE="$RUNNER_TEMP/legacy-state" \
+            ./sbk-charts -h > legacy-help.txt 2> legacy-runtime.txt
+        grep -q "Environment: venv" legacy-help.txt
+        grep -q "cannot create a working venv; trying the next candidate" legacy-runtime.txt
+        test -z "$(find "$probe_tmp" -mindepth 1 -maxdepth 1 -print -quit)"
 #    - name: Test with pytest
 #      run: |
 #        pytest
@@ -84,4 +109,153 @@ jobs:
       shell: cmd
       env:
         SBK_CHARTS_VENV: ${{ github.workspace }}\venv-sbk-charts
-      run: sbk-charts.bat -h
+      run: |
+        del /Q .sbk-charts-runtime 2>nul
+        sbk-charts.bat -h
+        findstr /R /C:"^kind=venv$" .sbk-charts-runtime >nul
+        if errorlevel 1 exit /b 1
+    - name: Skip a Python launcher with broken venv support
+      shell: pwsh
+      run: |
+        $FakeBin = Join-Path $env:RUNNER_TEMP "fake-python-bin"
+        $ProbeTemp = Join-Path $env:RUNNER_TEMP "venv-probes"
+        $BrokenPythonMarker = Join-Path $env:RUNNER_TEMP "broken-python-attempted"
+        $env:SBK_BROKEN_PY_MARKER = $BrokenPythonMarker
+        New-Item -ItemType Directory -Force -Path $FakeBin, $ProbeTemp | Out-Null
+        @'
+        @echo off
+        if "%~2"=="-c" exit /b 0
+        echo attempted>"%SBK_BROKEN_PY_MARKER%"
+        exit /b 1
+        '@ | Set-Content -LiteralPath (Join-Path $FakeBin "py.cmd") -Encoding ASCII
+        $env:PATH = "$FakeBin;$env:PATH"
+        $env:TEMP = $ProbeTemp
+        $env:TMP = $ProbeTemp
+        $env:SBK_CHARTS_VENV = Join-Path $env:RUNNER_TEMP "legacy-venv"
+        $env:SBK_CHARTS_STATE_FILE = Join-Path $env:RUNNER_TEMP "legacy-state"
+        .\sbk-charts.ps1 -h 1> legacy-help.txt 2> legacy-runtime.txt
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        if (-not (Select-String -Quiet -Path legacy-help.txt -Pattern "Environment: venv")) {
+          throw "The working Python launcher was not selected"
+        }
+        if (-not (Test-Path -LiteralPath $BrokenPythonMarker -PathType Leaf)) {
+          throw "The broken Python launcher was not probed"
+        }
+        if (Get-ChildItem -LiteralPath $ProbeTemp -Force | Select-Object -First 1) {
+          throw "A venv probe directory was not cleaned"
+        }
+    - name: Clean an unpublished managed environment after failure
+      shell: pwsh
+      run: |
+        $SavedVenv = Join-Path $env:RUNNER_TEMP "saved-project-venv"
+        Move-Item -LiteralPath .\venv-sbk-charts -Destination $SavedVenv
+        $FakeUv = Join-Path $env:RUNNER_TEMP "failing-uv.cmd"
+        @'
+        @echo off
+        if "%~1"=="python" exit /b 0
+        if not "%~1"=="venv" exit /b 1
+        set "last="
+        :next
+        if "%~1"=="" goto create
+        set "last=%~1"
+        shift
+        goto next
+        :create
+        mkdir "%last%"
+        exit /b 1
+        '@ | Set-Content -LiteralPath $FakeUv -Encoding ASCII
+        $FailedRuntime = Join-Path $env:RUNNER_TEMP "failed-managed-runtime"
+        $env:SBK_CHARTS_UV = $FakeUv
+        $env:SBK_CHARTS_RUNTIME_ROOT = $FailedRuntime
+        $env:SBK_CHARTS_STATE_FILE = Join-Path $env:RUNNER_TEMP "managed-failure-state"
+        Remove-Item Env:SBK_CHARTS_VENV -ErrorAction SilentlyContinue
+        .\sbk-charts.ps1 -h 1> failure-help.txt 2> failure-runtime.txt
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        if (-not (Select-String -Quiet -Path failure-help.txt -Pattern "Environment: venv")) {
+          throw "Legacy venv fallback did not run after managed failure"
+        }
+        if (Get-ChildItem -LiteralPath $FailedRuntime -Filter ".env-*" -Force | Select-Object -First 1) {
+          throw "An unpublished managed environment was not cleaned"
+        }
+        if (Test-Path -LiteralPath (Join-Path $FailedRuntime "bootstrap.lock")) {
+          throw "The bootstrap lock was not cleaned"
+        }
+
+  managed-bootstrap-unix:
+    name: Managed bootstrap (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - name: Linux x86-64
+          runner: ubuntu-24.04
+        - name: macOS Apple silicon
+          runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      with:
+        persist-credentials: false
+    - name: Create and concurrently reuse managed environment
+      shell: bash
+      run: |
+        ./sbk-charts -h > first-help.txt 2> first-runtime.txt &
+        first_pid=$!
+        ./sbk-charts -h > concurrent-help.txt 2> concurrent-runtime.txt &
+        concurrent_pid=$!
+        wait "$first_pid"
+        wait "$concurrent_pid"
+        grep -q "Environment: managed" first-help.txt
+        grep -q "Environment: managed" concurrent-help.txt
+        grep -q "^kind=managed$" .sbk-charts-runtime
+        grep -q "^profile=core$" .sbk-charts-runtime
+        test ! -e .sbk-runtime/bootstrap.lock
+    - name: Reuse managed environment without network
+      shell: bash
+      env:
+        UV_OFFLINE: "true"
+        HTTPS_PROXY: http://127.0.0.1:1
+        HTTP_PROXY: http://127.0.0.1:1
+      run: |
+        ./sbk-charts -h > second-help.txt 2> second-runtime.txt
+        grep -q "Environment: managed" second-help.txt
+        grep -q "Reusing managed environment" second-runtime.txt
+
+  managed-bootstrap-windows:
+    name: Managed bootstrap (Windows x86-64)
+    runs-on: windows-2022
+    timeout-minutes: 15
+
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      with:
+        persist-credentials: false
+    - name: Create managed environment
+      shell: pwsh
+      run: |
+        .\sbk-charts.ps1 -h | Tee-Object -FilePath first-help.txt
+        if (-not (Select-String -Quiet -Path first-help.txt -Pattern "Environment: managed")) {
+          throw "Managed environment details were not reported"
+        }
+        if (-not (Select-String -Quiet -Path .sbk-charts-runtime -Pattern "^kind=managed$")) {
+          throw "Managed environment was not remembered"
+        }
+        if (-not (Select-String -Quiet -Path .sbk-charts-runtime -Pattern "^profile=core$")) {
+          throw "Core dependency profile was not remembered"
+        }
+    - name: Reuse managed environment without network through CMD shim
+      shell: pwsh
+      run: |
+        $env:UV_OFFLINE = "true"
+        $env:HTTPS_PROXY = "http://127.0.0.1:1"
+        $env:HTTP_PROXY = "http://127.0.0.1:1"
+        cmd /c "sbk-charts.bat -h 1>second-help.txt 2>second-runtime.txt"
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        if (-not (Select-String -Quiet -Path second-help.txt -Pattern "Environment: managed")) {
+          throw "Managed environment details were not reported during reuse"
+        }
+        if (-not (Select-String -Quiet -Path second-runtime.txt -Pattern "Reusing managed environment")) {
+          throw "Managed environment was not reused offline"
+        }
