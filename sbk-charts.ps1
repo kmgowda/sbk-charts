@@ -210,8 +210,16 @@ function Start-Application {
         [string] $EnvironmentProfile,
         [string[]] $Arguments
     )
-    & $PythonPath $PolicyReader --remember-environment $EnvironmentKind `
-        $EnvironmentPrefix $RuntimeStateFile $EnvironmentFingerprint $EnvironmentProfile
+    if ($EnvironmentFingerprint) {
+        & $PythonPath $PolicyReader --remember-environment $EnvironmentKind `
+            $EnvironmentPrefix $RuntimeStateFile $EnvironmentFingerprint $EnvironmentProfile
+    }
+    else {
+        # Windows PowerShell 5.1 drops empty native-command arguments. Use the
+        # four-value form so a legacy environment can still remember its profile.
+        & $PythonPath $PolicyReader --remember-environment $EnvironmentKind `
+            $EnvironmentPrefix $RuntimeStateFile $EnvironmentProfile
+    }
     if ($LASTEXITCODE -ne 0) {
         Write-LauncherMessage "WARNING: Could not remember successful $EnvironmentKind environment $EnvironmentPrefix"
     }

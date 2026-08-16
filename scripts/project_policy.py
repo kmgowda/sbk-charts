@@ -389,10 +389,16 @@ def main() -> int:
         print("\n".join(runtime_details(load_policy(), *selected.runtime_details)))
         return 0
     if selected.remember_environment:
-        if len(selected.remember_environment) not in {3, 5}:
-            parser.error("--remember-environment expects 3 or 5 values")
+        if len(selected.remember_environment) not in {3, 4, 5}:
+            parser.error("--remember-environment expects 3, 4, or 5 values")
         environment_kind, environment_prefix, state_file = selected.remember_environment[:3]
-        fingerprint, profile = (selected.remember_environment[3:] or ["", "core"])
+        optional_values = selected.remember_environment[3:]
+        if len(optional_values) == 2:
+            fingerprint, profile = optional_values
+        elif len(optional_values) == 1:
+            fingerprint, profile = "", optional_values[0]
+        else:
+            fingerprint, profile = "", "core"
         remember_environment(
             environment_kind,
             environment_prefix,

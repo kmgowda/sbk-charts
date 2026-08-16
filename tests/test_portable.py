@@ -379,6 +379,34 @@ class PortableReleaseTest(unittest.TestCase):
                 remember_environment("system", "/usr/bin", state_file)
             self.assertIsNone(load_remembered_environment(state_file))
 
+    def test_policy_cli_remembers_profile_without_fingerprint(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            state_file = Path(temporary) / "runtime-state"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(build_portable.ROOT / "scripts" / "project_policy.py"),
+                    "--remember-environment",
+                    "venv",
+                    "/project/venv",
+                    str(state_file),
+                    "ollama",
+                ],
+                cwd=build_portable.ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            remembered = load_remembered_environment(state_file)
+            self.assertEqual(("venv", "/project/venv"), remembered)
+            state_values = dict(
+                line.split("=", 1)
+                for line in state_file.read_text(encoding="utf-8").splitlines()
+            )
+            self.assertEqual("", state_values["fingerprint"])
+            self.assertEqual("ollama", state_values["profile"])
+
     def test_launchers_and_ci_consume_runtime_policy(self):
         bash_launcher = (build_portable.ROOT / "sbk-charts").read_text(encoding="utf-8")
         powershell_launcher = (build_portable.ROOT / "sbk-charts.ps1").read_text(encoding="utf-8")
@@ -431,6 +459,7 @@ class PortableReleaseTest(unittest.TestCase):
         )
         self.assertIn("Trying remembered managed environment", powershell_launcher)
         self.assertIn("--remember-environment $EnvironmentKind", powershell_launcher)
+        self.assertIn("if ($EnvironmentFingerprint)", powershell_launcher)
         self.assertIn(
             "if (-not $env:SBK_CHARTS_VENV -and $ExpectedFingerprint)",
             powershell_launcher,
@@ -452,6 +481,7 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn("managed-bootstrap-windows:", workflow)
         self.assertIn("Skip a Python interpreter with broken venv support", workflow)
         self.assertIn("Skip a Python launcher with broken venv support", workflow)
+        self.assertIn("SBK_BROKEN_PY_MARKER", workflow)
         self.assertIn("Clean an unpublished managed environment after failure", workflow)
         self.assertIn('UV_OFFLINE: "true"', workflow)
         self.assertIn("python -m build --wheel --sdist", workflow)

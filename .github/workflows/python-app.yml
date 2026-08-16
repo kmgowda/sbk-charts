@@ -109,16 +109,23 @@ jobs:
       shell: cmd
       env:
         SBK_CHARTS_VENV: ${{ github.workspace }}\venv-sbk-charts
-      run: sbk-charts.bat -h
+      run: |
+        del /Q .sbk-charts-runtime 2>nul
+        sbk-charts.bat -h
+        findstr /R /C:"^kind=venv$" .sbk-charts-runtime >nul
+        if errorlevel 1 exit /b 1
     - name: Skip a Python launcher with broken venv support
       shell: pwsh
       run: |
         $FakeBin = Join-Path $env:RUNNER_TEMP "fake-python-bin"
         $ProbeTemp = Join-Path $env:RUNNER_TEMP "venv-probes"
+        $BrokenPythonMarker = Join-Path $env:RUNNER_TEMP "broken-python-attempted"
+        $env:SBK_BROKEN_PY_MARKER = $BrokenPythonMarker
         New-Item -ItemType Directory -Force -Path $FakeBin, $ProbeTemp | Out-Null
         @'
         @echo off
         if "%~2"=="-c" exit /b 0
+        echo attempted>"%SBK_BROKEN_PY_MARKER%"
         exit /b 1
         '@ | Set-Content -LiteralPath (Join-Path $FakeBin "py.cmd") -Encoding ASCII
         $env:PATH = "$FakeBin;$env:PATH"
@@ -131,8 +138,8 @@ jobs:
         if (-not (Select-String -Quiet -Path legacy-help.txt -Pattern "Environment: venv")) {
           throw "The working Python launcher was not selected"
         }
-        if (-not (Select-String -Quiet -Path legacy-runtime.txt -Pattern "cannot create a working venv")) {
-          throw "The broken Python launcher was not skipped"
+        if (-not (Test-Path -LiteralPath $BrokenPythonMarker -PathType Leaf)) {
+          throw "The broken Python launcher was not probed"
         }
         if (Get-ChildItem -LiteralPath $ProbeTemp -Force | Select-Object -First 1) {
           throw "A venv probe directory was not cleaned"
