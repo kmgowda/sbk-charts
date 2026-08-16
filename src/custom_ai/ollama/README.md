@@ -1,6 +1,6 @@
 # Ollama backend
 
-The `ollama` command sends shared SBK analysis prompts to an Ollama server over HTTP. The server can run on the same computer or on a reachable network host.
+The `ollama` command sends shared SBK analysis prompts to an Ollama server over HTTP or HTTPS. The server can run on the same computer or on a reachable network host. Remote endpoints must use `https://` with certificate validation enabled. Use plain `http://` only for localhost or a trusted private network because it does not encrypt prompts or benchmark data.
 
 ## Setup
 
@@ -51,6 +51,6 @@ The adapter checks `/api/tags` for service health and sends chat requests to `/a
 - Model not found: run `ollama pull <model>` and use the same name in `--ollama-model`.
 - Slow or timed-out calls: choose a smaller model, increase both relevant timeouts, or add `-nothreads`.
 - Out of memory: choose a smaller or more strongly quantized model.
-- Remote endpoint: check firewall and routing, and remember benchmark prompt data leaves the local machine.
+- Remote endpoint: use `https://` with a certificate trusted by the client, keep certificate validation enabled, check firewall and routing, and remember benchmark prompt data leaves the local machine. Limit plain `http://` to localhost or a trusted private network.
 
 The implementation uses the `requests` package; it does not require the Ollama Python client.

@@ -23,6 +23,20 @@ from scripts.project_policy import (
 )
 
 
+BACKEND_GUIDES = frozenset(
+    {
+        "src/custom_ai/README.md",
+        "src/custom_ai/anthropic/README.md",
+        "src/custom_ai/gemini/README.md",
+        "src/custom_ai/hugging_face/README.md",
+        "src/custom_ai/lm_studio/README.md",
+        "src/custom_ai/no_ai/README.md",
+        "src/custom_ai/ollama/README.md",
+        "src/custom_ai/pytorch_llm/README.md",
+    }
+)
+
+
 class PortableReleaseTest(unittest.TestCase):
     def setUp(self) -> None:
         self.commands: list[list[str]] = []
@@ -78,6 +92,7 @@ class PortableReleaseTest(unittest.TestCase):
             expected = hashlib.sha256(archive.read_bytes()).hexdigest()
             self.assertEqual(f"{expected}  {archive.name}\n", checksum_path.read_text(encoding="utf-8"))
             with tarfile.open(archive, "r:gz") as source:
+                archive_members = set(source.getnames())
                 manifest = json.load(
                     source.extractfile(f"{bundle_name}/{self.policy.portable.manifest_name}")
                 )
@@ -89,6 +104,9 @@ class PortableReleaseTest(unittest.TestCase):
             self.assertIn(self.policy.application.name, manifest["files"])
             self.assertIn(POLICY_FILE.name, manifest["files"])
             self.assertIn("docs/PORTABLE.md", manifest["files"])
+            for guide in BACKEND_GUIDES:
+                self.assertIn(guide, manifest["files"])
+                self.assertIn(f"{bundle_name}/{guide}", archive_members)
             self.assertIn("--help", self.commands[-1])
 
     def test_windows_target_creates_zip_archive(self):
@@ -125,17 +143,7 @@ class PortableReleaseTest(unittest.TestCase):
         )
         self.assertEqual(set(self.policy.portable.targets), set(self.policy.portable.archive_formats))
         self.assertEqual(set(self.policy.portable.targets), set(self.policy.portable.runners))
-        backend_guides = {
-            "src/custom_ai/README.md",
-            "src/custom_ai/anthropic/README.md",
-            "src/custom_ai/gemini/README.md",
-            "src/custom_ai/hugging_face/README.md",
-            "src/custom_ai/lm_studio/README.md",
-            "src/custom_ai/no_ai/README.md",
-            "src/custom_ai/ollama/README.md",
-            "src/custom_ai/pytorch_llm/README.md",
-        }
-        self.assertTrue(backend_guides.issubset(self.policy.portable.bundle_paths))
+        self.assertTrue(BACKEND_GUIDES.issubset(self.policy.portable.bundle_paths))
         self.assertTrue(POLICY_FILE.is_file())
 
         matrix = github_matrix(self.policy)

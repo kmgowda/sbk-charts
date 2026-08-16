@@ -306,7 +306,8 @@ Read [Portable distributions](docs/PORTABLE.md) for supported targets, checksum 
 Plugin discovery skips a backend when importing its Python module fails. Run:
 
 ```bash
-venv-sbk-charts/bin/python -c \
+# Activate the selected environment first, then use its Python executable.
+python -c \
   "from src.ai.discover import discover_custom_ai_classes; print(discover_custom_ai_classes())"
 ```
 
@@ -349,7 +350,7 @@ PyTorch wheels vary by Python version, operating system, and processor. The self
 
 Create a feature branch, make a focused change, run the verification commands in [AGENTS.md](AGENTS.md), and open a pull request that explains the behavior change and test results. Do not commit generated workbooks, virtual environments, build directories, wheels, API keys, or model files.
 
-Report bugs and feature requests through [GitHub Issues](https://github.com/kmgowda/sbk-charts/issues). Include the command, operating system, Python version, selected environment, complete error text, and a small reproducible CSV when possible.
+Report bugs and feature requests through [GitHub Issues](https://github.com/kmgowda/sbk-charts/issues). Include the command, operating system, Python version, selected environment, redacted error text, and a small reproducible CSV when possible. Remove API keys, tokens, prompts, and sensitive benchmark measurements before sharing diagnostics.
 
 ## License
 

@@ -216,7 +216,10 @@ Verification examples:
 ```bash
 ./sbk-charts -h
 ./sbk-charts -i samples/charts/sbk-file-read.csv gemini -h
-GEMINI_API_KEY=<key> ./sbk-charts \
+read -r -s -p "GEMINI_API_KEY: " GEMINI_API_KEY
+printf '\n'
+export GEMINI_API_KEY
+./sbk-charts \
   -i samples/charts/sbk-file-read.csv \
   -o /tmp/gemini.xlsx \
   gemini --gemini-model gemini-2.5-flash

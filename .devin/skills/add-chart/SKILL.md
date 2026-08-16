@@ -28,4 +28,8 @@ Use this skill for a new metric visualization, comparison sheet, or chart family
   -o /tmp/chart-two.xlsx
 ```
 
-Load each workbook with openpyxl and visually inspect it. Check title, axes, units, range, legend, series count, colors, font size, dimensions, placement, and sheet order. File validity alone is not enough.
+Load each workbook with openpyxl to verify its structure and expected sheet
+order. Because openpyxl does not render charts, also open each workbook in
+Excel, LibreOffice, or an equivalent spreadsheet viewer. Visually check the
+titles, axes, units, ranges, legends, series, colors, fonts, dimensions,
+placement, and sheet order.
