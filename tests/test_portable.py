@@ -1,6 +1,7 @@
 import hashlib
 import json
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -59,6 +60,25 @@ class PortableReleaseTest(unittest.TestCase):
             (dist / "_internal").mkdir()
             (dist / "_internal" / "runtime.dat").write_bytes(b"runtime")
         return subprocess.CompletedProcess(command, 0)
+
+    def test_portable_builder_runs_without_installed_project_paths(self):
+        repository_root = Path(__file__).resolve().parents[1]
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                "-S",
+                str(repository_root / "scripts" / "build_portable.py"),
+                "--help",
+            ],
+            cwd=repository_root,
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("Build a self-contained", result.stdout)
 
     def test_portable_entry_forwards_arguments_to_the_application(self):
         captured: list[str] = []

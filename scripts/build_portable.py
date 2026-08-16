@@ -15,9 +15,12 @@ import tempfile
 import zipfile
 from pathlib import Path, PurePath
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from scripts.project_policy import ProjectPolicy, application_version, load_policy
 
-ROOT = Path(__file__).resolve().parents[1]
 POLICY = load_policy()
 
 
