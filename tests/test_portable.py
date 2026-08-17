@@ -1,3 +1,12 @@
+# Copyright (c) KMG. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+##
+
 import hashlib
 import json
 import re
@@ -45,6 +54,34 @@ class PortableReleaseTest(unittest.TestCase):
     def setUp(self) -> None:
         self.commands: list[list[str]] = []
         self.policy = load_policy()
+
+    def test_source_files_include_the_license_header(self):
+        root = build_portable.ROOT
+        python_files = sorted(
+            {
+                *root.glob("*.py"),
+                *(root / "scripts").glob("*.py"),
+                *(root / "src").rglob("*.py"),
+                *(root / "tests").rglob("*.py"),
+            }
+        )
+        other_source_files = (
+            root / "sbk-charts",
+            root / "sbk-charts.ps1",
+            root / "sbk-charts.bat",
+            root / "sbk-charts.ini",
+            root / "pyproject.toml",
+            root / "MANIFEST.in",
+            root / "pybuild.gradle",
+            root / ".github" / "workflows" / "python-app.yml",
+            root / ".github" / "workflows" / "portable.yml",
+        )
+
+        for source_file in (*python_files, *other_source_files):
+            with self.subTest(source_file=source_file.relative_to(root)):
+                source = source_file.read_text(encoding="utf-8")
+                self.assertIn("Copyright (c) KMG. All Rights Reserved.", source)
+                self.assertIn("http://www.apache.org/licenses/LICENSE-2.0", source)
 
     def fake_run(self, command: list[str], **_kwargs: object) -> subprocess.CompletedProcess:
         self.commands.append(command)
