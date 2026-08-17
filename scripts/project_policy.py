@@ -18,6 +18,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_FILE = ROOT / "sbk-charts.ini"
+ENVIRONMENT_KINDS = frozenset({"managed", "venv", "conda"})
+SELECTION_SOURCES = frozenset(
+    {
+        "unknown",
+        "explicit-venv",
+        "saved-state",
+        "active-venv",
+        "active-conda",
+        "project-venv",
+        "managed-cache",
+        "named-conda",
+        "created-managed",
+        "created-venv",
+        "created-conda",
+    }
+)
 
 
 def _items(value: str) -> tuple[str, ...]:
@@ -50,6 +66,7 @@ class RuntimePolicy:
     managed_python: str
     default_conda_environment: str
     runtime_state_file: str
+    runtime_state_schema: int
     virtual_environment_names: tuple[str, ...]
     managed_runtime_directory: str
     lock_directory: str
@@ -112,6 +129,7 @@ def load_policy(path: Path = POLICY_FILE) -> ProjectPolicy:
         managed_python=runtime_section["managed_python"],
         default_conda_environment=runtime_section["default_conda_environment"],
         runtime_state_file=runtime_section["runtime_state_file"],
+        runtime_state_schema=runtime_section.getint("runtime_state_schema"),
         virtual_environment_names=_items(runtime_section["virtual_environment_names"]),
         managed_runtime_directory=runtime_section["managed_runtime_directory"],
         lock_directory=runtime_section["lock_directory"],
@@ -168,6 +186,8 @@ def load_policy(path: Path = POLICY_FILE) -> ProjectPolicy:
         raise ValueError("At least one virtual environment name is required")
     if runtime.bootstrap_lock_timeout_seconds < 1:
         raise ValueError("Bootstrap lock timeout must be at least one second")
+    if runtime.runtime_state_schema < 1:
+        raise ValueError("Runtime state schema must be at least one")
     if set(bootstrap.archives) != set(bootstrap.checksums):
         raise ValueError("Every bootstrap archive must have exactly one SHA-256 checksum")
     if bootstrap.manager != "uv":
@@ -284,13 +304,30 @@ def runtime_details(
     policy: ProjectPolicy,
     environment_kind: str,
     environment_prefix: str,
+    environment_profile: str = "core",
+    selection_source: str = "unknown",
+    saved_environment_reused: bool = False,
+    environment_created: bool = False,
 ) -> tuple[str, ...]:
     """Return standardized launcher details for the selected runtime."""
+    if environment_kind not in ENVIRONMENT_KINDS:
+        raise ValueError(f"Unsupported environment kind: {environment_kind}")
+    if selection_source not in SELECTION_SOURCES:
+        raise ValueError(f"Unsupported environment selection source: {selection_source}")
     label = policy.application.name
+    environment_label = {
+        "managed": "managed venv",
+        "venv": "venv",
+        "conda": "conda",
+    }.get(environment_kind, environment_kind)
     return (
         f"{label}: Operating system: {platform.platform(aliased=True)}",
         f"{label}: Python: {platform.python_version()} ({sys.executable})",
-        f"{label}: Environment: {environment_kind} ({environment_prefix})",
+        f"{label}: Environment: {environment_label} ({environment_prefix})",
+        f"{label}: Dependency profile: {environment_profile}",
+        f"{label}: Selection source: {selection_source}",
+        f"{label}: Saved environment reused: {'yes' if saved_environment_reused else 'no'}",
+        f"{label}: Environment created this run: {'yes' if environment_created else 'no'}",
     )
 
 
@@ -300,16 +337,20 @@ def remember_environment(
     state_file: Path,
     fingerprint: str = "",
     profile: str = "core",
+    state_schema: int | None = None,
 ) -> None:
     """Atomically persist the last validated launcher environment."""
-    if environment_kind not in {"venv", "conda", "managed"}:
+    if environment_kind not in ENVIRONMENT_KINDS:
         raise ValueError(f"Unsupported environment kind: {environment_kind}")
     if not environment_prefix:
         raise ValueError("Environment prefix must not be empty")
+    if state_schema is None:
+        state_schema = load_policy().runtime.runtime_state_schema
 
     temporary = state_file.with_name(f".{state_file.name}.{os.getpid()}.tmp")
     try:
         temporary.write_text(
+            f"schema={state_schema}\n"
             f"kind={environment_kind}\n"
             f"prefix={environment_prefix}\n"
             f"fingerprint={fingerprint}\n"
@@ -321,8 +362,13 @@ def remember_environment(
         temporary.unlink(missing_ok=True)
 
 
-def load_remembered_environment(state_file: Path) -> tuple[str, str] | None:
+def load_remembered_environment(
+    state_file: Path,
+    supported_schema: int | None = None,
+) -> tuple[str, str] | None:
     """Load a valid remembered launcher environment, if one exists."""
+    if supported_schema is None:
+        supported_schema = load_policy().runtime.runtime_state_schema
     try:
         values = dict(
             line.split("=", 1)
@@ -333,7 +379,10 @@ def load_remembered_environment(state_file: Path) -> tuple[str, str] | None:
         return None
     environment_kind = values.get("kind", "")
     environment_prefix = values.get("prefix", "")
-    if environment_kind not in {"venv", "conda", "managed"} or not environment_prefix:
+    state_schema = values.get("schema", str(supported_schema))
+    if state_schema != str(supported_schema):
+        return None
+    if environment_kind not in ENVIRONMENT_KINDS or not environment_prefix:
         return None
     return environment_kind, environment_prefix
 
@@ -366,8 +415,8 @@ def main() -> int:
     outputs.add_argument("--minimum-python", action="store_true")
     outputs.add_argument(
         "--runtime-details",
-        nargs=2,
-        metavar=("ENVIRONMENT_KIND", "ENVIRONMENT_PREFIX"),
+        nargs="+",
+        metavar="VALUE",
     )
     outputs.add_argument(
         "--remember-environment",
@@ -386,7 +435,25 @@ def main() -> int:
         print(load_policy().runtime.minimum_python)
         return 0
     if selected.runtime_details:
-        print("\n".join(runtime_details(load_policy(), *selected.runtime_details)))
+        if len(selected.runtime_details) not in {2, 6}:
+            parser.error("--runtime-details expects 2 or 6 values")
+        if len(selected.runtime_details) == 2:
+            runtime_arguments: list[object] = [*selected.runtime_details]
+        else:
+            environment_kind, environment_prefix, profile, source, saved, created = (
+                selected.runtime_details
+            )
+            if saved not in {"yes", "no"} or created not in {"yes", "no"}:
+                parser.error("runtime saved/created values must be yes or no")
+            runtime_arguments = [
+                environment_kind,
+                environment_prefix,
+                profile,
+                source,
+                saved == "yes",
+                created == "yes",
+            ]
+        print("\n".join(runtime_details(load_policy(), *runtime_arguments)))
         return 0
     if selected.remember_environment:
         if len(selected.remember_environment) not in {3, 4, 5}:
@@ -399,12 +466,14 @@ def main() -> int:
             fingerprint, profile = "", optional_values[0]
         else:
             fingerprint, profile = "", "core"
+        policy = load_policy()
         remember_environment(
             environment_kind,
             environment_prefix,
             Path(state_file),
             fingerprint,
             profile,
+            policy.runtime.runtime_state_schema,
         )
         return 0
 

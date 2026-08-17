@@ -239,7 +239,7 @@ When changing policy:
 - update [docs/POLICY.md](docs/POLICY.md);
 - smoke-test Linux/macOS Bash and Windows PowerShell/batch paths as applicable.
 
-Launcher changes must preserve temporary-path cleanup and fallback behavior. A system Python candidate is usable only when it can create a temporary venv with working `ensurepip` and `pip`. An explicit `SBK_CHARTS_VENV` disables creation of a new managed environment. Windows PowerShell 5.1 can drop empty native-command arguments, so legacy state persistence uses the policy helper's profile-without-fingerprint form.
+Launcher changes must preserve temporary-path cleanup, common selection order, provenance reporting, and fallback behavior. A system Python candidate is usable only when it can create a temporary venv with working `ensurepip` and `pip`. An explicit `SBK_CHARTS_VENV` disables creation of a new managed environment. Windows PowerShell 5.1 can drop empty native-command arguments, so legacy state persistence uses the policy helper's profile-without-fingerprint form. State without a schema remains backward compatible; unknown schemas must not be trusted.
 
 The version is declared once in `src/version/sbk_version.py`. Do not copy it into examples that will become stale; use `<version>` in release procedures.
 

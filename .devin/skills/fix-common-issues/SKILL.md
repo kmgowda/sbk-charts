@@ -17,7 +17,7 @@ Help uses the lazy registry and should list every declared backend without its S
 
 Inspect `.sbk-charts-runtime`, `.sbk-runtime/`, `SBK_CHARTS_VENV`, `SBK_CHARTS_CONDA_ENV`, and launcher overrides. A managed environment also requires the current profile and lock fingerprint. Test first-run creation and a second run with network access disabled.
 
-Run `./sbk-charts -h` and read the printed OS, interpreter, environment kind, and prefix. Do not remove validation merely to hide a real dependency conflict.
+Run `./sbk-charts -h` and read the printed OS, interpreter, environment kind, prefix, profile, selection source, saved-state reuse flag, and creation flag. Do not remove validation merely to hide a real dependency conflict.
 
 If legacy fallback selects no Python, test every configured candidate instead of stopping at the first version-compatible executable. Each candidate must create a temporary venv with working `ensurepip` and `pip`. Failed probes, `.tool.*` downloads, and unpublished `.env-*` directories should be removed automatically. On Windows, also verify the CMD shim remembers a backend profile when the legacy environment has no managed fingerprint.
 

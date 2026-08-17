@@ -14,6 +14,7 @@ from unittest.mock import patch
 from scripts import build_portable, sbk_charts_portable_entry
 from scripts.project_policy import (
     POLICY_FILE,
+    SELECTION_SOURCES,
     application_version,
     environment_matches_policy,
     github_matrix,
@@ -158,6 +159,7 @@ class PortableReleaseTest(unittest.TestCase):
     def test_central_policy_defines_runtime_and_artifact_metadata(self):
         self.assertEqual("3.10", self.policy.runtime.minimum_python)
         self.assertEqual(".sbk-charts-runtime", self.policy.runtime.runtime_state_file)
+        self.assertEqual(1, self.policy.runtime.runtime_state_schema)
         self.assertEqual("venv-sbk-charts", self.policy.runtime.virtual_environment_names[0])
         self.assertEqual(
             {"linux-amd64", "macos-arm64", "windows-amd64"},
@@ -224,6 +226,20 @@ class PortableReleaseTest(unittest.TestCase):
             self.assertEqual(1, replaced, "bootstrap lock timeout entry not found")
             policy_file.write_text(source, encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "at least one second"):
+                load_policy(policy_file)
+
+    def test_policy_rejects_nonpositive_runtime_state_schema(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            policy_file = Path(temporary) / "sbk-charts.ini"
+            original = POLICY_FILE.read_text(encoding="utf-8")
+            source, replaced = re.subn(
+                r"runtime_state_schema = \d+",
+                "runtime_state_schema = 0",
+                original,
+            )
+            self.assertEqual(1, replaced, "runtime state schema entry not found")
+            policy_file.write_text(source, encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Runtime state schema"):
                 load_policy(policy_file)
 
     def test_version_resolution_ignores_non_module_assignments_and_text(self):
@@ -310,16 +326,47 @@ class PortableReleaseTest(unittest.TestCase):
             patch("scripts.project_policy.platform.python_version", return_value="3.12.11"),
             patch("scripts.project_policy.sys.executable", "/project/.venv/bin/python"),
         ):
-            details = runtime_details(self.policy, "venv", "/project/.venv")
+            details = runtime_details(
+                self.policy,
+                "managed",
+                "/project/.sbk-runtime/envs/abc",
+                "gemini",
+                "saved-state",
+                True,
+                False,
+            )
 
         self.assertEqual(
             (
                 "sbk-charts: Operating system: macOS-15.6-arm64",
                 "sbk-charts: Python: 3.12.11 (/project/.venv/bin/python)",
-                "sbk-charts: Environment: venv (/project/.venv)",
+                "sbk-charts: Environment: managed venv (/project/.sbk-runtime/envs/abc)",
+                "sbk-charts: Dependency profile: gemini",
+                "sbk-charts: Selection source: saved-state",
+                "sbk-charts: Saved environment reused: yes",
+                "sbk-charts: Environment created this run: no",
             ),
             details,
         )
+
+        self.assertEqual(
+            {
+                "unknown",
+                "explicit-venv",
+                "saved-state",
+                "active-venv",
+                "active-conda",
+                "project-venv",
+                "managed-cache",
+                "named-conda",
+                "created-managed",
+                "created-venv",
+                "created-conda",
+            },
+            set(SELECTION_SOURCES),
+        )
+        with self.assertRaisesRegex(ValueError, "Unsupported environment selection source"):
+            runtime_details(self.policy, "venv", "/project/.venv", selection_source="typo")
 
     def test_successful_environment_is_remembered_atomically(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -340,9 +387,22 @@ class PortableReleaseTest(unittest.TestCase):
                 load_remembered_environment(state_file),
             )
             state = state_file.read_text(encoding="utf-8")
+            self.assertIn(f"schema={self.policy.runtime.runtime_state_schema}\n", state)
             self.assertIn("fingerprint=abc\n", state)
             self.assertIn("profile=gemini\n", state)
             self.assertEqual([], list(state_file.parent.glob(".*.tmp")))
+
+    def test_remembered_environment_schema_is_backward_compatible(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            state_file = Path(temporary) / "runtime-state"
+            state_file.write_text("kind=venv\nprefix=/project/.venv\n", encoding="utf-8")
+            self.assertEqual(("venv", "/project/.venv"), load_remembered_environment(state_file))
+
+            state_file.write_text(
+                "schema=999\nkind=venv\nprefix=/project/.venv\n",
+                encoding="utf-8",
+            )
+            self.assertIsNone(load_remembered_environment(state_file))
 
     def test_core_and_backend_dependency_profiles_are_locked(self):
         root = build_portable.ROOT
@@ -416,6 +476,10 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn("policy_value runtime minimum_python", bash_launcher)
         self.assertIn("scripts/project_policy.py\" --environment-ready", bash_launcher)
         self.assertIn('--runtime-details "$environment_kind" "$environment_prefix"', bash_launcher)
+        self.assertIn('"$selection_source"', bash_launcher)
+        self.assertIn('"saved-state" "yes" "no"', bash_launcher)
+        self.assertIn('"created-managed" "no" "yes"', bash_launcher)
+        self.assertIn("policy_value runtime runtime_state_schema", bash_launcher)
         self.assertIn("policy_value runtime runtime_state_file", bash_launcher)
         self.assertIn("policy_value runtime managed_python", bash_launcher)
         self.assertIn("policy_value runtime bootstrap_lock_timeout_seconds", bash_launcher)
@@ -442,6 +506,10 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn('"runtime.minimum_python"', powershell_launcher)
         self.assertIn("$PolicyReader --environment-ready", powershell_launcher)
         self.assertIn("--runtime-details $EnvironmentKind $EnvironmentPrefix", powershell_launcher)
+        self.assertIn("$EnvironmentProfile $SelectionSource $SavedValue $CreatedValue", powershell_launcher)
+        self.assertIn('-SelectionSource "saved-state"', powershell_launcher)
+        self.assertIn('-SelectionSource "created-managed"', powershell_launcher)
+        self.assertIn('"runtime.runtime_state_schema"', powershell_launcher)
         self.assertIn('"runtime.runtime_state_file"', powershell_launcher)
         self.assertIn('"runtime.managed_python"', powershell_launcher)
         self.assertIn('"runtime.bootstrap_lock_timeout_seconds"', powershell_launcher)
@@ -473,6 +541,15 @@ class PortableReleaseTest(unittest.TestCase):
             powershell_launcher.index("Trying remembered Conda environment"),
             powershell_launcher.index("$EnvironmentCandidates ="),
         )
+        self.assertLess(
+            powershell_launcher.index(
+                '-EnvironmentProfile $SelectedProfile -SelectionSource "managed-cache" -Managed',
+                powershell_launcher.index("$ManagedEnvironment ="),
+            ),
+            powershell_launcher.index(
+                '-EnvironmentProfile $SelectedProfile -SelectionSource "named-conda"',
+            ),
+        )
         self.assertNotIn('MINIMUM_PYTHON="3.10"', bash_launcher)
         self.assertNotIn('$MinimumPython = "3.10"', powershell_launcher)
         self.assertIn("scripts/project_policy.py --minimum-python", workflow)
@@ -483,6 +560,10 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn("Skip a Python launcher with broken venv support", workflow)
         self.assertIn("SBK_BROKEN_PY_MARKER", workflow)
         self.assertIn("Clean an unpublished managed environment after failure", workflow)
+        self.assertIn("Selection source: saved-state", workflow)
+        self.assertIn("Saved environment reused: yes", workflow)
+        self.assertIn("Environment created this run: yes", workflow)
+        self.assertIn('grep -q "^schema=1$"', workflow)
         self.assertIn('UV_OFFLINE: "true"', workflow)
         self.assertIn("python -m build --wheel --sdist", workflow)
         self.assertNotIn("actions/checkout@v", workflow)

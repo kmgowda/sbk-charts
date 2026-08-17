@@ -74,6 +74,8 @@ jobs:
         SBK_CHARTS_STATE_FILE="$RUNNER_TEMP/legacy-state" \
             ./sbk-charts -h > legacy-help.txt 2> legacy-runtime.txt
         grep -q "Environment: venv" legacy-help.txt
+        grep -q "Selection source: created-venv" legacy-help.txt
+        grep -q "Environment created this run: yes" legacy-help.txt
         grep -q "cannot create a working venv; trying the next candidate" legacy-runtime.txt
         test -z "$(find "$probe_tmp" -mindepth 1 -maxdepth 1 -print -quit)"
 #    - name: Test with pytest
@@ -104,14 +106,20 @@ jobs:
       shell: pwsh
       env:
         SBK_CHARTS_VENV: ${{ github.workspace }}\venv-sbk-charts
-      run: .\sbk-charts.ps1 -h
+      run: |
+        .\sbk-charts.ps1 -h | Tee-Object -FilePath powershell-venv-help.txt
+        if (-not (Select-String -Quiet -Path powershell-venv-help.txt -Pattern "Selection source: explicit-venv")) {
+          throw "PowerShell did not report the explicit venv source"
+        }
     - name: Test Command Prompt launcher with existing venv
       shell: cmd
       env:
         SBK_CHARTS_VENV: ${{ github.workspace }}\venv-sbk-charts
       run: |
         del /Q .sbk-charts-runtime 2>nul
-        sbk-charts.bat -h
+        sbk-charts.bat -h > cmd-venv-help.txt
+        findstr /C:"Selection source: explicit-venv" cmd-venv-help.txt >nul
+        if errorlevel 1 exit /b 1
         findstr /R /C:"^kind=venv$" .sbk-charts-runtime >nul
         if errorlevel 1 exit /b 1
     - name: Skip a Python launcher with broken venv support
@@ -137,6 +145,12 @@ jobs:
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         if (-not (Select-String -Quiet -Path legacy-help.txt -Pattern "Environment: venv")) {
           throw "The working Python launcher was not selected"
+        }
+        if (-not (Select-String -Quiet -Path legacy-help.txt -Pattern "Selection source: created-venv")) {
+          throw "The created venv source was not reported"
+        }
+        if (-not (Select-String -Quiet -Path legacy-help.txt -Pattern "Environment created this run: yes")) {
+          throw "The created venv status was not reported"
         }
         if (-not (Test-Path -LiteralPath $BrokenPythonMarker -PathType Leaf)) {
           throw "The broken Python launcher was not probed"
@@ -174,6 +188,9 @@ jobs:
         if (-not (Select-String -Quiet -Path failure-help.txt -Pattern "Environment: venv")) {
           throw "Legacy venv fallback did not run after managed failure"
         }
+        if (-not (Select-String -Quiet -Path failure-help.txt -Pattern "Selection source: created-venv")) {
+          throw "Legacy venv creation provenance was not reported"
+        }
         if (Get-ChildItem -LiteralPath $FailedRuntime -Filter ".env-*" -Force | Select-Object -First 1) {
           throw "An unpublished managed environment was not cleaned"
         }
@@ -209,7 +226,9 @@ jobs:
         wait "$concurrent_pid"
         grep -q "Environment: managed" first-help.txt
         grep -q "Environment: managed" concurrent-help.txt
+        grep -q "Environment created this run: yes" first-help.txt concurrent-help.txt
         grep -q "^kind=managed$" .sbk-charts-runtime
+        grep -q "^schema=1$" .sbk-charts-runtime
         grep -q "^profile=core$" .sbk-charts-runtime
         test ! -e .sbk-runtime/bootstrap.lock
     - name: Reuse managed environment without network
@@ -221,6 +240,9 @@ jobs:
       run: |
         ./sbk-charts -h > second-help.txt 2> second-runtime.txt
         grep -q "Environment: managed" second-help.txt
+        grep -q "Selection source: saved-state" second-help.txt
+        grep -q "Saved environment reused: yes" second-help.txt
+        grep -q "Environment created this run: no" second-help.txt
         grep -q "Reusing managed environment" second-runtime.txt
 
   managed-bootstrap-windows:
@@ -239,6 +261,18 @@ jobs:
         if (-not (Select-String -Quiet -Path first-help.txt -Pattern "Environment: managed")) {
           throw "Managed environment details were not reported"
         }
+        if (-not (Select-String -Quiet -Path first-help.txt -Pattern "Selection source: created-managed")) {
+          throw "Managed environment creation source was not reported"
+        }
+        if (-not (Select-String -Quiet -Path first-help.txt -Pattern "Saved environment reused: no")) {
+          throw "First-run saved-environment status was not reported"
+        }
+        if (-not (Select-String -Quiet -Path first-help.txt -Pattern "Environment created this run: yes")) {
+          throw "Managed environment creation was not reported"
+        }
+        if (-not (Select-String -Quiet -Path .sbk-charts-runtime -Pattern "^schema=1$")) {
+          throw "Runtime state schema was not remembered"
+        }
         if (-not (Select-String -Quiet -Path .sbk-charts-runtime -Pattern "^kind=managed$")) {
           throw "Managed environment was not remembered"
         }
@@ -255,6 +289,15 @@ jobs:
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         if (-not (Select-String -Quiet -Path second-help.txt -Pattern "Environment: managed")) {
           throw "Managed environment details were not reported during reuse"
+        }
+        if (-not (Select-String -Quiet -Path second-help.txt -Pattern "Selection source: saved-state")) {
+          throw "Saved environment selection source was not reported during reuse"
+        }
+        if (-not (Select-String -Quiet -Path second-help.txt -Pattern "Saved environment reused: yes")) {
+          throw "Saved environment reuse was not reported"
+        }
+        if (-not (Select-String -Quiet -Path second-help.txt -Pattern "Environment created this run: no")) {
+          throw "Offline reuse incorrectly reported environment creation"
         }
         if (-not (Select-String -Quiet -Path second-runtime.txt -Pattern "Reusing managed environment")) {
           throw "Managed environment was not reused offline"

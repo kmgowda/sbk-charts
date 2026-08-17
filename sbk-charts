@@ -39,6 +39,7 @@ MINIMUM_PYTHON="$(policy_value runtime minimum_python)"
 MANAGED_PYTHON="$(policy_value runtime managed_python)"
 DEFAULT_CONDA_ENV="$(policy_value runtime default_conda_environment)"
 RUNTIME_STATE_NAME="$(policy_value runtime runtime_state_file)"
+RUNTIME_STATE_SCHEMA="$(policy_value runtime runtime_state_schema)"
 VIRTUAL_ENVIRONMENT_NAMES="$(policy_value runtime virtual_environment_names)"
 MANAGED_RUNTIME_NAME="$(policy_value runtime managed_runtime_directory)"
 LOCK_DIRECTORY_NAME="$(policy_value runtime lock_directory)"
@@ -51,7 +52,8 @@ BOOTSTRAP_DOWNLOAD_BASE_URL="$(policy_value bootstrap download_base_url)"
 if [ -z "$APP_NAME" ] || [ -z "$DISTRIBUTION_NAME" ] || [ -z "$APP_MODULE" ] || \
     [ -z "$MINIMUM_PYTHON" ] || [ -z "$MANAGED_PYTHON" ] || \
     [ -z "$DEFAULT_CONDA_ENV" ] || \
-    [ -z "$RUNTIME_STATE_NAME" ] || [ -z "$VIRTUAL_ENVIRONMENT_NAMES" ] || \
+    [ -z "$RUNTIME_STATE_NAME" ] || [ -z "$RUNTIME_STATE_SCHEMA" ] || \
+    [ -z "$VIRTUAL_ENVIRONMENT_NAMES" ] || \
     [ -z "$MANAGED_RUNTIME_NAME" ] || [ -z "$LOCK_DIRECTORY_NAME" ] || \
     [ -z "$BOOTSTRAP_LOCK_TIMEOUT_SECONDS" ] || \
     [ -z "$UNIX_PYTHON_COMMANDS" ] || [ -z "$BOOTSTRAP_MANAGER" ] || \
@@ -206,40 +208,52 @@ run_application() {
     local environment_prefix="$3"
     local environment_fingerprint="$4"
     local environment_profile="$5"
-    shift 5
+    local selection_source="$6"
+    local saved_environment_reused="$7"
+    local environment_created="$8"
+    shift 8
     if ! "$python_path" "$PROJECT_ROOT/scripts/project_policy.py" \
         --remember-environment "$environment_kind" "$environment_prefix" \
         "$RUNTIME_STATE_FILE" "$environment_fingerprint" "$environment_profile"; then
         log "WARNING: Could not remember successful $environment_kind environment $environment_prefix"
     fi
     "$python_path" "$PROJECT_ROOT/scripts/project_policy.py" \
-        --runtime-details "$environment_kind" "$environment_prefix" || \
+        --runtime-details "$environment_kind" "$environment_prefix" \
+        "$environment_profile" "$selection_source" \
+        "$saved_environment_reused" "$environment_created" || \
         fail "Could not report runtime details"
     exec "$python_path" -m "$APP_MODULE" "$@"
 }
 
 try_virtual_environment() {
     local environment_dir="$1"
+    local selection_source="$2"
+    local saved_environment_reused="$3"
     local python_path
-    shift
+    shift 3
     [ -n "$environment_dir" ] || return 1
     python_path="$environment_dir/bin/python"
     [ -x "$python_path" ] || return 1
     python_is_supported "$python_path" || return 1
     install_project "$python_path" "virtual environment $environment_dir" || return 1
-    run_application "$python_path" "venv" "$environment_dir" "" "$SELECTED_PROFILE" "$@"
+    run_application "$python_path" "venv" "$environment_dir" "" "$SELECTED_PROFILE" \
+        "$selection_source" "$saved_environment_reused" "no" "$@"
 }
 
 try_conda_prefix() {
     local environment_dir="$1"
+    local selection_source="$2"
+    local saved_environment_reused="$3"
+    local environment_created="$4"
     local python_path
-    shift
+    shift 4
     [ -n "$environment_dir" ] || return 1
     python_path="$environment_dir/bin/python"
     [ -x "$python_path" ] || return 1
     python_is_supported "$python_path" || return 1
     install_project "$python_path" "Conda environment $environment_dir" || return 1
-    run_application "$python_path" "conda" "$environment_dir" "" "$SELECTED_PROFILE" "$@"
+    run_application "$python_path" "conda" "$environment_dir" "" "$SELECTED_PROFILE" \
+        "$selection_source" "$saved_environment_reused" "$environment_created" "$@"
 }
 
 managed_environment_is_ready() {
@@ -257,13 +271,21 @@ managed_environment_is_ready() {
 try_managed_environment() {
     local environment_dir="$1"
     local expected_fingerprint="$2"
+    local selection_source="$3"
+    local saved_environment_reused="$4"
+    local environment_created="$5"
     local python_path
-    shift 2
+    shift 5
     managed_environment_is_ready "$environment_dir" "$expected_fingerprint" || return 1
     python_path="$environment_dir/bin/python"
-    log "Reusing managed environment $environment_dir"
+    if [ "$environment_created" = "yes" ]; then
+        log "Using newly created managed environment $environment_dir"
+    else
+        log "Reusing managed environment $environment_dir"
+    fi
     run_application "$python_path" "managed" "$environment_dir" \
-        "$expected_fingerprint" "$SELECTED_PROFILE" "$@"
+        "$expected_fingerprint" "$SELECTED_PROFILE" "$selection_source" \
+        "$saved_environment_reused" "$environment_created" "$@"
 }
 
 release_bootstrap_lock() {
@@ -374,7 +396,8 @@ create_managed_environment() {
     if managed_environment_is_ready "$environment_dir" "$EXPECTED_FINGERPRINT"; then
         release_bootstrap_lock
         trap - EXIT HUP INT TERM
-        try_managed_environment "$environment_dir" "$EXPECTED_FINGERPRINT" "$@"
+        try_managed_environment "$environment_dir" "$EXPECTED_FINGERPRINT" \
+            "managed-cache" "no" "no" "$@"
         fail "Managed environment passed validation but could not start $APP_NAME"
     fi
 
@@ -461,51 +484,56 @@ create_managed_environment() {
     mv "$temporary_environment" "$environment_dir" || fail "Could not publish managed environment"
     release_bootstrap_lock
     trap - EXIT HUP INT TERM
-    try_managed_environment "$environment_dir" "$EXPECTED_FINGERPRINT" "$@"
+    try_managed_environment "$environment_dir" "$EXPECTED_FINGERPRINT" \
+        "created-managed" "no" "yes" "$@"
     fail "Managed environment could not start $APP_NAME"
 }
 
 if [ -n "${SBK_CHARTS_VENV:-}" ]; then
-    try_virtual_environment "$SBK_CHARTS_VENV" "$@"
+    try_virtual_environment "$SBK_CHARTS_VENV" "explicit-venv" "no" "$@"
 else
     preferred_kind="$(runtime_state_value kind 2>/dev/null || true)"
+    preferred_schema="$(runtime_state_value schema 2>/dev/null || true)"
     preferred_prefix="$(runtime_state_value prefix 2>/dev/null || true)"
     preferred_fingerprint="$(runtime_state_value fingerprint 2>/dev/null || true)"
     preferred_profile="$(runtime_state_value profile 2>/dev/null || true)"
-    if [ -n "$preferred_prefix" ]; then
+    if { [ -z "$preferred_schema" ] || [ "$preferred_schema" = "$RUNTIME_STATE_SCHEMA" ]; } && \
+        [ -n "$preferred_prefix" ]; then
         case "$preferred_kind" in
             managed)
                 if [ "$preferred_fingerprint" = "$EXPECTED_FINGERPRINT" ] && \
                     [ "$preferred_profile" = "$SELECTED_PROFILE" ]; then
                     log "Trying remembered managed environment $preferred_prefix"
-                    try_managed_environment "$preferred_prefix" "$EXPECTED_FINGERPRINT" "$@"
+                    try_managed_environment "$preferred_prefix" "$EXPECTED_FINGERPRINT" \
+                        "saved-state" "yes" "no" "$@"
                 fi
                 ;;
             venv)
                 log "Trying remembered venv environment $preferred_prefix"
-                try_virtual_environment "$preferred_prefix" "$@"
+                try_virtual_environment "$preferred_prefix" "saved-state" "yes" "$@"
                 ;;
             conda)
                 log "Trying remembered Conda environment $preferred_prefix"
-                try_conda_prefix "$preferred_prefix" "$@"
+                try_conda_prefix "$preferred_prefix" "saved-state" "yes" "no" "$@"
                 ;;
         esac
     fi
 
-    try_virtual_environment "${VIRTUAL_ENV:-}" "$@"
-    try_conda_prefix "${CONDA_PREFIX:-}" "$@"
+    try_virtual_environment "${VIRTUAL_ENV:-}" "active-venv" "no" "$@"
+    try_conda_prefix "${CONDA_PREFIX:-}" "active-conda" "no" "no" "$@"
 
     while IFS= read -r environment_name
     do
         environment_dir="$PROJECT_ROOT/$environment_name"
-        try_virtual_environment "$environment_dir" "$@"
+        try_virtual_environment "$environment_dir" "project-venv" "no" "$@"
     done <<EOF
 $(printf '%s\n' "$VIRTUAL_ENVIRONMENT_NAMES" | tr ',' '\n' | awk '{ gsub(/^[[:space:]]+|[[:space:]]+$/, ""); if (length) print }')
 EOF
 fi
 
 managed_environment="$MANAGED_RUNTIME_ROOT/envs/$EXPECTED_FINGERPRINT"
-try_managed_environment "$managed_environment" "$EXPECTED_FINGERPRINT" "$@"
+try_managed_environment "$managed_environment" "$EXPECTED_FINGERPRINT" \
+    "managed-cache" "no" "no" "$@"
 
 conda_command=""
 named_conda_environment_exists=0
@@ -515,7 +543,7 @@ if command -v conda >/dev/null 2>&1; then
     conda_prefix="$(printf '%s\n' "$conda_output" | last_output_line)"
     if [ -n "$conda_prefix" ]; then
         named_conda_environment_exists=1
-        try_conda_prefix "$conda_prefix" "$@"
+        try_conda_prefix "$conda_prefix" "named-conda" "no" "no" "$@"
     fi
 fi
 
@@ -546,7 +574,8 @@ if [ -n "$system_python" ]; then
     if "$system_python" -m venv "$venv_dir"; then
         venv_python="$venv_dir/bin/python"
         if install_project "$venv_python" "virtual environment $venv_dir"; then
-            run_application "$venv_python" "venv" "$venv_dir" "" "$SELECTED_PROFILE" "$@"
+            run_application "$venv_python" "venv" "$venv_dir" "" "$SELECTED_PROFILE" \
+                "created-venv" "no" "yes" "$@"
         fi
         log "Virtual environment setup failed; trying Conda"
     else
@@ -567,7 +596,11 @@ if [ -n "$conda_command" ]; then
     conda_output="$("$conda_command" run --name "$CONDA_ENV_NAME" python -c 'import sys; print(sys.prefix)')" \
         || fail "Conda could not resolve environment $CONDA_ENV_NAME"
     conda_prefix="$(printf '%s\n' "$conda_output" | last_output_line)"
-    try_conda_prefix "$conda_prefix" "$@"
+    if [ "$named_conda_environment_exists" -eq 1 ]; then
+        try_conda_prefix "$conda_prefix" "named-conda" "no" "no" "$@"
+    else
+        try_conda_prefix "$conda_prefix" "created-conda" "no" "yes" "$@"
+    fi
 fi
 
 if [ -z "$system_python" ]; then
