@@ -44,7 +44,7 @@ Defines:
 - exact managed Python and managed runtime directory;
 - maximum wait for another process to finish managed bootstrap;
 - default Conda environment name;
-- remembered-environment state filename;
+- remembered-environment state filename and schema version;
 - project virtual-environment names;
 - Unix interpreter search order;
 - Windows interpreter launcher search order.
@@ -122,17 +122,20 @@ The policy points to `src/version/sbk_version.py`; it does not repeat the versio
 After runtime validation and immediately before starting the application process, the launcher writes environment identity and managed-policy state:
 
 ```text
+schema=1
 kind=managed
 prefix=/checkout/.sbk-runtime/envs/<fingerprint>
 fingerprint=<sha256>
 profile=core
 ```
 
-The write is atomic. The remembered environment is a preference, not proof that the previous workbook operation completed and not an unconditional trust decision. It is validated again before reuse.
+The write is atomic. Schema `1` is the current state contract. Legacy state without a schema is accepted for compatibility, while an unknown schema is ignored. The remembered environment is a preference, not proof that the previous workbook operation completed and not an unconditional trust decision. It is validated again before reuse.
 
 Managed records carry both fingerprint and profile. Legacy venv and Conda records have an empty fingerprint but still retain the selected profile. `project_policy.py --remember-environment` therefore accepts three values for the default core profile, four values for a profile without a fingerprint, or five values for fingerprint plus profile. The four-value form is required by Windows PowerShell 5.1 because it can discard an empty argument passed to a native Python process.
 
 Bootstrap policy also controls the maximum lock wait. Both launchers remove failed Python-venv probes, incomplete runtime-manager downloads, and unpublished managed environments. A supported Python version alone is insufficient for legacy setup: the interpreter must successfully create a temporary venv with working `ensurepip` and `pip` before it is selected.
+
+Runtime reporting is separate from persisted state. Each launcher passes the selected profile, provenance source, saved-state reuse flag, and creation flag to `runtime_details()`. Keeping provenance in the current execution path avoids incorrectly claiming saved-state reuse merely because the state file was just written.
 
 ## How to change policy safely
 

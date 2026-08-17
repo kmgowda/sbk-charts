@@ -65,7 +65,21 @@ sbk-charts.bat -i samples\charts\sbk-file-read.csv -o out.xlsx
 
 On first use, the source launcher reuses a valid existing environment when possible. Otherwise, on a supported target, it downloads a pinned, checksum-verified `uv`, installs the project-managed Python 3.12.10, and creates a locked environment under `.sbk-runtime/`. This works even when Python, venv, and Conda are absent. The first bootstrap needs HTTPS access to GitHub Releases and the Python package index. If managed setup is unsupported or fails, the launcher removes unpublished temporary files and tries usable system Python interpreters and Conda before it gives up.
 
-Later runs validate and reuse the saved environment without downloading anything when it is still compatible with the application, selected profile, and dependency lock. The launcher prints the operating system, exact Python executable, Python version, and whether it selected a managed, virtual, or Conda environment. Core chart generation installs only core packages. Selecting an AI backend creates or reuses that backend's dependency profile, so PyTorch and cloud SDKs are not required for normal chart generation.
+Later runs validate and reuse the saved environment without downloading anything when it is still compatible with the application, selected profile, and dependency lock. Before starting the application, the launcher prints the operating system, exact Python executable and version, environment type and path, dependency profile, selection source, whether saved state was reused, and whether the environment was created during this run. Core chart generation installs only core packages. Selecting an AI backend creates or reuses that backend's dependency profile, so PyTorch and cloud SDKs are not required for normal chart generation.
+
+Example second-run report:
+
+```text
+sbk-charts: Operating system: macOS-15.6-arm64
+sbk-charts: Python: 3.12.10 (/project/.sbk-runtime/envs/<fingerprint>/bin/python)
+sbk-charts: Environment: managed venv (/project/.sbk-runtime/envs/<fingerprint>)
+sbk-charts: Dependency profile: core
+sbk-charts: Selection source: saved-state
+sbk-charts: Saved environment reused: yes
+sbk-charts: Environment created this run: no
+```
+
+Common selection sources are `saved-state`, `explicit-venv`, `active-venv`, `active-conda`, `project-venv`, `managed-cache`, `named-conda`, and the `created-*` variants. `saved-state` with `Saved environment reused: yes` is the normal second-run result. A different source means the saved environment was absent, overridden, incompatible, or failed validation.
 
 ## Command-line syntax
 
@@ -237,7 +251,7 @@ flowchart TD
     A[Start launcher] --> B{Explicit SBK_CHARTS_VENV set?}
     B -- Yes --> C{Explicit venv works?}
     C -- Yes --> H[Validated environment]
-    C -- No --> E{Existing managed or named Conda environment works?}
+    C -- No --> E{Existing managed venv or named Conda environment works?}
     B -- No --> D{Remembered active or project environment works?}
     D -- Yes --> H
     D -- No --> E
@@ -262,7 +276,7 @@ Useful overrides:
 | `SBK_CHARTS_RUNTIME_ROOT` | Store managed tools, Python, caches, and environments elsewhere. |
 | `SBK_CHARTS_UV` | Use a pre-downloaded `uv` executable. Mainly useful for offline provisioning and tests. |
 
-The default state file is `.sbk-charts-runtime` in the project root. It records environment kind, prefix, dependency profile, and fingerprint. Delete that small file if you deliberately want the launcher to forget its last validated choice. Managed files remain under `.sbk-runtime/` and can still be found by fingerprint.
+The default state file is `.sbk-charts-runtime` in the project root. It records a state-schema version, environment kind, prefix, dependency profile, and fingerprint. Delete that small file if you deliberately want the launcher to forget its last validated choice. Managed files remain under `.sbk-runtime/` and can still be found by fingerprint. Old state files without a schema remain readable; unknown future schemas are ignored safely.
 
 `SBK_CHARTS_VENV` is a strict preference. The launcher first tries that directory and, if needed, may create a normal venv there from a working system Python. While the override is set, it does not create a new managed environment. It can still reuse an already-valid managed or named Conda environment and can fall back to Conda if the requested venv cannot be prepared.
 

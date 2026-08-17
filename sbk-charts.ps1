@@ -67,6 +67,7 @@ $BootstrapManagerVersion = Get-RequiredPolicyValue $Policy "bootstrap.manager_ve
 $BootstrapDownloadBaseUrl = Get-RequiredPolicyValue $Policy "bootstrap.download_base_url"
 $DefaultCondaEnvironment = Get-RequiredPolicyValue $Policy "runtime.default_conda_environment"
 $RuntimeStateName = Get-RequiredPolicyValue $Policy "runtime.runtime_state_file"
+$RuntimeStateSchema = Get-RequiredPolicyValue $Policy "runtime.runtime_state_schema"
 $VirtualEnvironmentNames = @(
     (Get-RequiredPolicyValue $Policy "runtime.virtual_environment_names").Split(',') |
         ForEach-Object { $_.Trim() } | Where-Object { $_ }
@@ -208,6 +209,9 @@ function Start-Application {
         [string] $EnvironmentPrefix,
         [string] $EnvironmentFingerprint,
         [string] $EnvironmentProfile,
+        [string] $SelectionSource,
+        [bool] $SavedEnvironmentReused,
+        [bool] $EnvironmentCreated,
         [string[]] $Arguments
     )
     if ($EnvironmentFingerprint) {
@@ -223,7 +227,10 @@ function Start-Application {
     if ($LASTEXITCODE -ne 0) {
         Write-LauncherMessage "WARNING: Could not remember successful $EnvironmentKind environment $EnvironmentPrefix"
     }
-    & $PythonPath $PolicyReader --runtime-details $EnvironmentKind $EnvironmentPrefix
+    $SavedValue = if ($SavedEnvironmentReused) { "yes" } else { "no" }
+    $CreatedValue = if ($EnvironmentCreated) { "yes" } else { "no" }
+    & $PythonPath $PolicyReader --runtime-details $EnvironmentKind $EnvironmentPrefix `
+        $EnvironmentProfile $SelectionSource $SavedValue $CreatedValue
     if ($LASTEXITCODE -ne 0) {
         throw "Could not report runtime details"
     }
@@ -239,6 +246,9 @@ function Use-EnvironmentPrefix {
         [string] $PythonRelativePath = "python.exe",
         [string] $EnvironmentFingerprint = "",
         [string] $EnvironmentProfile = "core",
+        [string] $SelectionSource = "unknown",
+        [switch] $SavedEnvironmentReused,
+        [switch] $EnvironmentCreated,
         [switch] $Managed
     )
     if (-not $EnvironmentPrefix) {
@@ -250,7 +260,11 @@ function Use-EnvironmentPrefix {
     }
     if ($Managed) {
         if (-not (Test-EnvironmentReady $PythonPath)) { return }
-        Write-LauncherMessage "Reusing managed environment $EnvironmentPrefix"
+        if ($EnvironmentCreated) {
+            Write-LauncherMessage "Using newly created managed environment $EnvironmentPrefix"
+        } else {
+            Write-LauncherMessage "Reusing managed environment $EnvironmentPrefix"
+        }
     } else {
         if (-not (Install-Project $PythonPath "$EnvironmentKind environment $EnvironmentPrefix")) {
             return
@@ -258,7 +272,9 @@ function Use-EnvironmentPrefix {
     }
     Start-Application -PythonPath $PythonPath -EnvironmentKind $EnvironmentKind `
         -EnvironmentPrefix $EnvironmentPrefix -EnvironmentFingerprint $EnvironmentFingerprint `
-        -EnvironmentProfile $EnvironmentProfile -Arguments $Arguments
+        -EnvironmentProfile $EnvironmentProfile -SelectionSource $SelectionSource `
+        -SavedEnvironmentReused $SavedEnvironmentReused.IsPresent `
+        -EnvironmentCreated $EnvironmentCreated.IsPresent -Arguments $Arguments
 }
 
 function Get-BootstrapManager {
@@ -354,7 +370,7 @@ function Start-ManagedEnvironment {
             Use-EnvironmentPrefix -EnvironmentPrefix $EnvironmentPrefix -EnvironmentKind "managed" `
                 -Arguments $Arguments `
                 -PythonRelativePath "Scripts\python.exe" -EnvironmentFingerprint $ExpectedFingerprint `
-                -EnvironmentProfile $SelectedProfile -Managed
+                -EnvironmentProfile $SelectedProfile -SelectionSource "managed-cache" -Managed
         }
         $UvPath = if ($env:SBK_CHARTS_UV) { $env:SBK_CHARTS_UV } else { Get-BootstrapManager }
         if (-not (Test-Path -LiteralPath $UvPath -PathType Leaf)) {
@@ -398,7 +414,8 @@ function Start-ManagedEnvironment {
     Use-EnvironmentPrefix -EnvironmentPrefix $EnvironmentPrefix -EnvironmentKind "managed" `
         -Arguments $Arguments `
         -PythonRelativePath "Scripts\python.exe" -EnvironmentFingerprint $ExpectedFingerprint `
-        -EnvironmentProfile $SelectedProfile -Managed
+        -EnvironmentProfile $SelectedProfile -SelectionSource "created-managed" `
+        -EnvironmentCreated -Managed
     throw "Managed environment could not start $AppName"
 }
 
@@ -411,6 +428,10 @@ function Read-RuntimeState {
         if ($RawLine -match '^([^=]+)=(.*)$') {
             $Values[$Matches[1]] = $Matches[2]
         }
+    }
+    if ($Values.ContainsKey("schema") -and $Values["schema"] -ne $RuntimeStateSchema) {
+        Write-LauncherMessage "Ignoring runtime state with unsupported schema $($Values['schema'])"
+        return @{}
     }
     return $Values
 }
@@ -428,17 +449,20 @@ if (-not $env:SBK_CHARTS_VENV) {
         Use-EnvironmentPrefix -EnvironmentPrefix $PreferredPrefix -EnvironmentKind "managed" `
             -Arguments $ApplicationArguments `
             -PythonRelativePath "Scripts\python.exe" -EnvironmentFingerprint $ExpectedFingerprint `
-            -EnvironmentProfile $SelectedProfile -Managed
+            -EnvironmentProfile $SelectedProfile -SelectionSource "saved-state" `
+            -SavedEnvironmentReused -Managed
     } elseif ($PreferredPrefix -and $PreferredKind -eq "venv") {
         Write-LauncherMessage "Trying remembered venv environment $PreferredPrefix"
         Use-EnvironmentPrefix -EnvironmentPrefix $PreferredPrefix -EnvironmentKind "venv" `
             -Arguments $ApplicationArguments `
-            -PythonRelativePath "Scripts\python.exe" -EnvironmentProfile $SelectedProfile
+            -PythonRelativePath "Scripts\python.exe" -EnvironmentProfile $SelectedProfile `
+            -SelectionSource "saved-state" -SavedEnvironmentReused
     } elseif ($PreferredPrefix -and $PreferredKind -eq "conda") {
         Write-LauncherMessage "Trying remembered Conda environment $PreferredPrefix"
         Use-EnvironmentPrefix -EnvironmentPrefix $PreferredPrefix -EnvironmentKind "conda" `
             -Arguments $ApplicationArguments `
-            -EnvironmentProfile $SelectedProfile
+            -EnvironmentProfile $SelectedProfile -SelectionSource "saved-state" `
+            -SavedEnvironmentReused
     }
 }
 
@@ -458,15 +482,17 @@ foreach ($EnvironmentPrefix in $EnvironmentCandidates) {
         continue
     }
     $SeenCandidates[$CandidateKey] = $true
+    $CandidateSource = if ($env:SBK_CHARTS_VENV) { "explicit-venv" } else { "active-venv" }
     Use-EnvironmentPrefix -EnvironmentPrefix $EnvironmentPrefix -EnvironmentKind "venv" `
         -Arguments $ApplicationArguments `
-        -PythonRelativePath "Scripts\python.exe" -EnvironmentProfile $SelectedProfile
+        -PythonRelativePath "Scripts\python.exe" -EnvironmentProfile $SelectedProfile `
+        -SelectionSource $CandidateSource
 }
 
 if (-not $env:SBK_CHARTS_VENV) {
     Use-EnvironmentPrefix -EnvironmentPrefix $env:CONDA_PREFIX -EnvironmentKind "conda" `
         -Arguments $ApplicationArguments `
-        -EnvironmentProfile $SelectedProfile
+        -EnvironmentProfile $SelectedProfile -SelectionSource "active-conda"
 
     $ProjectEnvironmentCandidates = @($VirtualEnvironmentNames | ForEach-Object {
         Join-Path $ProjectRoot $_
@@ -474,7 +500,8 @@ if (-not $env:SBK_CHARTS_VENV) {
     foreach ($EnvironmentPrefix in $ProjectEnvironmentCandidates) {
         Use-EnvironmentPrefix -EnvironmentPrefix $EnvironmentPrefix -EnvironmentKind "venv" `
             -Arguments $ApplicationArguments `
-            -PythonRelativePath "Scripts\python.exe" -EnvironmentProfile $SelectedProfile
+            -PythonRelativePath "Scripts\python.exe" -EnvironmentProfile $SelectedProfile `
+            -SelectionSource "project-venv"
     }
 }
 
@@ -485,9 +512,6 @@ if ($CondaCommand) {
     if ($LASTEXITCODE -eq 0 -and $CondaPrefixOutput) {
         $NamedCondaEnvironmentExists = $true
         $CondaPrefix = [string](@($CondaPrefixOutput) | Select-Object -Last 1)
-        Use-EnvironmentPrefix -EnvironmentPrefix ($CondaPrefix.Trim()) -EnvironmentKind "conda" `
-            -Arguments $ApplicationArguments `
-            -EnvironmentProfile $SelectedProfile
     }
 }
 
@@ -496,7 +520,13 @@ if ($ExpectedFingerprint) {
     Use-EnvironmentPrefix -EnvironmentPrefix $ManagedEnvironment -EnvironmentKind "managed" `
         -Arguments $ApplicationArguments `
         -PythonRelativePath "Scripts\python.exe" -EnvironmentFingerprint $ExpectedFingerprint `
-        -EnvironmentProfile $SelectedProfile -Managed
+        -EnvironmentProfile $SelectedProfile -SelectionSource "managed-cache" -Managed
+}
+
+if ($NamedCondaEnvironmentExists) {
+    Use-EnvironmentPrefix -EnvironmentPrefix ($CondaPrefix.Trim()) -EnvironmentKind "conda" `
+        -Arguments $ApplicationArguments `
+        -EnvironmentProfile $SelectedProfile -SelectionSource "named-conda"
 }
 
 if (-not $env:SBK_CHARTS_VENV -and $ExpectedFingerprint) {
@@ -545,7 +575,9 @@ if ($SupportedLauncher) {
             (Install-Project $VenvPython "virtual environment $VenvPath")) {
             Start-Application -PythonPath $VenvPython -EnvironmentKind "venv" `
                 -EnvironmentPrefix $VenvPath -EnvironmentFingerprint "" `
-                -EnvironmentProfile $SelectedProfile -Arguments $ApplicationArguments
+                -EnvironmentProfile $SelectedProfile -SelectionSource "created-venv" `
+                -SavedEnvironmentReused $false -EnvironmentCreated $true `
+                -Arguments $ApplicationArguments
         }
     }
     Write-LauncherMessage "Virtual environment setup failed; trying Conda"
@@ -564,9 +596,16 @@ if ($CondaCommand) {
     }
     $CondaPrefixOutput = & $CondaCommand.Source run --name $CondaEnvironmentName python -c "import sys; print(sys.prefix)"
     $CondaPrefix = [string](@($CondaPrefixOutput) | Select-Object -Last 1)
-    Use-EnvironmentPrefix -EnvironmentPrefix ($CondaPrefix.Trim()) -EnvironmentKind "conda" `
-        -Arguments $ApplicationArguments `
-        -EnvironmentProfile $SelectedProfile
+    if ($NamedCondaEnvironmentExists) {
+        Use-EnvironmentPrefix -EnvironmentPrefix ($CondaPrefix.Trim()) -EnvironmentKind "conda" `
+            -Arguments $ApplicationArguments `
+            -EnvironmentProfile $SelectedProfile -SelectionSource "named-conda"
+    } else {
+        Use-EnvironmentPrefix -EnvironmentPrefix ($CondaPrefix.Trim()) -EnvironmentKind "conda" `
+            -Arguments $ApplicationArguments `
+            -EnvironmentProfile $SelectedProfile -SelectionSource "created-conda" `
+            -EnvironmentCreated
+    }
 }
 
 if (-not $SupportedLauncher) {

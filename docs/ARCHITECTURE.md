@@ -361,17 +361,19 @@ When `SBK_CHARTS_VENV` is not set, runtime selection happens in stages:
 
 1. try the last validated environment from the state file;
 2. try the active virtual or Conda environment and known project-local virtual environments;
-3. try reusable fingerprinted-managed and configured named-Conda environments;
+3. try the reusable fingerprinted managed venv, then the configured named-Conda environment;
 4. on a supported managed target, create the exact managed Python and locked environment;
 5. if managed setup is unsupported or fails, probe system Python candidates for venv support and then prepare the named Conda environment.
 
-The two native implementations differ only within stage 3: Bash checks the fingerprinted managed directory before the named Conda environment, while PowerShell checks the named Conda environment first. The remembered state remains the first preference on both, so a previously successful choice is reused consistently.
+Both native implementations use the same stage order. The remembered state remains the first preference, while the exact project-owned managed cache is preferred over a named Conda environment when neither was remembered.
 
 When `SBK_CHARTS_VENV` is set, the launcher tries that explicit path first and skips remembered, active, and project-local candidates. It does not create a new managed environment while the override is set. If the explicit venv is unusable, it may reuse an existing managed or named Conda environment, create the requested normal venv with a suitable system Python, or fall back to Conda.
 
 Legacy environment creation checks Python candidates in policy order. A candidate is selected only after it creates a temporary venv whose `ensurepip` and `pip` commands work; failed probes are removed before the next interpreter is tried. Bootstrap-manager downloads and unpublished managed environments are also temporary and are removed on failure.
 
 An environment is reusable only when it has a supported Python, the installed distribution version matches the source version, the application and selected backend import, and the dependency check succeeds. A managed environment also must match the fingerprint of target, exact Python, selected profile, and lock contents. Creation is serialized by a bootstrap lock with a policy-controlled wait timeout and published by directory rename only after self-validation. The lock is released before the application process replaces the launcher. The successful runtime is written atomically to `.sbk-charts-runtime` immediately before the application starts.
+
+Selection provenance is captured before the state file is rewritten. The launcher passes the environment profile, selection source, saved-state reuse flag, and creation flag to `project_policy.py`. This produces the same structured runtime report on Bash, PowerShell, and the CMD shim. A managed environment is reported as a `managed venv`, making clear that it is an isolated virtual environment whose Python is owned by sbk-charts.
 
 The static backend registry lets `--help` and core chart generation run without importing optional provider SDKs. Selecting a backend changes the dependency profile and imports only that implementation. Exact, hashed environments live in `requirements-lock/`; human-maintained inputs live in `requirements.txt` and `requirements-ai/`.
 
@@ -383,7 +385,7 @@ Managed source targets cover glibc Linux x86-64/ARM64, macOS Intel/Apple silicon
 
 - application and distribution identity;
 - Python minimum, exact managed Python, and interpreter search order;
-- environment names and runtime state filename;
+- environment names, runtime state filename, and state schema;
 - pinned runtime manager downloads and checksums;
 - AI dependency-profile inputs and exact lock directory;
 - entry point, requirements file, version file, and package data;
@@ -417,7 +419,7 @@ Portable archives are checksummed but not code-signed or notarized.
 
 ## 16. Tests and CI
 
-`tests/test_portable.py` covers policy parsing and validation, safe requirements parsing, AST version lookup, portable argument forwarding, archive creation, Windows ZIP names, environment validation, runtime details, remembered state including profile-only legacy state, and launcher/workflow contracts.
+`tests/test_portable.py` covers policy parsing and validation, safe requirements parsing, AST version lookup, portable argument forwarding, archive creation, Windows ZIP names, environment validation, structured runtime details, backward-compatible state schemas, remembered state including profile-only legacy state, and launcher/workflow contracts.
 
 The main CI workflow:
 
@@ -426,6 +428,7 @@ The main CI workflow:
 - runs the portable-policy unit tests;
 - verifies package builds and the Bash launcher on Linux;
 - verifies fresh and offline managed bootstrap on Linux, macOS Apple silicon, and Windows;
+- asserts first-run creation and second-run saved-state provenance output;
 - creates a Windows virtual environment and smoke-tests both Windows launchers;
 - verifies that launchers skip a version-compatible Python that cannot create a working venv;
 - verifies failed bootstrap downloads and unpublished environments do not leave temporary directories.
