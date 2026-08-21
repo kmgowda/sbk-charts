@@ -125,12 +125,21 @@ validated checkout. It then:
 1. creates and pushes an annotated `<version>` tag;
 2. creates a draft GitHub release and uploads the wheel, sdist, and checksums;
 3. publishes the release, which starts the native portable workflow;
-4. waits for every native application and checksum to be attached;
-5. succeeds only when the complete policy-derived asset set is present.
+4. waits while the native jobs build, test, and store their files as workflow
+   artifacts;
+5. lets one Ubuntu publishing job download the complete native set, validate
+   the policy-derived filenames and SHA-256 sidecars, and attach all native
+   files to the explicit GitHub repository;
+6. succeeds only when the complete policy-derived asset set is present.
 
-The native workflow builds on Linux, macOS, and Windows. Before upload, each job
-tests concurrent first extraction, saved application reuse, help, and sample
-workbook generation.
+The native workflow builds on Linux, macOS, and Windows. Each native job tests
+concurrent first extraction, saved application reuse, help, and sample workbook
+generation. Native jobs never modify a GitHub release. The Ubuntu publishing
+job runs only after every native job succeeds, so no operating-system shell is
+responsible for interpreting the release tag or uploading its own partial set.
+Release and recovery builds explicitly check out the requested version tag;
+the validator also rejects assets whose version differs from that checkout's
+canonical application version.
 
 ```mermaid
 flowchart TD
@@ -140,9 +149,11 @@ flowchart TD
     D --> E[Push annotated version tag]
     E --> F[Create draft release and upload Python packages]
     F --> G[Publish release]
-    G --> H[Native CI builds Linux macOS and Windows files]
-    H --> I[Attach native applications and checksums]
-    I --> J[Coordinator verifies complete asset set]
+    G --> H[Native CI builds and tests Linux macOS and Windows files]
+    H --> I[Store verified workflow artifacts]
+    I --> J[Ubuntu job downloads and validates complete native set]
+    J --> K[Upload all native files to explicit repository]
+    K --> L[Coordinator verifies complete release asset set]
 ```
 
 ## Recover from an interrupted publication
@@ -161,6 +172,10 @@ Python package assets, publishes a matching draft if necessary, and waits for
 the complete native asset set. When an already-published release is missing a
 native file, resume mode dispatches the portable workflow for the existing
 immutable tag. It does not move or force-push a tag.
+
+The recovery workflow follows the same build-to-publish handoff as a normal
+release: every native target must pass, the Ubuntu job must validate the exact
+downloaded set and checksums, and only then are the native assets replaced.
 
 For an already-published release, `--resume` preserves the existing title and
 release notes. Its purpose is artifact recovery, not editorial changes. If the

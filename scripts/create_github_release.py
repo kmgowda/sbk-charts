@@ -183,6 +183,52 @@ def expected_portable_asset_names(
     return frozenset(names)
 
 
+def verify_portable_asset_directory(
+    policy: ProjectPolicy,
+    version: str,
+    directory: Path,
+) -> tuple[Path, ...]:
+    """Validate the exact native release asset set and every checksum sidecar."""
+    if not VERSION_PATTERN.fullmatch(version):
+        raise ValueError(f"Unsupported release version: {version}")
+    if version != application_version(policy):
+        raise ValueError("Portable assets do not match the canonical application version")
+    expected_names = expected_portable_asset_names(policy, version)
+    if not directory.is_dir():
+        raise ValueError(f"Portable asset directory does not exist: {directory}")
+    entries = tuple(directory.iterdir())
+    invalid_entries = sorted(path.name for path in entries if not path.is_file())
+    if invalid_entries:
+        raise ValueError(
+            "Portable asset directory contains non-files: "
+            + ", ".join(invalid_entries)
+        )
+    actual_names = frozenset(path.name for path in entries)
+    missing = sorted(expected_names - actual_names)
+    unexpected = sorted(actual_names - expected_names)
+    if missing or unexpected:
+        details = []
+        if missing:
+            details.append("missing: " + ", ".join(missing))
+        if unexpected:
+            details.append("unexpected: " + ", ".join(unexpected))
+        raise ValueError("Invalid portable release asset set (" + "; ".join(details) + ")")
+
+    checksum_suffix = policy.portable.checksum_suffix
+    applications = sorted(
+        (directory / name)
+        for name in expected_names
+        if not name.endswith(checksum_suffix)
+    )
+    for application in applications:
+        checksum_path = directory / (application.name + checksum_suffix)
+        lines = checksum_path.read_text(encoding="utf-8").splitlines()
+        expected_line = f"{sha256(application)}  {application.name}"
+        if lines != [expected_line]:
+            raise ValueError(f"Invalid checksum file: {checksum_path.name}")
+    return tuple(sorted(directory / name for name in expected_names))
+
+
 def package_asset_names(policy: ProjectPolicy, version: str) -> tuple[str, str]:
     """Return the wheel and source-distribution filenames built by setuptools."""
     normalized = policy.application.distribution_name.replace("-", "_")

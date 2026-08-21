@@ -117,6 +117,73 @@ class GitHubReleaseTest(unittest.TestCase):
             self.assertTrue(checksum_lines[1].endswith(f"  {source_name}"))
             self.assertTrue(assets.expected_names.issuperset({wheel_name, source_name, "SHA256SUMS"}))
 
+    def test_portable_release_directory_requires_exact_checksummed_assets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            expected_names = create_github_release.expected_portable_asset_names(
+                self.policy,
+                self.version,
+            )
+            checksum_suffix = self.policy.portable.checksum_suffix
+            for name in expected_names:
+                if name.endswith(checksum_suffix):
+                    continue
+                application = directory / name
+                application.write_bytes(name.encode("utf-8"))
+                (directory / (name + checksum_suffix)).write_text(
+                    f"{create_github_release.sha256(application)}  {name}\r\n",
+                    encoding="utf-8",
+                )
+            validated = create_github_release.verify_portable_asset_directory(
+                self.policy,
+                self.version,
+                directory,
+            )
+            self.assertEqual(expected_names, frozenset(path.name for path in validated))
+
+    def test_portable_release_directory_rejects_missing_or_modified_assets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            expected_names = create_github_release.expected_portable_asset_names(
+                self.policy,
+                self.version,
+            )
+            checksum_suffix = self.policy.portable.checksum_suffix
+            for name in expected_names:
+                if name.endswith(checksum_suffix):
+                    continue
+                application = directory / name
+                application.write_bytes(b"verified")
+                (directory / (name + checksum_suffix)).write_text(
+                    f"{create_github_release.sha256(application)}  {name}\n",
+                    encoding="utf-8",
+                )
+            missing = directory / sorted(expected_names)[0]
+            missing.unlink()
+            with self.assertRaisesRegex(ValueError, "missing"):
+                create_github_release.verify_portable_asset_directory(
+                    self.policy,
+                    self.version,
+                    directory,
+                )
+
+            missing.write_text("unexpected replacement", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Invalid checksum file"):
+                create_github_release.verify_portable_asset_directory(
+                    self.policy,
+                    self.version,
+                    directory,
+                )
+
+    def test_portable_release_directory_rejects_a_different_version(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaisesRegex(ValueError, "canonical application version"):
+                create_github_release.verify_portable_asset_directory(
+                    self.policy,
+                    "9.9.9.9",
+                    Path(temporary),
+                )
+
     def test_generated_notes_describe_every_delivery(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -226,7 +293,25 @@ class GitHubReleaseTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("release_tag:", workflow)
         self.assertIn("inputs.release_tag != ''", workflow)
-        self.assertIn('gh release upload "$RELEASE_TAG"', workflow)
+        build_workflow, publish_workflow = workflow.split("\n  publish:\n", 1)
+        self.assertNotIn("gh release upload", build_workflow)
+        self.assertEqual(1, publish_workflow.count("gh release upload"))
+        self.assertIn("needs: [policy, build]", publish_workflow)
+        self.assertIn("runs-on: ubuntu-latest", publish_workflow)
+        self.assertEqual(
+            workflow.count("actions/checkout@"),
+            workflow.count("ref: ${{ github.event.release.tag_name || inputs.release_tag || github.ref }}"),
+        )
+        self.assertIn(
+            "actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f",
+            build_workflow,
+        )
+        self.assertIn("actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131", publish_workflow)
+        self.assertIn("pattern: portable-*", publish_workflow)
+        self.assertIn("merge-multiple: true", publish_workflow)
+        self.assertIn("scripts/verify_portable_release_assets.py", publish_workflow)
+        self.assertIn('gh release view "$RELEASE_TAG" --repo "$GH_REPO"', publish_workflow)
+        self.assertIn('--clobber --repo "$GH_REPO"', publish_workflow)
 
     def test_resume_restarts_native_build_for_the_immutable_tag(self):
         with patch.object(create_github_release, "run") as mocked_run:
