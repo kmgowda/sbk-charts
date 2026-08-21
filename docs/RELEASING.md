@@ -105,6 +105,12 @@ venv-sbk-charts/bin/python scripts/create_github_release.py \
   --notes-file /path/to/reviewed-notes.md
 ```
 
+The optional `--python <path>` flag selects the interpreter used for unit
+tests, lint checks, and wheel/sdist builds. The `./sbk-charts` smoke test still
+uses the launcher's normal runtime selection policy, so it may reuse a different
+saved, managed, virtual, or Conda environment. This deliberately verifies both
+the chosen development interpreter and the user-facing bootstrap path.
+
 ## Step 2: publish
 
 After reviewing the prepared output, rerun with explicit publication approval:
@@ -155,6 +161,12 @@ Python package assets, publishes a matching draft if necessary, and waits for
 the complete native asset set. When an already-published release is missing a
 native file, resume mode dispatches the portable workflow for the existing
 immutable tag. It does not move or force-push a tag.
+
+For an already-published release, `--resume` preserves the existing title and
+release notes. Its purpose is artifact recovery, not editorial changes. If the
+published notes must change, review and edit them separately with GitHub after
+the artifact recovery is complete. A resumed draft still receives the reviewed
+notes file when it is published.
 
 The default native-build timeout is one hour. Slow hosted runners can use a
 larger value:

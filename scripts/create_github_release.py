@@ -469,6 +469,18 @@ def release_asset_names(release: dict[str, object]) -> frozenset[str]:
     )
 
 
+def remote_tag_commit(remote_tags: str, version: str) -> str | None:
+    """Return the commit for one exact remote tag, preferring its peeled ref."""
+    exact_ref = f"refs/tags/{version}"
+    peeled_ref = exact_ref + "^{}"
+    matching_refs: dict[str, str] = {}
+    for line in remote_tags.splitlines():
+        fields = line.split()
+        if len(fields) == 2 and fields[1] in {exact_ref, peeled_ref}:
+            matching_refs[fields[1]] = fields[0]
+    return matching_refs.get(peeled_ref) or matching_refs.get(exact_ref)
+
+
 def ensure_tag(version: str, head: str, remote: str) -> None:
     """Create and push the version tag, or validate an existing matching tag."""
     result = run(["git", "rev-parse", "-q", "--verify", f"refs/tags/{version}"], capture=True, check=False)
@@ -479,12 +491,18 @@ def ensure_tag(version: str, head: str, remote: str) -> None:
     else:
         run(["git", "tag", "--annotate", version, "--message", f"sbk-charts {version}"])
     remote_tags = captured(
-        ["git", "ls-remote", "--tags", remote, f"refs/tags/{version}*"],
+        [
+            "git",
+            "ls-remote",
+            "--tags",
+            remote,
+            f"refs/tags/{version}",
+            f"refs/tags/{version}^{{}}",
+        ],
         check=False,
     )
-    if remote_tags:
-        peeled = [line.split()[0] for line in remote_tags.splitlines() if line.endswith("^{}")]
-        remote_commit = peeled[0] if peeled else remote_tags.splitlines()[0].split()[0]
+    remote_commit = remote_tag_commit(remote_tags, version)
+    if remote_commit:
         if remote_commit != head:
             raise RuntimeError(f"Remote tag {version} does not identify HEAD")
     else:
@@ -614,7 +632,11 @@ def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--version", help="Release version; defaults to the canonical project version")
     parser.add_argument("--notes-file", type=Path, help="Use reviewed release notes instead of generated notes")
     parser.add_argument("--output", type=Path, default=ROOT / "dist" / "release")
-    parser.add_argument("--python", default=sys.executable, help="Development Python used for checks and builds")
+    parser.add_argument(
+        "--python",
+        default=sys.executable,
+        help="Python for tests, lint, and package builds; the launcher selects its own runtime",
+    )
     parser.add_argument("--timeout-seconds", type=int, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument("--poll-seconds", type=int, default=DEFAULT_POLL_SECONDS)
     selected = parser.parse_args(arguments)

@@ -176,6 +176,50 @@ class GitHubReleaseTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "must be a list"):
             create_github_release.release_asset_names({"assets": "wheel"})
 
+    def test_remote_tag_lookup_accepts_only_the_exact_version(self):
+        exact_commit = "a" * 40
+        similar_commit = "b" * 40
+        remote_tags = "\n".join(
+            (
+                f"{similar_commit}\trefs/tags/{self.version}.1",
+                f"{similar_commit}\trefs/tags/{self.version}-candidate",
+                f"{similar_commit}\trefs/tags/{self.version}",
+                f"{exact_commit}\trefs/tags/{self.version}^{{}}",
+            )
+        )
+        self.assertEqual(
+            exact_commit,
+            create_github_release.remote_tag_commit(remote_tags, self.version),
+        )
+        self.assertIsNone(
+            create_github_release.remote_tag_commit(
+                f"{similar_commit}\trefs/tags/{self.version}.1",
+                self.version,
+            )
+        )
+
+    def test_ensure_tag_queries_exact_remote_refs(self):
+        head = "a" * 40
+        with (
+            patch.object(
+                create_github_release,
+                "run",
+                return_value=create_github_release.subprocess.CompletedProcess(
+                    args=[], returncode=0
+                ),
+            ),
+            patch.object(
+                create_github_release,
+                "captured",
+                side_effect=(head, f"{head}\trefs/tags/{self.version}^{{}}"),
+            ) as mocked_captured,
+        ):
+            create_github_release.ensure_tag(self.version, head, "origin")
+        remote_command = mocked_captured.call_args_list[1].args[0]
+        self.assertEqual(f"refs/tags/{self.version}", remote_command[-2])
+        self.assertEqual(f"refs/tags/{self.version}^{{}}", remote_command[-1])
+        self.assertNotIn("*", " ".join(remote_command))
+
     def test_portable_workflow_supports_release_recovery(self):
         workflow = (
             create_github_release.ROOT / ".github" / "workflows" / "portable.yml"
