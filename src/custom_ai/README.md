@@ -14,6 +14,8 @@ sbk-charts can create the workbook without AI. If a backend command is selected,
 
 All backends receive the same throughput, latency, total-MB, and percentile-histogram prompts from `src/genai/genai.py`. A backend's job is to configure a model, send those prompts, convert the response to text, and return `(success, text)`.
 
+Canonical model, endpoint, and generation defaults live in `src/ai/defaults.py`. The lightweight registry and the selected adapter both consume those values, so changing a default does not require duplicate edits.
+
 ## Choose a backend
 
 | Command | Runs | Setup | Default |

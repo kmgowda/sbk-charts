@@ -25,7 +25,7 @@ Use this skill when adding a cloud provider, local model server, or in-process l
 2. For a substantial integration, complete a plugin specification.
 3. Create `src/custom_ai/<name>/__init__.py`, `<name>.py`, and `README.md`.
 4. Define one concrete `SbkGenAI` subclass and add its lightweight descriptor to `src/ai/registry.py`.
-5. Add the same plugin flags to the registry descriptor and consume them in `parse_args()`. The registry must not import the optional SDK.
+5. Add plugin flags to the registry descriptor and consume them in `parse_args()`. Put defaults shared by the descriptor and adapter in `src/ai/defaults.py`; do not duplicate argument registration in the provider class. The registry must not import the optional SDK.
 6. Reuse all four shared prompt builders from `SbkGenAI`.
 7. Return `(True, text)` on success and `(False, actionable_error)` for expected failure.
 8. Implement chat with `_enhance_prompt_with_rag()` when supported.

@@ -33,6 +33,7 @@ import threading
 import sys
 
 from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 
 from src.ai.registry import BACKENDS, load_backend_class
 from src.charts import constants
@@ -70,6 +71,14 @@ warning_msg = ("The AI may hallucinate !. "
               "It's recommended to analyze the graphs along with the generated summary.")
 
 DEFAULT_TIMEOUT_SECONDS = 120
+AI_LABEL_COLUMN = 7
+AI_CONTENT_COLUMN = 8
+AI_TEXT_WRAP_WIDTH = 120
+AI_CONTENT_COLUMN_WIDTH_FACTOR = 0.90
+AI_BODY_MIN_ROW_HEIGHT = 25
+AI_BODY_LINE_HEIGHT = 25
+AI_WARNING_MIN_ROW_HEIGHT = 35
+AI_WARNING_LINE_HEIGHT = 35
 
 def get_t_num_sheet_name(r_num_name):
     """
@@ -225,27 +234,27 @@ class SbkAI:
         Uses Simple RAG by default for maximum compatibility.
         """
         try:
-            print("🎯 Using Simple RAG (ChromaDB-free) for maximum compatibility...")
+            print("Using Simple RAG (ChromaDB-free) for maximum compatibility...")
             try:
                 self.rag_pipeline = SbkSimpleRAGPipeline()
                 if self.rag_pipeline.initialize():
                     # Ingest storage statistics data
                     if self.rag_pipeline.ingest_storage_stats(self.get_storage_stats()):
                         stats = self.rag_pipeline.get_collection_stats()
-                        print(f"✅ Simple RAG pipeline initialized successfully with {stats.get('document_count', 0)} data points")
-                        print("💡 Simple RAG provides full functionality without external dependencies")
+                        print(f"Simple RAG pipeline initialized successfully with {stats.get('document_count', 0)} data points")
+                        print("Simple RAG provides full functionality without external dependencies")
                         return
                     else:
-                        print("❌ Failed to ingest storage statistics into Simple RAG pipeline")
+                        print("Failed to ingest storage statistics into Simple RAG pipeline")
                 else:
-                    print("❌ Failed to initialize Simple RAG pipeline")
+                    print("Failed to initialize Simple RAG pipeline")
                     
             except Exception as e:
-                print(f"❌ Simple RAG pipeline failed: {str(e)}")
+                print(f"Simple RAG pipeline failed: {str(e)}")
                 self.rag_pipeline = None
 
         except Exception as e:
-            print(f"❌ Error initializing RAG pipeline: {str(e)}")
+            print(f"Error initializing RAG pipeline: {str(e)}")
             self.rag_pipeline = None
 
     def open(self, args):
@@ -411,18 +420,18 @@ class SbkAI:
                     print(f"Running {method_name}...")
                     result_method, result = run_analysis(method_name)
                     results[result_method] = result
-                    print(f"✓ Completed {result_method}")
+                    print(f"Completed {result_method}")
 
                     # Check timeout after each method
                     if (time.time() - start_time) > self.timeout_seconds:
-                        print(f"⚠️ Timeout after {self.timeout_seconds} seconds")
+                        print(f"Timeout after {self.timeout_seconds} seconds")
                         # Mark remaining methods as timed out
                         for remaining in analysis_methods[analysis_methods.index(method_name) + 1:]:
                             results[remaining] = (False, "Analysis timed out")
                         break
 
                 except Exception as e:
-                    print(f"⚠️ Error in {method_name}: {str(e)}")
+                    print(f"Error in {method_name}: {str(e)}")
                     results[method_name] = (False, str(e))
         else:
             # Run analysis methods in parallel using ThreadPoolExecutor for better performance
@@ -447,22 +456,22 @@ class SbkAI:
                         try:
                             result_method, result = future.result(timeout=1.0)
                             results[result_method] = result
-                            print(f"✓ Completed {result_method}")
+                            print(f"Completed {result_method}")
                         except concurrent.futures.TimeoutError:
-                            print(f"⚠️ Timeout waiting for {method_name}, skipping...")
+                            print(f"Timeout waiting for {method_name}, skipping...")
                             results[method_name] = (False, "Analysis timed out")
                         except Exception as e:
-                            print(f"⚠️ Error in {method_name}: {str(e)}")
+                            print(f"Error in {method_name}: {str(e)}")
                             results[method_name] = (False, str(e))
 
                     # Print progress
                     remaining = len(future_to_method)
                     if remaining > 0:
-                        print(f"⏳ Waiting for {remaining} more analysis tasks...")
+                        print(f"Waiting for {remaining} more analysis tasks...")
 
                 remaining = len(future_to_method)
                 if remaining > 0:
-                    print(f"⚠️ {remaining} analysis tasks Timeout !")
+                    print(f"{remaining} analysis tasks timed out")
                     # Cancel any remaining futures
                     for future in future_to_method:
                         future.cancel()
@@ -478,16 +487,19 @@ class SbkAI:
 
        # Format and add AI analysis to the worksheet
         try:
-            sheet = self.wb["Summary"]
+            sheet = self.wb[sheets_constants.SUMMARY_SHEET]
 
             # Configure column H width to accommodate text
-            sheet.column_dimensions['H'].width = 120 * 0.90
+            content_column_letter = get_column_letter(AI_CONTENT_COLUMN)
+            sheet.column_dimensions[content_column_letter].width = (
+                AI_TEXT_WRAP_WIDTH * AI_CONTENT_COLUMN_WIDTH_FACTOR
+            )
             
             # Add AI warning section with proper formatting
             max_row = sheet.max_row + 3  # Add spacing before the warning
             
             # Format and add the warning message
-            warn_cell = sheet.cell(row=max_row, column=8)
+            warn_cell = sheet.cell(row=max_row, column=AI_CONTENT_COLUMN)
             warn_cell.value = warning_msg
             warn_cell.font = Font(size=16, bold=True, color=ExcelColors.RED_BOLD)
             warn_cell.alignment = Alignment(wrap_text=True, vertical='top')
@@ -495,31 +507,36 @@ class SbkAI:
             # Calculate optimal row height for the warning message
             warning_wrapped_lines = []
             for line in warning_msg.split('\n'):
-                warning_wrapped_lines.extend(textwrap.wrap(line, width=120))
+                warning_wrapped_lines.extend(
+                    textwrap.wrap(line, width=AI_TEXT_WRAP_WIDTH)
+                )
             
             # Set row height with minimum of 35 points
-            warn_row_height = max(35, len(warning_wrapped_lines) * 35)
+            warn_row_height = max(
+                AI_WARNING_MIN_ROW_HEIGHT,
+                len(warning_wrapped_lines) * AI_WARNING_LINE_HEIGHT,
+            )
             sheet.row_dimensions[max_row].height = warn_row_height
 
             # Add AI Performance Analysis section header
             max_row = sheet.max_row + 2
-            title_cell = sheet.cell(row=max_row, column=7)
+            title_cell = sheet.cell(row=max_row, column=AI_LABEL_COLUMN)
             title_cell.value = "AI Performance Analysis"
             title_cell.font = Font(size=18, bold=True, color=ExcelColors.TITLE_RED)
             
             # Add model description
-            dec_cell = sheet.cell(row=max_row, column=8)
+            dec_cell = sheet.cell(row=max_row, column=AI_CONTENT_COLUMN)
             dec_cell.value = self.ai_instance.get_model_description()[1]
             dec_cell.font = Font(size=16, color=ExcelColors.GREEN)
 
             # Add Throughput Analysis section
             throughput_header_row = max_row + 2
-            cell = sheet.cell(row=throughput_header_row, column=7)
+            cell = sheet.cell(row=throughput_header_row, column=AI_LABEL_COLUMN)
             cell.value = "Throughput Analysis"
             cell.font = Font(size=16, bold=True, color=ExcelColors.PURPLE)
             
             # Add throughput analysis content with formatting
-            cell = sheet.cell(row=throughput_header_row, column=8)
+            cell = sheet.cell(row=throughput_header_row, column=AI_CONTENT_COLUMN)
             throughput_analysis = results['get_throughput_analysis'][1]
             cell.value = throughput_analysis
             cell.font = Font(size=14, color=ExcelColors.DARK_RED)
@@ -534,24 +551,27 @@ class SbkAI:
             # Calculate and set optimal row height for throughput analysis
             wrapped_lines = []
             for line in throughput_analysis.split('\n'):
-                wrapped_lines.extend(textwrap.wrap(line, width=120))
+                wrapped_lines.extend(textwrap.wrap(line, width=AI_TEXT_WRAP_WIDTH))
             
-            row_height = max(25, len(wrapped_lines) * 25)
+            row_height = max(
+                AI_BODY_MIN_ROW_HEIGHT,
+                len(wrapped_lines) * AI_BODY_LINE_HEIGHT,
+            )
             sheet.row_dimensions[throughput_header_row].height = row_height
 
             # Add Latency Analysis section
             latency_row = sheet.max_row + 1
             
             # Format and add latency analysis header
-            cell = sheet.cell(row=latency_row, column=7)
+            cell = sheet.cell(row=latency_row, column=AI_LABEL_COLUMN)
             cell.value = "Latency Analysis"
             cell.font = Font(size=16, bold=True, color=ExcelColors.GREEN_HEADER)
             
             # Add latency analysis content with formatting
-            cell = sheet.cell(row=latency_row, column=8)
+            cell = sheet.cell(row=latency_row, column=AI_CONTENT_COLUMN)
             latency_analysis = results['get_latency_analysis'][1]
             cell.value = latency_analysis
-            cell.font = Font(size=14, color="FF000080")
+            cell.font = Font(size=14, color=ExcelColors.DARK_BLUE)
             cell.border = Border(
                 left=Side(style='thin'),
                 right=Side(style='thin'),
@@ -563,21 +583,26 @@ class SbkAI:
             # Calculate and set optimal row height for latency analysis
             latency_wrapped_lines = []
             for line in latency_analysis.split('\n'):
-                latency_wrapped_lines.extend(textwrap.wrap(line, width=120))
+                latency_wrapped_lines.extend(
+                    textwrap.wrap(line, width=AI_TEXT_WRAP_WIDTH)
+                )
             
-            latency_row_height = max(25, len(latency_wrapped_lines) * 25)
+            latency_row_height = max(
+                AI_BODY_MIN_ROW_HEIGHT,
+                len(latency_wrapped_lines) * AI_BODY_LINE_HEIGHT,
+            )
             sheet.row_dimensions[latency_row].height = latency_row_height
             
             # Add Total MB Analysis section
             mb_row = sheet.max_row + 1
             
             # Format and add total MB analysis header
-            cell = sheet.cell(row=mb_row, column=7)
+            cell = sheet.cell(row=mb_row, column=AI_LABEL_COLUMN)
             cell.value = "Total MB Analysis"
             cell.font = Font(size=16, bold=True, color=ExcelColors.BLUE)
             
             # Add total MB analysis content with formatting
-            cell = sheet.cell(row=mb_row, column=8)
+            cell = sheet.cell(row=mb_row, column=AI_CONTENT_COLUMN)
             mb_analysis = results['get_total_mb_analysis'][1]
             cell.value = mb_analysis
             cell.font = Font(size=14, color=ExcelColors.DARK_GREEN)
@@ -592,21 +617,26 @@ class SbkAI:
             # Calculate and set optimal row height for total MB analysis
             mb_wrapped_lines = []
             for line in mb_analysis.split('\n'):
-                mb_wrapped_lines.extend(textwrap.wrap(line, width=120))
+                mb_wrapped_lines.extend(
+                    textwrap.wrap(line, width=AI_TEXT_WRAP_WIDTH)
+                )
             
-            mb_row_height = max(25, len(mb_wrapped_lines) * 25)
+            mb_row_height = max(
+                AI_BODY_MIN_ROW_HEIGHT,
+                len(mb_wrapped_lines) * AI_BODY_LINE_HEIGHT,
+            )
             sheet.row_dimensions[mb_row].height = mb_row_height
             
             # Add Percentile Histogram Analysis section
             percentile_row = sheet.max_row + 1  # Add an extra blank row
             
             # Format and add percentile histogram analysis header
-            cell = sheet.cell(row=percentile_row, column=7)
+            cell = sheet.cell(row=percentile_row, column=AI_LABEL_COLUMN)
             cell.value = "Percentile Histogram Analysis"
             cell.font = Font(size=16, bold=True, color=ExcelColors.DARK_MAGENTA)
             
             # Add percentile histogram analysis content with formatting
-            cell = sheet.cell(row=percentile_row, column=8)
+            cell = sheet.cell(row=percentile_row, column=AI_CONTENT_COLUMN)
             percentile_analysis = results['get_percentile_histogram_analysis'][1]
             cell.value = percentile_analysis
             cell.font = Font(size=14, color=ExcelColors.SADDLE_BROWN)
@@ -621,9 +651,14 @@ class SbkAI:
             # Calculate and set optimal row height for percentile histogram analysis
             percentile_wrapped_lines = []
             for line in percentile_analysis.split('\n'):
-                percentile_wrapped_lines.extend(textwrap.wrap(line, width=120))
+                percentile_wrapped_lines.extend(
+                    textwrap.wrap(line, width=AI_TEXT_WRAP_WIDTH)
+                )
             
-            percentile_row_height = max(25, len(percentile_wrapped_lines) * 25)
+            percentile_row_height = max(
+                AI_BODY_MIN_ROW_HEIGHT,
+                len(percentile_wrapped_lines) * AI_BODY_LINE_HEIGHT,
+            )
             sheet.row_dimensions[percentile_row].height = percentile_row_height
 
         except Exception as e:
@@ -716,7 +751,7 @@ class SbkAI:
         if self.rag_pipeline and hasattr(self.rag_pipeline, 'get_storage_systems'):
             storage_systems = self.rag_pipeline.get_storage_systems()
             if storage_systems:
-                print(f"\n💡 Available storage systems for comparison: {', '.join(storage_systems)}")
+                print(f"\nAvailable storage systems for comparison: {', '.join(storage_systems)}")
                 print("You can ask questions like:")
                 print("- 'Which storage system performs better?'")
                 print("- 'Compare throughput between storage systems'")
@@ -742,7 +777,7 @@ class SbkAI:
                             # Ctrl-D pressed
                             if len(query_lines) == 0:
                                 # Exit chat mode
-                                print("\n👋  Exiting chat mode...")
+                                print("\nExiting chat mode...")
                                 return
                             else:
                                 # End current query
@@ -764,10 +799,10 @@ class SbkAI:
                     
                     # Monitor the thread and print status every 5 seconds
                     while response_thread.is_alive():
-                        print("\r🤔  AI is thinking...", end="", flush=True)
+                        print("\rAI is thinking...", end="", flush=True)
                         response_thread.join(timeout=5.0)
                         if response_thread.is_alive():
-                            print("\r🤔  AI is thinking... (still processing)", end="", flush=True)
+                            print("\rAI is thinking... (still processing)", end="", flush=True)
                     
                     print("\r", end="")  # Clear the thinking message
                     

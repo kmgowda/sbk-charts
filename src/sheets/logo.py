@@ -9,9 +9,11 @@
 ##
 import os
 
+from src.sheets import constants
+
 # The logo insertion function works fine only if the package pillow is installed.
 def add_sbk_logo(wb):
-    ws = wb.add_worksheet("SBK")
+    ws = wb.add_worksheet(constants.SBK_SHEET)
     img_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                             'images', 'sbk-logo.png')
     if os.path.exists(img_path):

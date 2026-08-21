@@ -112,7 +112,12 @@ class SbkSheets:
         wb = Workbook(self.oFile)
         add_sbk_logo(wb)
         df = read_csv(self.iFile)
-        wb_add_two_sheets(wb, constants.R_PREFIX + "1", constants.T_PREFIX + "1", df)
+        wb_add_two_sheets(
+            wb,
+            constants.FIRST_RESULT_SHEET,
+            constants.FIRST_TOTAL_SHEET,
+            df,
+        )
         wb.close()
         print("xlsx file %s created" % self.oFile)
 

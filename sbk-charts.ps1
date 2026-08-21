@@ -51,27 +51,40 @@ function Get-RequiredPolicyValue {
     return $Value
 }
 
+function Get-PositivePolicyInteger {
+    param(
+        [hashtable] $Policy,
+        [string] $Key,
+        [string] $Description
+    )
+    $ParsedValue = 0
+    $Value = Get-RequiredPolicyValue $Policy $Key
+    if (-not [int]::TryParse($Value, [ref] $ParsedValue) -or $ParsedValue -lt 1) {
+        throw "$Description must be at least one"
+    }
+    return $ParsedValue
+}
+
 $Policy = Read-ProjectPolicy $PolicyFile
 $AppName = Get-RequiredPolicyValue $Policy "application.name"
 $DistributionName = Get-RequiredPolicyValue $Policy "application.distribution_name"
 $AppModule = Get-RequiredPolicyValue $Policy "application.module"
+$VersionFileName = Get-RequiredPolicyValue $Policy "application.version_file"
 $MinimumPython = Get-RequiredPolicyValue $Policy "runtime.minimum_python"
 $ManagedPython = Get-RequiredPolicyValue $Policy "runtime.managed_python"
 $ManagedRuntimeName = Get-RequiredPolicyValue $Policy "runtime.managed_runtime_directory"
 $LockDirectoryName = Get-RequiredPolicyValue $Policy "runtime.lock_directory"
-$BootstrapLockTimeoutValue = Get-RequiredPolicyValue $Policy "runtime.bootstrap_lock_timeout_seconds"
-$BootstrapLockTimeoutSeconds = 0
-$BootstrapLockTimeoutIsValid = [int]::TryParse(
-    $BootstrapLockTimeoutValue,
-    [ref] $BootstrapLockTimeoutSeconds
-)
-if (-not $BootstrapLockTimeoutIsValid -or $BootstrapLockTimeoutSeconds -lt 1) {
-    throw "Bootstrap lock timeout must be at least one second"
-}
+$BootstrapLockTimeoutSeconds = Get-PositivePolicyInteger $Policy `
+    "runtime.bootstrap_lock_timeout_seconds" "Bootstrap lock timeout in seconds"
 $BootstrapManager = Get-RequiredPolicyValue $Policy "bootstrap.manager"
 $BootstrapManagerVersion = Get-RequiredPolicyValue $Policy "bootstrap.manager_version"
 $BootstrapDownloadBaseUrl = Get-RequiredPolicyValue $Policy "bootstrap.download_base_url"
+$BootstrapDownloadTimeoutSeconds = Get-PositivePolicyInteger $Policy `
+    "bootstrap.download_timeout_seconds" "Bootstrap download timeout in seconds"
+$BootstrapDownloadRetries = Get-PositivePolicyInteger $Policy `
+    "bootstrap.download_retries" "Bootstrap download retries"
 $DefaultCondaEnvironment = Get-RequiredPolicyValue $Policy "runtime.default_conda_environment"
+$DefaultProfile = Get-RequiredPolicyValue $Policy "runtime.default_profile"
 $RuntimeStateName = Get-RequiredPolicyValue $Policy "runtime.runtime_state_file"
 $RuntimeStateSchema = Get-RequiredPolicyValue $Policy "runtime.runtime_state_schema"
 $VirtualEnvironmentNames = @(
@@ -99,9 +112,19 @@ $ManagedRuntimeRoot = if ($env:SBK_CHARTS_RUNTIME_ROOT) {
     Join-Path $ProjectRoot $ManagedRuntimeName
 }
 $SelectedBackend = ""
-$SelectedProfile = "core"
+$SelectedProfile = $DefaultProfile
 $SelectedRequirements = ""
+$SkipApplicationValue = $false
 foreach ($ApplicationArgument in $ApplicationArguments) {
+    if ($SkipApplicationValue) {
+        $SkipApplicationValue = $false
+        continue
+    }
+    if ($ApplicationArgument -in @("-i", "--ifiles", "-o", "--ofile", "-secs", "--seconds")) {
+        $SkipApplicationValue = $true
+        continue
+    }
+    if ($ApplicationArgument.StartsWith("-")) { continue }
     $RequirementPath = [string] $Policy["ai.requirements.$ApplicationArgument"]
     if ($RequirementPath) {
         $SelectedBackend = $ApplicationArgument
@@ -111,15 +134,16 @@ foreach ($ApplicationArgument in $ApplicationArguments) {
     }
 }
 $LockFile = Join-Path (Join-Path $ProjectRoot $LockDirectoryName) "$SelectedProfile.txt"
-$ManagedArchitecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-$ManagedTarget = if ($ManagedArchitecture -eq [System.Runtime.InteropServices.Architecture]::X64) {
-    "windows-amd64"
-} elseif ($ManagedArchitecture -eq [System.Runtime.InteropServices.Architecture]::Arm64) {
-    "windows-arm64"
+$ManagedArchitectureKey = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+$ManagedSystem = [string] $Policy["portable.platforms.win32"]
+$ManagedArchitecture = [string] $Policy["portable.architectures.$ManagedArchitectureKey"]
+$ManagedTarget = if ($ManagedSystem -and $ManagedArchitecture) {
+    "$ManagedSystem-$ManagedArchitecture"
 } else { "" }
 $ExpectedFingerprint = ""
 if ($ManagedTarget -and (Test-Path -LiteralPath $LockFile -PathType Leaf)) {
     $FingerprintText = "$ManagedPython`n$ManagedTarget`n$SelectedProfile`n" + `
+        (Get-Content -LiteralPath (Join-Path $ProjectRoot $VersionFileName) -Raw) + "`n" + `
         (Get-Content -LiteralPath $LockFile -Raw)
     $Hasher = [System.Security.Cryptography.SHA256]::Create()
     try {
@@ -251,7 +275,7 @@ function Use-EnvironmentPrefix {
         [string[]] $Arguments,
         [string] $PythonRelativePath = "python.exe",
         [string] $EnvironmentFingerprint = "",
-        [string] $EnvironmentProfile = "core",
+        [string] $EnvironmentProfile = $DefaultProfile,
         [string] $SelectionSource = "unknown",
         [switch] $SavedEnvironmentReused,
         [switch] $EnvironmentCreated,
@@ -307,12 +331,13 @@ function Get-BootstrapManager {
         $ArchivePath = Join-Path $TemporaryDirectory $ArchiveName
         $ArchiveUrl = "$BootstrapDownloadBaseUrl/$BootstrapManagerVersion/$ArchiveName"
         Write-LauncherMessage "Downloading pinned $BootstrapManager $BootstrapManagerVersion for $ManagedTarget"
-        for ($DownloadAttempt = 1; $DownloadAttempt -le 3; $DownloadAttempt++) {
+        for ($DownloadAttempt = 1; $DownloadAttempt -le $BootstrapDownloadRetries; $DownloadAttempt++) {
             try {
-                Invoke-WebRequest -UseBasicParsing -Uri $ArchiveUrl -OutFile $ArchivePath
+                Invoke-WebRequest -UseBasicParsing -Uri $ArchiveUrl -OutFile $ArchivePath `
+                    -TimeoutSec $BootstrapDownloadTimeoutSeconds
                 break
             } catch {
-                if ($DownloadAttempt -eq 3) { throw }
+                if ($DownloadAttempt -eq $BootstrapDownloadRetries) { throw }
                 Start-Sleep -Seconds $DownloadAttempt
             }
         }
@@ -371,44 +396,43 @@ function Start-ManagedEnvironment {
     if (-not $LockAcquired) { throw "Timed out waiting for bootstrap lock $LockPath" }
     Set-Content -LiteralPath (Join-Path $LockPath "pid") -Value $PID -Encoding ASCII
     $TemporaryEnvironment = $null
+    $EnvironmentPublishedByAnotherProcess = $false
     try {
-        if (Test-Path -LiteralPath (Join-Path $EnvironmentPrefix "Scripts\python.exe")) {
-            Use-EnvironmentPrefix -EnvironmentPrefix $EnvironmentPrefix -EnvironmentKind "managed" `
-                -Arguments $Arguments `
-                -PythonRelativePath "Scripts\python.exe" -EnvironmentFingerprint $ExpectedFingerprint `
-                -EnvironmentProfile $SelectedProfile -SelectionSource "managed-cache" -Managed
+        $PublishedPython = Join-Path $EnvironmentPrefix "Scripts\python.exe"
+        if ((Test-SupportedPython $PublishedPython) -and
+            (Test-EnvironmentReady $PublishedPython)) {
+            $EnvironmentPublishedByAnotherProcess = $true
+        } else {
+            $UvPath = if ($env:SBK_CHARTS_UV) { $env:SBK_CHARTS_UV } else { Get-BootstrapManager }
+            if (-not (Test-Path -LiteralPath $UvPath -PathType Leaf)) {
+                throw "Bootstrap manager is not executable: $UvPath"
+            }
+            $PythonInstallDirectory = Join-Path $ManagedRuntimeRoot "python"
+            $env:UV_PYTHON_INSTALL_DIR = $PythonInstallDirectory
+            $env:UV_CACHE_DIR = Join-Path $ManagedRuntimeRoot "cache"
+            $env:UV_LINK_MODE = "copy"
+            Write-LauncherMessage "Installing managed Python $ManagedPython"
+            & $UvPath python install --install-dir $PythonInstallDirectory $ManagedPython
+            if ($LASTEXITCODE -ne 0) { throw "Could not install managed Python $ManagedPython" }
+            $TemporaryEnvironment = Join-Path $ManagedRuntimeRoot `
+                ".env-$ExpectedFingerprint-$([guid]::NewGuid().ToString('N'))"
+            & $UvPath venv --relocatable --managed-python --seed --python $ManagedPython $TemporaryEnvironment
+            if ($LASTEXITCODE -ne 0) { throw "Could not create managed environment" }
+            $ManagedPythonPath = Join-Path $TemporaryEnvironment "Scripts\python.exe"
+            & $UvPath pip install --python $ManagedPythonPath --require-hashes --requirement $LockFile
+            if ($LASTEXITCODE -ne 0) { throw "Could not install locked $SelectedProfile dependencies" }
+            & $UvPath pip install --python $ManagedPythonPath --no-build-isolation `
+                --no-deps $ProjectRoot
+            if ($LASTEXITCODE -ne 0 -or -not (Test-EnvironmentReady $ManagedPythonPath)) {
+                throw "Managed environment self-check failed"
+            }
+            if (Test-Path -LiteralPath $EnvironmentPrefix) {
+                Remove-Item -LiteralPath $EnvironmentPrefix -Recurse -Force
+            }
+            New-Item -ItemType Directory -Force -Path (Split-Path $EnvironmentPrefix) | Out-Null
+            Move-Item -LiteralPath $TemporaryEnvironment -Destination $EnvironmentPrefix
+            $TemporaryEnvironment = $null
         }
-        $UvPath = if ($env:SBK_CHARTS_UV) { $env:SBK_CHARTS_UV } else { Get-BootstrapManager }
-        if (-not (Test-Path -LiteralPath $UvPath -PathType Leaf)) {
-            throw "Bootstrap manager is not executable: $UvPath"
-        }
-        $PythonInstallDirectory = Join-Path $ManagedRuntimeRoot "python"
-        $env:UV_PYTHON_INSTALL_DIR = $PythonInstallDirectory
-        $env:UV_CACHE_DIR = Join-Path $ManagedRuntimeRoot "cache"
-        $env:UV_LINK_MODE = "copy"
-        Write-LauncherMessage "Installing managed Python $ManagedPython"
-        & $UvPath python install --install-dir $PythonInstallDirectory $ManagedPython
-        if ($LASTEXITCODE -ne 0) { throw "Could not install managed Python $ManagedPython" }
-        $TemporaryEnvironment = Join-Path $ManagedRuntimeRoot `
-            ".env-$ExpectedFingerprint-$([guid]::NewGuid().ToString('N'))"
-        & $UvPath venv --relocatable --managed-python --seed --python $ManagedPython $TemporaryEnvironment
-        if ($LASTEXITCODE -ne 0) { throw "Could not create managed environment" }
-        $ManagedPythonPath = Join-Path $TemporaryEnvironment "Scripts\python.exe"
-        & $UvPath pip install --python $ManagedPythonPath --require-hashes --requirement $LockFile
-        if ($LASTEXITCODE -ne 0) { throw "Could not install locked $SelectedProfile dependencies" }
-        & $UvPath pip install --python $ManagedPythonPath --no-build-isolation `
-            --no-deps --editable $ProjectRoot
-        if ($LASTEXITCODE -ne 0 -or -not (Test-EnvironmentReady $ManagedPythonPath)) {
-            throw "Managed environment self-check failed"
-        }
-        if (Test-Path -LiteralPath $EnvironmentPrefix) {
-            $StaleEnvironment = "$EnvironmentPrefix.stale-$PID"
-            Move-Item -LiteralPath $EnvironmentPrefix -Destination $StaleEnvironment
-            Write-LauncherMessage "Preserved incomplete managed environment as $StaleEnvironment"
-        }
-        New-Item -ItemType Directory -Force -Path (Split-Path $EnvironmentPrefix) | Out-Null
-        Move-Item -LiteralPath $TemporaryEnvironment -Destination $EnvironmentPrefix
-        $TemporaryEnvironment = $null
     } finally {
         if ($TemporaryEnvironment -and (Test-Path -LiteralPath $TemporaryEnvironment)) {
             Remove-Item -LiteralPath $TemporaryEnvironment -Recurse -Force
@@ -417,11 +441,18 @@ function Start-ManagedEnvironment {
             Remove-Item -LiteralPath $LockPath -Recurse -Force
         }
     }
-    Use-EnvironmentPrefix -EnvironmentPrefix $EnvironmentPrefix -EnvironmentKind "managed" `
-        -Arguments $Arguments `
-        -PythonRelativePath "Scripts\python.exe" -EnvironmentFingerprint $ExpectedFingerprint `
-        -EnvironmentProfile $SelectedProfile -SelectionSource "created-managed" `
-        -EnvironmentCreated -Managed
+    if ($EnvironmentPublishedByAnotherProcess) {
+        Use-EnvironmentPrefix -EnvironmentPrefix $EnvironmentPrefix -EnvironmentKind "managed" `
+            -Arguments $Arguments `
+            -PythonRelativePath "Scripts\python.exe" -EnvironmentFingerprint $ExpectedFingerprint `
+            -EnvironmentProfile $SelectedProfile -SelectionSource "managed-cache" -Managed
+    } else {
+        Use-EnvironmentPrefix -EnvironmentPrefix $EnvironmentPrefix -EnvironmentKind "managed" `
+            -Arguments $Arguments `
+            -PythonRelativePath "Scripts\python.exe" -EnvironmentFingerprint $ExpectedFingerprint `
+            -EnvironmentProfile $SelectedProfile -SelectionSource "created-managed" `
+            -EnvironmentCreated -Managed
+    }
     throw "Managed environment could not start $AppName"
 }
 

@@ -25,27 +25,30 @@ Requirements:
 - A compatible pre-trained language model (e.g., from Hugging Face)
 """
 
-import torch
-from typing import Tuple, Optional, Dict, Any
-from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
-from transformers.utils.hub import cached_file, TRANSFORMERS_CACHE
-from src.genai.genai import SbkGenAI
-import traceback
-import re
-import os
 import glob
 import logging
+import os
+import re
+import traceback
+from typing import Any, Dict, Optional, Tuple
 
-# Default model configuration
-DEFAULT_MODEL = "openai/gpt-oss-20b"
-DEFAULT_DEVICE = (
-    "cuda" if torch.cuda.is_available() 
-    else "mps" if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available() 
-    else "cpu"
-)
-DEFAULT_MAX_LENGTH = 2048
-DEFAULT_TEMPERATURE = 0.4
-DEFAULT_TOP_P = 0.9
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+from transformers.utils.hub import TRANSFORMERS_CACHE, cached_file
+
+from src.ai.defaults import PYTORCH_DEFAULTS
+from src.genai.genai import SbkGenAI
+
+
+def _automatic_device() -> str:
+    """Return the best device available to the local PyTorch runtime."""
+    return (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+        else "cpu"
+    )
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -59,11 +62,13 @@ class PyTorchLLM(SbkGenAI):
     from the Hugging Face model hub that's compatible with PyTorch.
     
     Configuration:
-    - Model: Any Hugging Face model ID or local path (default: openai/gpt-oss-20b)
-    - Device: 'cuda', 'mps', or 'cpu' (auto-detects CUDA by default)
-    - Max Length: Maximum sequence length for generation (default: 2048)
-    - Temperature: Controls randomness (default: 0.4)
-    - Top-p: Nucleus sampling parameter (default: 0.9)
+    - Model: Any Hugging Face model ID or local path
+    - Device: 'cuda', 'mps', or 'cpu', with automatic selection available
+    - Max Length: Maximum sequence length for generation
+    - Temperature: Controls randomness
+    - Top-p: Nucleus sampling parameter
+
+    Run the ``pytorchllm -h`` subcommand for the current defaults.
     
     Attributes:
         model_name (str): Name or path of the loaded model
@@ -79,11 +84,11 @@ class PyTorchLLM(SbkGenAI):
 
     def __init__(self) -> None:
         super().__init__()
-        self.model_name = DEFAULT_MODEL
-        self.device = DEFAULT_DEVICE
-        self.max_length = DEFAULT_MAX_LENGTH
-        self.temperature = DEFAULT_TEMPERATURE
-        self.top_p = DEFAULT_TOP_P
+        self.model_name = PYTORCH_DEFAULTS.model
+        self.device = _automatic_device()
+        self.max_length = PYTORCH_DEFAULTS.max_length
+        self.temperature = PYTORCH_DEFAULTS.temperature
+        self.top_p = PYTORCH_DEFAULTS.top_p
         self.model = None
         self.tokenizer = None
         self._is_initialized = False
@@ -162,18 +167,18 @@ class PyTorchLLM(SbkGenAI):
                     
                     if config_file and os.path.exists(config_file):
                         model_dir = os.path.dirname(config_file)
-                        logger.info(f"✅ Model files cached at: {model_dir}")
+                        logger.info(f"Model files cached at: {model_dir}")
                     else:
                         # Fallback: try to find any .bin or .safetensors file in the cache
                         cache_files = glob.glob(os.path.join(TRANSFORMERS_CACHE, '**/*.bin'), recursive=True) + \
                                      glob.glob(os.path.join(TRANSFORMERS_CACHE, '**/*.safetensors'), recursive=True)
                         if cache_files:
                             model_dir = os.path.dirname(cache_files[0])
-                            logger.info(f"✅ Found model weights at: {model_dir}")
+                            logger.info(f"Found model weights at: {model_dir}")
                         else:
-                            logger.warning(f"⚠️ Could not determine exact cache location. Using default: {TRANSFORMERS_CACHE}")
+                            logger.warning(f"Could not determine exact cache location. Using default: {TRANSFORMERS_CACHE}")
                 except Exception as e:
-                    logger.warning(f"⚠️ Could not determine exact cache location: {str(e)}")
+                    logger.warning(f"Could not determine exact cache location: {str(e)}")
                     logger.info(f"Using default cache directory: {TRANSFORMERS_CACHE}")
 
             self.model = self.model.to(self.device)
@@ -210,47 +215,10 @@ class PyTorchLLM(SbkGenAI):
         else:
             return 'cpu'
 
-    def add_args(self, parser) -> None:
-        """Add command-line arguments for PyTorch LLM configuration."""
-        parser.add_argument(
-            "--pt-model",
-            help=f"Hugging Face model ID or path (default: {DEFAULT_MODEL})",
-            default=DEFAULT_MODEL
-        )
-        parser.add_argument(
-            "--pt-train",
-            action="store_true",
-            help="Enable training mode (default: False)",
-            default=False
-        )
-        parser.add_argument(
-            "--pt-device",
-            help=f"Device to run the model on (default: {DEFAULT_DEVICE})",
-            default=DEFAULT_DEVICE
-        )
-        parser.add_argument(
-            "--pt-max-length",
-            type=int,
-            help=f"Maximum sequence length (default: {DEFAULT_MAX_LENGTH})",
-            default=DEFAULT_MAX_LENGTH
-        )
-        parser.add_argument(
-            "--pt-temperature",
-            type=float,
-            help=f"Sampling temperature (default: {DEFAULT_TEMPERATURE})",
-            default=DEFAULT_TEMPERATURE
-        )
-        parser.add_argument(
-            "--pt-top-p",
-            type=float,
-            help=f"Top-p sampling parameter (default: {DEFAULT_TOP_P})",
-            default=DEFAULT_TOP_P
-        )
-
     def parse_args(self, args) -> None:
         """Parse command-line arguments."""
         self.model_name = args.pt_model
-        if args.pt_device != "auto":
+        if args.pt_device != PYTORCH_DEFAULTS.device:
             self.device = args.pt_device
         self.max_length = args.pt_max_length
         self.temperature = args.pt_temperature
@@ -274,22 +242,22 @@ class PyTorchLLM(SbkGenAI):
         if self.train_mode:
             self.model.train()
             logger.info("\n" + "=" * 50)
-            logger.info("🚀 Starting training on generated output")
+            logger.info("Starting training on generated output")
 
             for output_text in self.output_list:
-                logger.info(f"📄 Generated length: {len(output_text)} chars")
+                logger.info(f"Generated length: {len(output_text)} chars")
                 loss = self._train_on_output(output_text)
                 if loss is None:
                     break
             logger.info("=" * 50)
             # Save the model after training
             if loss is not None:
-                logger.info("💾 Saving trained model...")
+                logger.info("Saving trained model...")
                 save_success = self._save_model()
                 if save_success:
-                    logger.info("✅ Model saved successfully")
+                    logger.info("Model saved successfully")
                 else:
-                    logger.error("❌ Failed to save model")
+                    logger.error("Failed to save model")
 
 
     def _save_model(self, output_dir: str = None) -> bool:
@@ -317,17 +285,17 @@ class PyTorchLLM(SbkGenAI):
                 return False
             
             os.makedirs(output_dir, exist_ok=True)
-            logger.info(f"💾 Saving model to {output_dir}...")
+            logger.info(f"Saving model to {output_dir}...")
             
             # Save model and tokenizer
             self.model.save_pretrained(output_dir)
             self.tokenizer.save_pretrained(output_dir)
             
-            logger.info(f"✅ Model successfully saved to {output_dir}")
+            logger.info(f"Model successfully saved to {output_dir}")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error saving model: {str(e)}")
+            logger.error(f"Error saving model: {str(e)}")
             return False
             
     def _train_on_output(self, generated_text: str) -> Optional[float]:
@@ -348,7 +316,7 @@ class PyTorchLLM(SbkGenAI):
             logger.error("Empty generated text for training")
             return None
         try:
-            logger.info(f"🔄 Starting training on generated output (length: {len(generated_text)} chars)...")
+            logger.info(f"Starting training on generated output (length: {len(generated_text)} chars)...")
 
             # Get model's dtype for consistent typing
             model_dtype = next(self.model.parameters()).dtype
@@ -399,14 +367,14 @@ class PyTorchLLM(SbkGenAI):
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 self.optimizer.step()
                 # Print training progress
-                logger.info(f"✅ Training complete - Loss: {loss.item():.4f}")
+                logger.info(f"Training complete - Loss: {loss.item():.4f}")
                 return loss.item()
 
-            logger.warning("⚠️ No loss computed during training")
+            logger.warning("No loss computed during training")
             return None
             
         except Exception as e:
-            logger.error(f"❌ Error during training: {str(e)}")
+            logger.error(f"Error during training: {str(e)}")
             traceback.print_exc()
             return None
     
@@ -453,8 +421,8 @@ class PyTorchLLM(SbkGenAI):
             if 'attention_mask' in inputs:
                 inputs['attention_mask'] = inputs['attention_mask'].to(dtype=torch.long)
             
-            # Calculate max_new_tokens, ensuring it's at least DEFAULT_MAX_LENGTH
-            max_new_tokens = max(DEFAULT_MAX_LENGTH, inputs['input_ids'].shape[1])
+            # Keep generated output at least as large as the configured context.
+            max_new_tokens = max(self.max_length, inputs['input_ids'].shape[1])
             
             # Generate text with appropriate settings
             with torch.no_grad():

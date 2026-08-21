@@ -8,107 +8,140 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 -->
 
-# Portable sbk-charts distributions
+# Self-extracting portable applications
 
-A portable distribution is a native archive containing sbk-charts, a Python runtime, and Python dependencies. It is useful when the destination machine should not install Python, pip, venv, or Conda.
+A portable release is one native file containing sbk-charts, Python, core dependencies, and all supported AI backend dependencies. It does not need a source checkout, installed Python, pip, venv, or Conda.
 
-This is different from the repository launchers:
+The file extracts itself only when its saved payload is absent or invalid. Later executions reuse the validated saved application. This differs from the source launchers, which construct dependency profiles and may use venv or Conda.
 
-| Delivery | Python on destination | First-run package download | Best for |
+| Delivery | Destination requirement | First execution | Later execution |
 |---|---|---|---|
-| Source launcher | Not required on supported targets | Yes on first managed bootstrap | Development and source checkouts |
-| Portable archive | Not required | No for bundled application code | Fixed native deployment |
-| Wheel | Required | Installation downloads dependencies as needed | Existing Python environments |
+| Source launcher | Bash or PowerShell and network for new managed setup | Install Python and selected locked profile | Validate and reuse the saved environment |
+| Self-extracting portable file | Target-specific native requirements described below | Verify and extract embedded bundled runtime | Validate and reuse saved bundled runtime |
+| Wheel | Compatible Python and installer | Install package and dependencies | Use installed Python environment |
 
-## Supported native targets
+## Supported files
 
-| Target | Archive | Processor |
+| Target | Release file | Processor |
 |---|---|---|
-| Linux | `sbk-charts-<version>-linux-amd64.tar.gz` | x86-64 |
-| macOS | `sbk-charts-<version>-macos-arm64.tar.gz` | Apple silicon |
-| Windows | `sbk-charts-<version>-windows-amd64.zip` | x86-64 |
+| Linux | `sbk-charts-<version>-linux-amd64.run` | x86-64 |
+| macOS | `sbk-charts-<version>-macos-arm64.run` | Apple silicon |
+| Windows | `sbk-charts-<version>-windows-amd64.exe` | x86-64 |
 
-Portable builds are not universal and are not cross-compiled. Choose the archive that exactly matches the operating system and processor.
+Portable files are built natively and are not universal. Using the wrong file stops with a target-mismatch error before extraction.
 
 ## Download and verify
 
-Download both the archive and its adjacent `.sha256` file from the GitHub release.
+Download the portable file and its adjacent `.sha256` file from the release.
 
 Linux:
 
 ```bash
-sha256sum --check sbk-charts-<version>-linux-amd64.tar.gz.sha256
+sha256sum --check sbk-charts-<version>-linux-amd64.run.sha256
 ```
 
 macOS:
 
 ```bash
-shasum -a 256 sbk-charts-<version>-macos-arm64.tar.gz
-cat sbk-charts-<version>-macos-arm64.tar.gz.sha256
+shasum -a 256 sbk-charts-<version>-macos-arm64.run
+cat sbk-charts-<version>-macos-arm64.run.sha256
 ```
 
-Compare the two hash values on macOS.
+Compare the two macOS hash values.
 
-Windows PowerShell:
+Windows:
 
 ```powershell
-Get-FileHash .\sbk-charts-<version>-windows-amd64.zip -Algorithm SHA256
-Get-Content .\sbk-charts-<version>-windows-amd64.zip.sha256
+Get-FileHash .\sbk-charts-<version>-windows-amd64.exe -Algorithm SHA256
+Get-Content .\sbk-charts-<version>-windows-amd64.exe.sha256
 ```
 
-Checksums detect accidental or malicious file changes after publication. The project archives are not code-signed or notarized, so apply any additional organizational trust policy you require.
+The external checksum covers the complete release file. The launcher also verifies the embedded payload before extracting it. The payload contains `manifest.json`, which records the SHA-256 of every bundled file except `manifest.json` itself.
 
-## Extract and run
-
-Extract the complete top-level directory. Do not move only the executable; PyInstaller's `_internal` directory must stay beside it.
+## Run
 
 Linux or macOS:
 
 ```bash
-tar -xzf sbk-charts-<version>-<target>.tar.gz
-cd sbk-charts-<version>-<target>
-./sbk-charts -i /path/to/results.csv -o report.xlsx
+chmod +x sbk-charts-<version>-<target>.run
+./sbk-charts-<version>-<target>.run -i /path/to/results.csv -o report.xlsx
 ```
 
 Windows PowerShell:
 
 ```powershell
-Expand-Archive .\sbk-charts-<version>-windows-amd64.zip
-Set-Location .\sbk-charts-<version>-windows-amd64\sbk-charts-<version>-windows-amd64
-.\sbk-charts.exe -i C:\path\to\results.csv -o report.xlsx
+.\sbk-charts-<version>-windows-amd64.exe -i C:\path\to\results.csv -o report.xlsx
 ```
 
-All normal application arguments are supported, including AI backends. Cloud backends still need credentials and network access. Local-service backends still need their server and model. The in-process PyTorch backend still needs enough memory for the selected bundled/code-supported model behavior.
+Normal application arguments are forwarded unchanged. Cloud backends still require credentials and service access. Local backends still require their service or model resources.
 
-## Bundle contents
-
-A bundle contains:
-
-- the `sbk-charts` executable, with `.exe` on Windows;
-- PyInstaller's `_internal` runtime directory;
-- license, README, documentation, and policy files declared in `sbk-charts.ini`;
-- `manifest.json` with application, version, target, archive format, hash algorithm, and hashes of bundled files.
-
-The external `.sha256` covers the final archive. The internal manifest covers individual files inside the extracted bundle.
-
-## Build flow
+## First execution and saved reuse
 
 ```mermaid
 flowchart TD
-    A[Read sbk-charts.ini] --> B[Identify native target]
-    B --> C[Run PyInstaller in onedir mode]
-    C --> D[Smoke-test executable with help]
-    D --> E[Copy declared docs and metadata]
-    E --> F[Hash bundle files and write manifest]
-    F --> G[Create tar.gz or zip]
-    G --> H[Write archive SHA-256 file]
+    A[Start one portable file] --> B[Validate OS and processor]
+    B --> C{Saved state and payload match?}
+    C -- Yes --> H[Run saved bundled application]
+    C -- No --> D[Acquire per-target lock]
+    D --> E[Read and SHA-256 verify embedded payload]
+    E --> F[Extract into a temporary directory]
+    F --> G[Atomically publish payload and state]
+    G --> H
+    H --> I[Print OS Python environment and reuse details]
+    I --> J[Run sbk-charts Python entry point]
 ```
 
-`scripts/build_portable.py` fails immediately for an unsupported operating system, processor, target, archive type, or missing declared bundle path. The help smoke test must pass before an archive is created.
+The default saved locations are:
+
+| OS | Default root |
+|---|---|
+| Linux | `${XDG_CACHE_HOME:-$HOME/.cache}/sbk-charts/portable` |
+| macOS | `$HOME/Library/Caches/sbk-charts/portable` |
+| Windows | `%LOCALAPPDATA%\sbk-charts\portable` |
+
+Set `SBK_CHARTS_PORTABLE_ROOT` before execution to use a different location. This is useful for read-only homes, shared deployment systems, tests, and cleanup.
+
+The saved path includes application version, target, and payload checksum. Installing a new release therefore cannot overwrite an older release. A state file records schema, target, version, payload checksum, and installation path. Missing, mismatched, or damaged state triggers safe re-extraction.
+
+Concurrent first executions use one per-target lock. The process that acquires it extracts and publishes the application. Waiting processes revalidate and reuse the published result. Failed temporary extraction directories are removed, and the application is never started while the lock is held.
+
+Example first execution output:
+
+```text
+sbk-charts: Operating system: Linux-...
+sbk-charts: Python: 3.12.x (.../sbk-charts)
+sbk-charts: Environment: portable (.../sbk-charts/portable/...)
+sbk-charts: Dependency profile: all-ai
+sbk-charts: Selection source: self-extract-created
+sbk-charts: Saved environment reused: no
+sbk-charts: Environment created this run: yes
+Sbk Charts Version : <version>
+```
+
+The second execution reports `self-extract-cache`, reuse `yes`, and creation `no`. Normal, help, and argument-error paths print one banner and one application-version line before parsing finishes. The dedicated `-version` and `--version` paths intentionally print only the version line and exit successfully; no input file or banner is required.
+
+## Internal file format
+
+Unix artifacts contain a POSIX shell launcher followed by a binary TAR.GZ payload. The launcher knows the exact payload line and expected SHA-256. Windows artifacts are small native .NET Framework launchers followed by a ZIP payload and its length footer. The expected payload SHA-256 is compiled into the launcher.
+
+The Windows launcher source is [`scripts/windows_self_extractor.cs`](../scripts/windows_self_extractor.cs). The native build locates the Windows .NET Framework C# compiler, substitutes policy-derived constants into this reviewed template, compiles it, and appends the verified payload. The launcher forwards arguments with Windows command-line escaping and starts the bundled application only after releasing its named extraction mutex.
+
+The extracted payload is a PyInstaller one-directory application. Keeping that representation inside the self-extractor avoids PyInstaller extracting its runtime into a new temporary directory on every execution.
+
+```mermaid
+flowchart LR
+    P[sbk-charts.ini] --> B[Native builder]
+    S[Python source and dependencies] --> F[PyInstaller onedir payload]
+    B --> F
+    F --> M[Add docs and manifest]
+    M --> C[Compress native payload]
+    C --> X[Prepend Unix or Windows extractor]
+    X --> H[Write whole-file SHA-256]
+```
 
 ## Build locally
 
-Use a native machine matching the desired target. Start in an environment where the application dependencies can be installed.
+Use a machine matching the target:
 
 ```bash
 python -m pip install --upgrade pip
@@ -117,41 +150,32 @@ python -m unittest discover -s tests -v
 python scripts/build_portable.py
 ```
 
-Output is written to `dist/portable/` by default. A different directory can be selected:
+Output is written to `dist/portable/`. Select another directory with `--output`.
 
-```bash
-python scripts/build_portable.py --output /tmp/sbk-portable
-```
+Linux release automation installs CPU-only Torch before building. A development environment containing CUDA Torch can create a much larger local artifact.
 
-For the Linux release shape, the workflow installs the official CPU-only PyTorch wheel before installing sbk-charts. This keeps CUDA runtimes out of the Linux archive.
+## Release verification
 
-## Release automation
+The native CI matrix performs these checks on Linux, macOS, and Windows:
 
-`.github/workflows/portable.yml` reads its target/runner matrix from `scripts/project_policy.py`. Each matrix job runs on its native GitHub runner, installs pinned build tools, runs portable tests, builds one archive, and uploads the archive plus checksum. On a published GitHub release, the files are attached to that release.
+1. build the frozen payload and run its help command;
+2. build the single self-extracting file and checksum;
+3. execute it from an empty runtime root;
+4. verify first-run creation provenance;
+5. execute it again and verify saved reuse provenance;
+6. create an XLSX workbook from the sample CSV;
+7. upload exactly the portable application and checksum.
 
-Action versions are pinned to full commit SHAs. Checkout credentials are not persisted.
+The workflow runs for pull requests, pushes to `main`, manual requests, and releases. Release events attach the files to the GitHub release.
 
-## Validate a built archive
+## Security and operational limits
 
-At minimum:
+- The application verifies checksums but is not currently code-signed or notarized.
+- Unix execution requires a POSIX shell, `tar`, and either `sha256sum` or `shasum`.
+- Windows execution requires the built-in .NET Framework 4 runtime; it does not require PowerShell for the portable application.
+- Input and output paths remain external and require normal filesystem permissions.
+- Provider credentials are never embedded.
+- Model downloads and separately hosted local AI services are not embedded.
+- Old versioned payloads remain available until the user removes their version directory.
 
-1. verify the external archive checksum;
-2. list archive entries and confirm one top-level directory;
-3. extract everything into a clean directory;
-4. run `sbk-charts --help` from the extracted bundle;
-5. create a workbook from the sample CSV;
-6. open the workbook and confirm Summary and charts exist;
-7. compare each file hash with `manifest.json` if performing release validation;
-8. test on a clean machine or container matching the target when possible.
-
-## Limitations and operations
-
-- A portable archive works only on its declared native target.
-- macOS Gatekeeper or Windows security controls may warn because archives are not signed.
-- Input CSV and output XLSX paths remain external and writable by the user.
-- Provider credentials are not bundled.
-- Model downloads and local AI server setup are not eliminated by bundling the application.
-- Upgrade by extracting a new version into a new directory. Do not overlay `_internal` directories from different versions.
-- Keep the external checksum with any internally mirrored archive.
-
-Target names, runners, archive formats, bundle paths, and hashing rules are owned by [`sbk-charts.ini`](../sbk-charts.ini). See [POLICY.md](POLICY.md) before changing them.
+Target names, payload formats, self-extracting extensions, runtime-state policy, runners, and bundled paths are owned by [`sbk-charts.ini`](../sbk-charts.ini). Read [POLICY.md](POLICY.md) before changing them.

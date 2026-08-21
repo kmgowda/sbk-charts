@@ -105,7 +105,7 @@ The stage order is an architectural invariant. Chart code expects R/T sheets to 
 | `src/rag/` | Retrieval for chat and prompt grounding | `SbkSimpleRAGPipeline`, optional `SbkRAGPipeline` |
 | `src/custom_ai/` | Provider and local-model adapters | Seven `SbkGenAI` subclasses |
 | `src/version/` | Canonical release version | `__sbk_version__` |
-| `scripts/` | Policy reader, portable entry point, portable builder | `project_policy.py`, `build_portable.py` |
+| `scripts/` | Policy reader, portable entry point, portable builder, Windows extractor template | `project_policy.py`, `build_portable.py`, `windows_self_extractor.cs` |
 | `tests/` | Runtime-policy and portable-build unit tests | `test_portable.py` |
 | `.github/workflows/` | Linux lint/tests, Windows launcher smoke tests, native portable builds | GitHub Actions jobs |
 | `.devin/skills/` | Task instructions usable by Devin and other capable agents | Onboarding, build, chart, plugin, troubleshooting skills |
@@ -182,7 +182,7 @@ flowchart LR
 
 `SbkMultiCharts` extends that behavior across every R/T pair. It creates the Summary and Durations sheets, comparisons across runs, totals, and the final workbook order.
 
-Exact SBK column names live in `src/charts/constants.py`. Sheet prefixes and the `Type == Total` value live in `src/sheets/constants.py`. Chart code should never repeat an SBK header string inline.
+Exact SBK column names and ordered percentile chart groups live in `src/charts/constants.py`. Stable sheet names, sheet prefixes, and the `Type == Total` value live in `src/sheets/constants.py`. Chart code should never repeat an SBK header or workbook sheet name inline.
 
 ### 7.2 Workbook order
 
@@ -254,7 +254,7 @@ Metadata columns such as ID, Header, Type, Storage, Action, and Latency Time Uni
 
 ### 10.1 Lazy registry
 
-`src/ai/registry.py` declares the stable command name, implementation module, class, and CLI argument builder for each backend. It does not import optional provider modules. `load_backend_class()` imports only the command selected by the user:
+`src/ai/registry.py` declares the stable command name, implementation module, class, and CLI argument builder for each backend. Dependency-free defaults shared by the registry and adapters live in `src/ai/defaults.py`. The registry does not import optional provider modules. `load_backend_class()` imports only the command selected by the user:
 
 ```text
 gemini      -> Gemini
@@ -398,13 +398,13 @@ Managed source targets cover glibc Linux x86-64/ARM64, macOS Intel/Apple silicon
 
 `scripts/project_policy.py` loads these values into frozen dataclasses, validates cross-field consistency, reads requirements safely, reads the version with Python's AST, emits the CI matrix, and provides runtime-state helpers.
 
-Domain settings remain in their domain modules. CSV header strings belong in chart constants, visual sizes and colors belong in chart code, AI defaults belong in their plugin, and retrieval scores belong in the RAG algorithm. See [POLICY.md](POLICY.md) for the ownership rules.
+Domain settings remain in their owning modules. CSV headers and percentile groups belong in chart constants, workbook sheet identities belong in sheet constants, visual sizes and colors belong in chart or AI layout code, shared backend defaults belong in `src/ai/defaults.py`, and retrieval scores belong in the RAG algorithm. See [POLICY.md](POLICY.md) for the ownership rules.
 
 ## 15. Packaging and portable releases
 
 `setup.py` consumes project policy rather than repeating package name, entry point, requirements path, version path, or package-data values. A wheel installs a normal `sbk-charts` console script.
 
-Portable builds use PyInstaller in one-directory mode:
+Portable builds use PyInstaller in one-directory mode as an internal payload, then wrap that payload in one persistent self-extracting application:
 
 ```mermaid
 flowchart TD
@@ -414,17 +414,20 @@ flowchart TD
     D --> E[Run executable with help]
     E --> F[Copy license README policy and docs]
     F --> G[Create manifest with file hashes]
-    G --> H[Create tar.gz or zip]
-    H --> I[Write external SHA-256 checksum]
+    G --> H[Compress native payload]
+    H --> I[Prepend native self-extracting launcher]
+    I --> J[Write external SHA-256 checksum]
 ```
 
-Supported targets are currently Linux x86-64, macOS Apple silicon, and Windows x86-64. Each archive is built on its native GitHub runner. Windows ZIP member names are normalized to `/` separators. The Linux workflow installs the CPU-only PyTorch wheel to avoid bundling unused CUDA runtimes.
+Supported targets are currently Linux x86-64, macOS Apple silicon, and Windows x86-64. Each application is built on its native GitHub runner. Unix releases are executable `.run` files containing TAR.GZ payloads. Windows releases are native `.exe` extractors containing ZIP payloads. The Linux workflow installs the CPU-only PyTorch wheel to avoid bundling unused CUDA runtimes.
 
-Portable archives are checksummed but not code-signed or notarized.
+On first execution, the launcher verifies the embedded payload and atomically publishes it under the user's OS cache. State is keyed by schema, version, target, and payload checksum. Later executions validate and reuse that saved payload. Concurrent executions share a short-lived extraction lock, and the Python application is always started after lock release.
+
+Portable applications are checksummed but not code-signed or notarized.
 
 ## 16. Tests and CI
 
-`tests/test_portable.py` covers policy parsing and validation, safe requirements parsing, AST version lookup, portable argument forwarding, archive creation, Windows ZIP names, environment validation, structured runtime details, backward-compatible state schemas, remembered state including profile-only legacy state, and launcher/workflow contracts.
+`tests/test_portable.py` covers policy parsing and validation, safe requirements parsing, AST version lookup, portable argument forwarding and provenance, self-extractor generation, real Unix first-run extraction and saved reuse, Windows payload generation, environment validation, backward-compatible state schemas, remembered state including profile-only legacy state, and launcher/workflow contracts.
 
 The main CI workflow:
 
@@ -443,7 +446,9 @@ The portable workflow:
 - reads its native build matrix from policy;
 - installs application and portable build requirements;
 - reruns tests;
-- builds and smoke-tests an archive;
+- builds and smoke-tests one self-extracting application;
+- executes it twice to prove first-run extraction and saved reuse;
+- creates a sample workbook through the saved bundled runtime;
 - uploads build artifacts and, for release events, attaches them to the release.
 
 The Excel pipeline still requires an end-to-end sample run because unit tests do not verify chart rendering or all workbook behavior.
@@ -507,5 +512,5 @@ Detailed procedures and acceptance checks are in [AGENT_RECIPES.md](AGENT_RECIPE
 | Backend | An adapter that sends shared prompts to a cloud API, local server, or local model. |
 | RAG | Retrieval-augmented generation: adding relevant benchmark facts to an AI prompt. |
 | Source launcher | A shell script that finds or creates Python and installs the checkout. |
-| Portable archive | A native release bundle containing the application, Python, and dependencies. |
+| Portable application | One native self-extracting release file containing the application, Python, and dependencies. |
 | Policy | Shared runtime and artifact metadata stored in `sbk-charts.ini`. |

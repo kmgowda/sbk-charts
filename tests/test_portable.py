@@ -7,10 +7,14 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 ##
 
+import argparse
 import hashlib
+import io
 import json
+import os
 import re
 import subprocess
+import struct
 import sys
 import tarfile
 import tempfile
@@ -32,6 +36,14 @@ from scripts.project_policy import (
     load_requirements,
     remember_environment,
     runtime_details,
+)
+from src.ai.defaults import (
+    ANTHROPIC_DEFAULTS,
+    GEMINI_DEFAULTS,
+    HUGGING_FACE_DEFAULTS,
+    LM_STUDIO_DEFAULTS,
+    OLLAMA_DEFAULTS,
+    PYTORCH_DEFAULTS,
 )
 from src.ai.registry import BACKENDS
 
@@ -68,6 +80,28 @@ class PortableReleaseTest(unittest.TestCase):
             }
         )
 
+    @staticmethod
+    def replace_policy_value(
+        source: str,
+        section: str,
+        key: str,
+        value: str,
+    ) -> str:
+        """Replace exactly one INI value within its named section."""
+        pattern = (
+            rf"(?ms)(^\[{re.escape(section)}\]\s*$.*?"
+            rf"^\s*{re.escape(key)}\s*=\s*)[^\r\n]*"
+        )
+        updated, replacements = re.subn(
+            pattern,
+            lambda match: f"{match.group(1)}{value}",
+            source,
+            count=1,
+        )
+        if replacements != 1:
+            raise AssertionError(f"Policy value not found: [{section}] {key}")
+        return updated
+
     def test_source_files_include_the_license_header(self):
         root = build_portable.ROOT
         python_files = sorted(
@@ -86,6 +120,7 @@ class PortableReleaseTest(unittest.TestCase):
             root / "pyproject.toml",
             root / "MANIFEST.in",
             root / "pybuild.gradle",
+            root / "scripts" / "windows_self_extractor.cs",
             root / ".github" / "workflows" / "python-app.yml",
             root / ".github" / "workflows" / "portable.yml",
         )
@@ -96,6 +131,17 @@ class PortableReleaseTest(unittest.TestCase):
                 source = source_file.read_text(encoding="utf-8")
                 self.assertIn("Copyright (c) KMG. All Rights Reserved.", source)
                 self.assertIn("http://www.apache.org/licenses/LICENSE-2.0", source)
+
+    def test_console_output_sources_are_windows_encoding_safe(self):
+        """Keep frozen-app progress output usable on legacy Windows consoles."""
+        console_sources = (
+            build_portable.ROOT / "src" / "ai" / "sbk_ai.py",
+            build_portable.ROOT / "src" / "custom_ai" / "pytorch_llm" / "pytorch_llm.py",
+            build_portable.ROOT / "src" / "rag" / "sbk_rag.py",
+        )
+        for source_file in console_sources:
+            with self.subTest(source_file=source_file):
+                source_file.read_text(encoding="utf-8").encode("ascii")
 
     def test_documentation_links_fences_and_backend_flags_are_current(self):
         root = build_portable.ROOT
@@ -137,8 +183,74 @@ class PortableReleaseTest(unittest.TestCase):
                 with self.subTest(backend=backend, option=option):
                     self.assertIn(f"`{option}`", guide)
 
+    def test_backend_cli_defaults_come_from_the_shared_defaults_module(self):
+        """Keep CLI defaults single-sourced and argument registration unique."""
+        expected = {
+            "anthropic": {
+                "anthropic_model": ANTHROPIC_DEFAULTS.model,
+                "anthropic_max_tokens": ANTHROPIC_DEFAULTS.max_tokens,
+                "anthropic_temperature": ANTHROPIC_DEFAULTS.temperature,
+            },
+            "gemini": {
+                "gemini_model": GEMINI_DEFAULTS.model,
+                "gemini_max_tokens": GEMINI_DEFAULTS.max_tokens,
+                "gemini_temperature": GEMINI_DEFAULTS.temperature,
+            },
+            "huggingface": {"model_id": HUGGING_FACE_DEFAULTS.model},
+            "lmstudio": {
+                "url": LM_STUDIO_DEFAULTS.url,
+                "lm_model": LM_STUDIO_DEFAULTS.model,
+                "lm_temperature": LM_STUDIO_DEFAULTS.temperature,
+                "lm_max_tokens": LM_STUDIO_DEFAULTS.max_tokens,
+            },
+            "noai": {},
+            "ollama": {
+                "ollama_url": OLLAMA_DEFAULTS.url,
+                "ollama_model": OLLAMA_DEFAULTS.model,
+                "ollama_temperature": OLLAMA_DEFAULTS.temperature,
+                "ollama_timeout": OLLAMA_DEFAULTS.request_timeout_seconds,
+            },
+            "pytorchllm": {
+                "pt_model": PYTORCH_DEFAULTS.model,
+                "pt_train": PYTORCH_DEFAULTS.train,
+                "pt_device": PYTORCH_DEFAULTS.device,
+                "pt_max_length": PYTORCH_DEFAULTS.max_length,
+                "pt_temperature": PYTORCH_DEFAULTS.temperature,
+                "pt_top_p": PYTORCH_DEFAULTS.top_p,
+            },
+        }
+
+        for backend, descriptor in BACKENDS.items():
+            parser = argparse.ArgumentParser(add_help=False)
+            descriptor.add_arguments(parser)
+            with self.subTest(backend=backend):
+                self.assertEqual(expected[backend], vars(parser.parse_args([])))
+
+        adapter_default_names = {
+            "anthropic": "ANTHROPIC_DEFAULTS",
+            "gemini": "GEMINI_DEFAULTS",
+            "huggingface": "HUGGING_FACE_DEFAULTS",
+            "lmstudio": "LM_STUDIO_DEFAULTS",
+            "noai": None,
+            "ollama": "OLLAMA_DEFAULTS",
+            "pytorchllm": "PYTORCH_DEFAULTS",
+        }
+        for backend, descriptor in BACKENDS.items():
+            implementation = build_portable.ROOT / Path(
+                *descriptor.module.split(".")
+            ).with_suffix(".py")
+            source = implementation.read_text(encoding="utf-8")
+            with self.subTest(implementation=implementation):
+                self.assertNotIn("def add_args(", source)
+                default_name = adapter_default_names[backend]
+                if default_name:
+                    self.assertIn(default_name, source)
+
     def fake_run(self, command: list[str], **_kwargs: object) -> subprocess.CompletedProcess:
         self.commands.append(command)
+        if "/target:exe" in command:
+            output = Path(next(item.removeprefix("/out:") for item in command if item.startswith("/out:")))
+            output.write_bytes(b"MZ-native-extractor")
         if "PyInstaller" in command:
             application_name = self.policy.application.name
             dist = Path(command[command.index("--distpath") + 1]) / application_name
@@ -149,7 +261,16 @@ class PortableReleaseTest(unittest.TestCase):
                 else application_name
             )
             executable = dist / executable_name
-            executable.write_bytes(b"portable executable")
+            if executable_name.endswith(".exe"):
+                executable.write_bytes(b"portable executable")
+            else:
+                executable.write_text(
+                    "#!/bin/sh\n"
+                    "printf 'Selection source: %s\\n' \"$SBK_CHARTS_PORTABLE_SELECTION_SOURCE\"\n"
+                    "printf 'Saved environment reused: %s\\n' \"$SBK_CHARTS_PORTABLE_REUSED\"\n"
+                    "printf 'Environment created this run: %s\\n' \"$SBK_CHARTS_PORTABLE_CREATED\"\n",
+                    encoding="utf-8",
+                )
             executable.chmod(0o755)
             (dist / "_internal").mkdir()
             (dist / "_internal" / "runtime.dat").write_bytes(b"runtime")
@@ -172,7 +293,7 @@ class PortableReleaseTest(unittest.TestCase):
         )
 
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("Build a self-contained", result.stdout)
+        self.assertIn("Build one self-extracting", result.stdout)
 
     def test_portable_entry_forwards_arguments_to_the_application(self):
         captured: list[str] = []
@@ -192,7 +313,52 @@ class PortableReleaseTest(unittest.TestCase):
             captured,
         )
 
-    def test_builder_creates_manifested_checksummed_archive(self):
+    def test_missing_input_reports_version_before_parser_error(self):
+        """Show the application version even when required arguments are absent."""
+        result = subprocess.run(
+            [sys.executable, "-m", self.policy.application.module],
+            cwd=build_portable.ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            check=False,
+        )
+        version_line = f"Sbk Charts Version : {application_version(self.policy)}"
+        parser_error = "the following arguments are required: -i/--ifiles"
+        self.assertEqual(2, result.returncode, result.stdout)
+        self.assertIn(version_line, result.stdout)
+        self.assertEqual(1, result.stdout.count(version_line))
+        self.assertIn(parser_error, result.stdout)
+        self.assertLess(result.stdout.index("_____"), result.stdout.index(version_line))
+        self.assertLess(result.stdout.index(version_line), result.stdout.index(parser_error))
+
+    def test_version_options_print_one_version_and_exit_successfully(self):
+        """Support both the requested short spelling and conventional alias."""
+        version_line = f"Sbk Charts Version : {application_version(self.policy)}"
+        for option in ("-version", "--version"):
+            with self.subTest(option=option):
+                result = subprocess.run(
+                    [sys.executable, "-m", self.policy.application.module, option],
+                    cwd=build_portable.ROOT,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual(version_line, result.stdout.strip())
+                self.assertEqual("", result.stderr)
+
+    @staticmethod
+    def unix_payload(artifact: Path) -> bytes:
+        """Read the binary payload appended after the generated shell launcher."""
+        contents = artifact.read_bytes()
+        match = re.search(rb"^payload_line=(\d+)$", contents, flags=re.MULTILINE)
+        if not match:
+            raise AssertionError("payload_line declaration is missing")
+        payload_line = int(match.group(1))
+        return b"".join(contents.splitlines(keepends=True)[payload_line - 1:])
+
+    def test_builder_creates_manifested_checksummed_self_extracting_application(self):
         with (
             tempfile.TemporaryDirectory() as temporary,
             patch.object(build_portable, "application_version", return_value="1.2.3.4"),
@@ -201,14 +367,16 @@ class PortableReleaseTest(unittest.TestCase):
         ):
             archive = build_portable.build_bundle(Path(temporary))
             bundle_name = f"{self.policy.application.name}-1.2.3.4-linux-amd64"
-            self.assertEqual(f"{bundle_name}.tar.gz", archive.name)
+            self.assertEqual(f"{bundle_name}.run", archive.name)
+            if os.name != "nt":
+                self.assertTrue(archive.stat().st_mode & 0o100)
             checksum_path = archive.with_suffix(archive.suffix + self.policy.portable.checksum_suffix)
             expected = hashlib.sha256(archive.read_bytes()).hexdigest()
             self.assertEqual(f"{expected}  {archive.name}\n", checksum_path.read_text(encoding="utf-8"))
-            with tarfile.open(archive, "r:gz") as source:
+            with tarfile.open(fileobj=io.BytesIO(self.unix_payload(archive)), mode="r:gz") as source:
                 archive_members = set(source.getnames())
                 manifest = json.load(
-                    source.extractfile(f"{bundle_name}/{self.policy.portable.manifest_name}")
+                    source.extractfile(self.policy.portable.manifest_name)
                 )
             self.assertEqual(self.policy.application.name, manifest["application"])
             self.assertEqual("tar.gz", manifest["archive_format"])
@@ -221,24 +389,198 @@ class PortableReleaseTest(unittest.TestCase):
             self.assertIn("docs/DEVELOPMENT.md", manifest["files"])
             for guide in BACKEND_GUIDES:
                 self.assertIn(guide, manifest["files"])
-                self.assertIn(f"{bundle_name}/{guide}", archive_members)
+                self.assertIn(guide, archive_members)
             self.assertIn("--help", self.commands[-1])
 
-    def test_windows_target_creates_zip_archive(self):
+    def test_unix_self_extractor_streams_payload_from_disk(self):
+        """Do not duplicate a potentially large compressed payload in memory."""
+        payload_contents = b"streamed-payload"
+
+        def create_test_payload(
+            _bundle: Path,
+            _target: str,
+            destination: Path,
+            _policy: object,
+        ) -> None:
+            destination.write_bytes(payload_contents)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / "bundle"
+            output = root / "output"
+            bundle.mkdir()
+            output.mkdir()
+            with (
+                patch.object(build_portable, "create_payload", side_effect=create_test_payload),
+                patch.object(
+                    Path,
+                    "read_bytes",
+                    side_effect=AssertionError("payload must be streamed"),
+                ),
+            ):
+                artifact = build_portable.create_self_extracting_application(
+                    bundle,
+                    output,
+                    "1.2.3.4",
+                    "linux-amd64",
+                    self.policy,
+                )
+
+            with artifact.open("rb") as source:
+                source.seek(-len(payload_contents), os.SEEK_END)
+                self.assertEqual(payload_contents, source.read())
+
+    def test_windows_target_creates_one_native_application(self):
         with (
             tempfile.TemporaryDirectory() as temporary,
             patch.object(build_portable, "application_version", return_value="1.2.3.4"),
             patch.object(build_portable, "current_platform", return_value="windows-amd64"),
+            patch.object(build_portable, "windows_csharp_compiler", return_value=Path("csc")),
             patch.object(build_portable.subprocess, "run", side_effect=self.fake_run),
         ):
             archive = build_portable.build_bundle(Path(temporary))
             bundle_name = f"{self.policy.application.name}-1.2.3.4-windows-amd64"
-            self.assertEqual(f"{bundle_name}.zip", archive.name)
-            with zipfile.ZipFile(archive) as source:
-                self.assertIn(
-                    f"{bundle_name}/{self.policy.portable.manifest_name}",
-                    source.namelist(),
+            self.assertEqual(f"{bundle_name}.exe", archive.name)
+            contents = archive.read_bytes()
+            payload_length = struct.unpack("<Q", contents[-8:])[0]
+            payload = contents[-8 - payload_length:-8]
+            with zipfile.ZipFile(io.BytesIO(payload)) as source:
+                self.assertIn(self.policy.portable.manifest_name, source.namelist())
+            self.assertTrue(contents.startswith(b"MZ-native-extractor"))
+            self.assertIn("/target:exe", self.commands[-1])
+
+    def test_windows_native_extractor_template_is_complete(self):
+        source = build_portable.windows_launcher_source(
+            self.policy, "1.2.3.4", "windows-amd64", "a" * 64
+        )
+        self.assertNotIn("@@", source)
+        self.assertIn('private const string Version = "1.2.3.4";', source)
+        self.assertIn('private const string PayloadSha256 = "' + "a" * 64 + '";', source)
+        self.assertIn("Mutex", source)
+        self.assertIn("catch (IOException)", source)
+        self.assertIn("catch (UnauthorizedAccessException)", source)
+        self.assertIn("Embedded payload failed SHA-256 verification", source)
+        self.assertIn("self-extract-created", source)
+
+    @unittest.skipIf(os.name == "nt", "Unix self-extractor test")
+    def test_unix_self_extractor_creates_then_reuses_saved_application(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = build_portable.current_platform(self.policy)
+            with (
+                patch.object(build_portable, "application_version", return_value="1.2.3.4"),
+                patch.object(build_portable, "current_platform", return_value=target),
+                patch.object(build_portable.subprocess, "run", side_effect=self.fake_run),
+            ):
+                artifact = build_portable.build_bundle(root / "output")
+            environment = {**os.environ, "SBK_CHARTS_PORTABLE_ROOT": str(root / "runtime")}
+            first = subprocess.run(
+                [str(artifact), "--help"], capture_output=True, text=True,
+                check=False, env=environment,
+            )
+            second = subprocess.run(
+                [str(artifact), "--help"], capture_output=True, text=True,
+                check=False, env=environment,
+            )
+            self.assertEqual(0, first.returncode, first.stderr)
+            self.assertIn("Selection source: self-extract-created", first.stdout)
+            self.assertIn("Environment created this run: yes", first.stdout)
+            self.assertEqual(0, second.returncode, second.stderr)
+            self.assertIn("Selection source: self-extract-cache", second.stdout)
+            self.assertIn("Saved environment reused: yes", second.stdout)
+            self.assertIn("Environment created this run: no", second.stdout)
+            self.assertTrue((root / "runtime" / f"state-{target}").is_file())
+            self.assertFalse((root / "runtime" / f"bootstrap-{target}.lock").exists())
+
+    @unittest.skipIf(os.name == "nt", "Unix self-extractor test")
+    def test_unix_self_extractor_serializes_concurrent_first_execution(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = build_portable.current_platform(self.policy)
+            with (
+                patch.object(build_portable, "application_version", return_value="1.2.3.4"),
+                patch.object(build_portable, "current_platform", return_value=target),
+                patch.object(build_portable.subprocess, "run", side_effect=self.fake_run),
+            ):
+                artifact = build_portable.build_bundle(root / "output")
+            environment = {**os.environ, "SBK_CHARTS_PORTABLE_ROOT": str(root / "runtime")}
+            processes = [
+                subprocess.Popen(
+                    [str(artifact), "--help"], stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE, text=True, env=environment,
                 )
+                for _ in range(2)
+            ]
+            results = [process.communicate(timeout=30) for process in processes]
+            self.assertEqual([0, 0], [process.returncode for process in processes])
+            output = "\n".join(stdout for stdout, _stderr in results)
+            self.assertEqual(1, output.count("Environment created this run: yes"))
+            self.assertEqual(1, output.count("Saved environment reused: yes"))
+            self.assertFalse((root / "runtime" / f"bootstrap-{target}.lock").exists())
+
+    @unittest.skipIf(os.name == "nt", "Unix self-extractor test")
+    def test_unix_self_extractor_recovers_a_lock_without_owner_metadata(self):
+        """Recover after interruption leaves a lock directory without a PID."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = build_portable.current_platform(self.policy)
+            with (
+                patch.object(build_portable, "application_version", return_value="1.2.3.4"),
+                patch.object(build_portable, "current_platform", return_value=target),
+                patch.object(build_portable.subprocess, "run", side_effect=self.fake_run),
+            ):
+                artifact = build_portable.build_bundle(root / "output")
+
+            runtime = root / "runtime"
+            stale_lock = runtime / f"bootstrap-{target}.lock"
+            stale_lock.mkdir(parents=True)
+            fake_bin = root / "fake-bin"
+            fake_bin.mkdir()
+            fake_sleep = fake_bin / "sleep"
+            fake_sleep.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            fake_sleep.chmod(0o755)
+            environment = {
+                **os.environ,
+                "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+                "SBK_CHARTS_PORTABLE_ROOT": str(runtime),
+            }
+            result = subprocess.run(
+                [str(artifact), "--help"],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=environment,
+                timeout=30,
+            )
+
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertIn("Selection source: self-extract-created", result.stdout)
+            self.assertFalse(stale_lock.exists())
+
+    @unittest.skipIf(os.name == "nt", "Unix self-extractor test")
+    def test_unix_self_extractor_rejects_a_corrupt_payload_and_cleans_up(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = build_portable.current_platform(self.policy)
+            with (
+                patch.object(build_portable, "application_version", return_value="1.2.3.4"),
+                patch.object(build_portable, "current_platform", return_value=target),
+                patch.object(build_portable.subprocess, "run", side_effect=self.fake_run),
+            ):
+                artifact = build_portable.build_bundle(root / "output")
+            contents = bytearray(artifact.read_bytes())
+            contents[-1] ^= 1
+            artifact.write_bytes(contents)
+            artifact.chmod(0o755)
+            runtime = root / "runtime"
+            result = subprocess.run(
+                [str(artifact), "--help"], capture_output=True, text=True, check=False,
+                env={**os.environ, "SBK_CHARTS_PORTABLE_ROOT": str(runtime)},
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("failed SHA-256 verification", result.stderr)
+            self.assertFalse((runtime / f"bootstrap-{target}.lock").exists())
+            self.assertEqual([], list(runtime.glob(".install.*")))
 
     def test_windows_zip_member_names_use_posix_separators(self):
         member = build_portable.zip_member_name(
@@ -250,6 +592,7 @@ class PortableReleaseTest(unittest.TestCase):
 
     def test_central_policy_defines_runtime_and_artifact_metadata(self):
         self.assertEqual("3.10", self.policy.runtime.minimum_python)
+        self.assertEqual("core", self.policy.runtime.default_profile)
         self.assertEqual(".sbk-charts-runtime", self.policy.runtime.runtime_state_file)
         self.assertEqual(1, self.policy.runtime.runtime_state_schema)
         self.assertEqual("venv-sbk-charts", self.policy.runtime.virtual_environment_names[0])
@@ -259,13 +602,24 @@ class PortableReleaseTest(unittest.TestCase):
         )
         self.assertEqual(set(self.policy.portable.targets), set(self.policy.portable.archive_formats))
         self.assertEqual(set(self.policy.portable.targets), set(self.policy.portable.runners))
+        self.assertEqual(
+            {"linux-amd64": "run", "macos-arm64": "run", "windows-amd64": "exe"},
+            self.policy.portable.self_extracting_extensions,
+        )
+        self.assertEqual(1, self.policy.portable.runtime_state_schema)
+        self.assertEqual("sbk-charts/portable", self.policy.portable.runtime_directory)
+        self.assertEqual(300, self.policy.portable.bootstrap_lock_timeout_seconds)
         self.assertTrue(BACKEND_GUIDES.issubset(self.policy.portable.bundle_paths))
+        self.assertIn("scripts/windows_self_extractor.cs", self.policy.portable.bundle_paths)
         self.assertTrue(POLICY_FILE.is_file())
         self.assertEqual("3.12.10", self.policy.runtime.managed_python)
         self.assertEqual(".sbk-runtime", self.policy.runtime.managed_runtime_directory)
         self.assertEqual("requirements-lock", self.policy.runtime.lock_directory)
         self.assertEqual(300, self.policy.runtime.bootstrap_lock_timeout_seconds)
         self.assertEqual("uv", self.policy.bootstrap.manager)
+        self.assertEqual(15, self.policy.bootstrap.connect_timeout_seconds)
+        self.assertEqual(300, self.policy.bootstrap.download_timeout_seconds)
+        self.assertEqual(3, self.policy.bootstrap.download_retries)
         self.assertRegex(self.policy.bootstrap.manager_version, r"^\d+\.\d+\.\d+$")
         self.assertTrue(set(self.policy.portable.targets).issubset(self.policy.bootstrap.archives))
         self.assertTrue(all(re.fullmatch(r"[0-9a-f]{64}", value)
@@ -314,6 +668,7 @@ class PortableReleaseTest(unittest.TestCase):
                 r"bootstrap_lock_timeout_seconds = \d+",
                 "bootstrap_lock_timeout_seconds = 0",
                 original,
+                count=1,
             )
             self.assertEqual(1, replaced, "bootstrap lock timeout entry not found")
             policy_file.write_text(source, encoding="utf-8")
@@ -328,11 +683,70 @@ class PortableReleaseTest(unittest.TestCase):
                 r"runtime_state_schema = \d+",
                 "runtime_state_schema = 0",
                 original,
+                count=1,
             )
             self.assertEqual(1, replaced, "runtime state schema entry not found")
             policy_file.write_text(source, encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "Runtime state schema"):
                 load_policy(policy_file)
+
+    def test_policy_rejects_invalid_portable_and_download_values(self):
+        """Exercise every portable-runtime and download-policy validation."""
+        cases = (
+            (
+                "portable",
+                "runtime_state_schema",
+                "0",
+                "Portable runtime state schema must be at least one",
+            ),
+            (
+                "portable",
+                "bootstrap_lock_timeout_seconds",
+                "0",
+                "Portable bootstrap lock timeout must be at least one second",
+            ),
+            (
+                "portable",
+                "runtime_directory",
+                str(Path(Path.cwd().anchor) / "absolute-runtime"),
+                "Portable runtime directory must be a non-empty relative path",
+            ),
+            (
+                "bootstrap",
+                "connect_timeout_seconds",
+                "0",
+                "Bootstrap download timeouts must be at least one second",
+            ),
+            (
+                "bootstrap",
+                "download_timeout_seconds",
+                "0",
+                "Bootstrap download timeouts must be at least one second",
+            ),
+            (
+                "bootstrap",
+                "download_retries",
+                "0",
+                "Bootstrap download retries must be at least one",
+            ),
+            (
+                "runtime",
+                "default_profile",
+                "",
+                "Default dependency profile must not be empty",
+            ),
+        )
+        original = POLICY_FILE.read_text(encoding="utf-8")
+        for section, key, value, message in cases:
+            with self.subTest(section=section, key=key):
+                with tempfile.TemporaryDirectory() as temporary:
+                    policy_file = Path(temporary) / "sbk-charts.ini"
+                    policy_file.write_text(
+                        self.replace_policy_value(original, section, key, value),
+                        encoding="utf-8",
+                    )
+                    with self.assertRaisesRegex(ValueError, re.escape(message)):
+                        load_policy(policy_file)
 
     def test_version_resolution_ignores_non_module_assignments_and_text(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -504,7 +918,7 @@ class PortableReleaseTest(unittest.TestCase):
         ):
             self.assertNotIn(optional_package, core_input)
 
-        for profile in ("core", *self.policy.ai_requirements):
+        for profile in (self.policy.runtime.default_profile, *self.policy.ai_requirements):
             lock = root / self.policy.runtime.lock_directory / f"{profile}.txt"
             self.assertTrue(lock.is_file(), profile)
             contents = lock.read_text(encoding="utf-8")
@@ -566,6 +980,10 @@ class PortableReleaseTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("policy_value runtime minimum_python", bash_launcher)
+        self.assertIn("policy_value runtime default_profile", bash_launcher)
+        self.assertIn('policy_value portable.platforms "$operating_system"', bash_launcher)
+        self.assertIn('policy_value portable.architectures "$machine"', bash_launcher)
+        self.assertNotIn('printf \'%s\\n\' "linux-amd64"', bash_launcher)
         self.assertIn("scripts/project_policy.py\" --environment-ready", bash_launcher)
         self.assertIn('--runtime-details "$environment_kind" "$environment_prefix"', bash_launcher)
         self.assertIn('"$selection_source"', bash_launcher)
@@ -575,11 +993,15 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn("policy_value runtime runtime_state_file", bash_launcher)
         self.assertIn("policy_value runtime managed_python", bash_launcher)
         self.assertIn("policy_value runtime bootstrap_lock_timeout_seconds", bash_launcher)
+        self.assertIn("policy_value bootstrap download_timeout_seconds", bash_launcher)
+        self.assertIn('--max-time "$BOOTSTRAP_DOWNLOAD_TIMEOUT_SECONDS"', bash_launcher)
+        self.assertIn("skip_application_value=no", bash_launcher)
         self.assertIn("--require-hashes --requirement", bash_launcher)
         self.assertIn("venv --relocatable --managed-python", bash_launcher)
         self.assertIn("python_can_create_venv", bash_launcher)
         self.assertIn("cannot create a working venv; trying the next candidate", bash_launcher)
         self.assertIn('rm -rf "$temporary_dir"', bash_launcher)
+        self.assertNotIn("Preserved incomplete managed environment", bash_launcher)
         self.assertNotIn("\n    \\\n        \"$1\" -m pip check", bash_launcher)
         self.assertIn("Trying remembered managed environment", bash_launcher)
         self.assertIn('--remember-environment "$environment_kind" "$environment_prefix"', bash_launcher)
@@ -596,6 +1018,10 @@ class PortableReleaseTest(unittest.TestCase):
             bash_launcher.index('try_virtual_environment "${VIRTUAL_ENV:-}"'),
         )
         self.assertIn('"runtime.minimum_python"', powershell_launcher)
+        self.assertIn('"runtime.default_profile"', powershell_launcher)
+        self.assertIn('$Policy["portable.platforms.win32"]', powershell_launcher)
+        self.assertIn('$Policy["portable.architectures.$ManagedArchitectureKey"]', powershell_launcher)
+        self.assertNotIn('"windows-amd64"', powershell_launcher)
         self.assertIn("$PolicyReader --environment-ready", powershell_launcher)
         self.assertIn("--runtime-details $EnvironmentKind $EnvironmentPrefix", powershell_launcher)
         self.assertIn("$EnvironmentProfile $SelectionSource $SavedValue $CreatedValue", powershell_launcher)
@@ -605,6 +1031,11 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn('"runtime.runtime_state_file"', powershell_launcher)
         self.assertIn('"runtime.managed_python"', powershell_launcher)
         self.assertIn('"runtime.bootstrap_lock_timeout_seconds"', powershell_launcher)
+        self.assertIn('"bootstrap.download_timeout_seconds"', powershell_launcher)
+        self.assertIn("-TimeoutSec $BootstrapDownloadTimeoutSeconds", powershell_launcher)
+        self.assertIn("function Get-PositivePolicyInteger", powershell_launcher)
+        self.assertNotIn("$BootstrapConnectTimeoutSeconds", powershell_launcher)
+        self.assertIn("$SkipApplicationValue = $false", powershell_launcher)
         self.assertIn("--require-hashes --requirement", powershell_launcher)
         self.assertIn("venv --relocatable --managed-python", powershell_launcher)
         self.assertIn("Test-PythonLauncherVenv", powershell_launcher)
@@ -616,6 +1047,10 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn(
             "if ($TemporaryDirectory -and (Test-Path -LiteralPath $TemporaryDirectory))",
             powershell_launcher,
+        )
+        self.assertLess(
+            powershell_launcher.index("Remove-Item -LiteralPath $LockPath", powershell_launcher.index("function Start-ManagedEnvironment")),
+            powershell_launcher.index("Use-EnvironmentPrefix -EnvironmentPrefix $EnvironmentPrefix", powershell_launcher.index("function Start-ManagedEnvironment")),
         )
         self.assertIn("Trying remembered managed environment", powershell_launcher)
         self.assertIn("--remember-environment $EnvironmentKind", powershell_launcher)
@@ -684,6 +1119,13 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn("pyinstaller-hooks-contrib==2026.6", portable_requirements)
         self.assertIn("https://download.pytorch.org/whl/cpu", workflow)
         self.assertIn("gh release upload", workflow)
+        self.assertIn("pull_request:", workflow)
+        self.assertIn("Selection source: self-extract-created", workflow)
+        self.assertIn("Saved environment reused: yes", workflow)
+        self.assertIn("self-extract-report.xlsx", workflow)
+        self.assertIn('"concurrency-ready"', workflow)
+        self.assertIn("Timed out waiting for concurrent extraction start barrier", workflow)
+        self.assertIn("Wait-Job -Job $Jobs -Timeout 600", workflow)
         self.assertEqual(workflow.count("actions/checkout@"), workflow.count("persist-credentials: false"))
         self.assertIn("cache-dependency-path: |", workflow)
         self.assertIn("requirements-ai/*.txt", workflow)

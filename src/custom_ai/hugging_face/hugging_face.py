@@ -29,9 +29,9 @@ Key behavior
 import  os
 from typing import Tuple
 from huggingface_hub import InferenceClient
-from src.genai.genai import SbkGenAI
 
-HF_MODEL_ID = "meta-llama/Llama-3.1-8B-Instruct"
+from src.ai.defaults import HUGGING_FACE_DEFAULTS
+from src.genai.genai import SbkGenAI
 
 
 def _call_llm_for_analysis(model_id, prompt):
@@ -63,9 +63,9 @@ def _call_llm_for_analysis(model_id, prompt):
 
     completion = client.chat_completion(  # ← key change
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=5000,
-        temperature=0.4,
-        top_p=0.9,
+        max_tokens=HUGGING_FACE_DEFAULTS.max_tokens,
+        temperature=HUGGING_FACE_DEFAULTS.temperature,
+        top_p=HUGGING_FACE_DEFAULTS.top_p,
     )
     # OpenAI‑style response schema
     return (True, completion.choices[0].message["content"].strip())
@@ -87,12 +87,7 @@ class HuggingFace(SbkGenAI):
     """
     def __init__(self):
         super().__init__()
-        self.model_id = HF_MODEL_ID
-
-
-    def add_args(self, parser):
-        parser.add_argument("-id", "--model_id", help="Hugging Face model ID; default model: "+HF_MODEL_ID, default=HF_MODEL_ID)
-        parser.set_defaults(model_id=HF_MODEL_ID)
+        self.model_id = HUGGING_FACE_DEFAULTS.model
 
     def parse_args(self, args):
 #        if hasattr(args, 'model_id') and args.model_id is not None:
@@ -182,4 +177,3 @@ class HuggingFace(SbkGenAI):
 
         except Exception as e:
             return False, f"Failed to generate response for query: {str(e)}"
-                

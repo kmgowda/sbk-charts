@@ -33,7 +33,14 @@ from src.parser.sbk_parser import get_sbk_parser
 from src.sheets.sheets import SbkMultiSheets
 from src.version.sbk_version import __sbk_version__
 
-SBK_BANNER_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'banner.txt')
+SBK_BANNER_FILE = Path(__file__).with_name("banner.txt")
+
+
+def _print_startup_identity() -> None:
+    """Print the banner and version exactly once before argument parsing."""
+    print(SBK_BANNER_FILE.read_text(encoding="utf-8"), end="")
+    print("Sbk Charts Version : " + __sbk_version__, flush=True)
+
 
 def sbk_charts():
     """Top-level orchestration for sbk-charts CLI.
@@ -55,9 +62,14 @@ def sbk_charts():
     parser = get_sbk_parser()
     ch = SbkAI()
     ch.add_args(parser)
+    version_option = next(
+        (argument for argument in sys.argv[1:] if argument in {"-version", "--version"}),
+        None,
+    )
+    if version_option:
+        parser.parse_args([version_option])
+    _print_startup_identity()
     args = parser.parse_args()
-    print(open(SBK_BANNER_FILE, 'r').read())
-    print("Sbk Charts Version : " + __sbk_version__)
     print('Input Files : ', args.ifiles)
     print('Output File : ', args.ofile)
 

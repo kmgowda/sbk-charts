@@ -29,12 +29,9 @@ Requirements:
 import os
 from typing import Tuple
 from anthropic import Anthropic as AnthropicClient
-from src.genai.genai import SbkGenAI
 
-# Default Anthropic configuration
-DEFAULT_MODEL = "anthropic-sonnet-4-20250514"
-DEFAULT_MAX_TOKENS = 2048
-DEFAULT_TEMPERATURE = 0.4
+from src.ai.defaults import ANTHROPIC_DEFAULTS
+from src.genai.genai import SbkGenAI
 
 
 class Anthropic(SbkGenAI):
@@ -46,9 +43,11 @@ class Anthropic(SbkGenAI):
     
     Configuration:
     - API Key: Set via ANTHROPIC_API_KEY environment variable
-    - Model: Specify with --anthropic-model (default: anthropic-sonnet-4-20250514)
-    - Temperature: Control response randomness with --anthropic-temperature (0.0-1.0)
+    - Model: Specify with --anthropic-model
+    - Temperature: Control response randomness with --anthropic-temperature
     - Max Tokens: Set maximum response length with --anthropic-max-tokens
+
+    Run the ``anthropic -h`` subcommand for the current defaults.
     
     The implementation includes automatic error handling and provides detailed
     technical analysis suitable for storage performance engineering.
@@ -65,9 +64,9 @@ class Anthropic(SbkGenAI):
         """Initialize the Anthropic backend with default configuration."""
         super().__init__()
         self.api_key = os.getenv("ANTHROPIC_API_KEY")
-        self.model = DEFAULT_MODEL
-        self.max_tokens = DEFAULT_MAX_TOKENS
-        self.temperature = DEFAULT_TEMPERATURE
+        self.model = ANTHROPIC_DEFAULTS.model
+        self.max_tokens = ANTHROPIC_DEFAULTS.max_tokens
+        self.temperature = ANTHROPIC_DEFAULTS.temperature
         self.client = None
 
     def _initialize_client(self) -> bool:
@@ -88,30 +87,6 @@ class Anthropic(SbkGenAI):
         except Exception as e:
             print(f"Failed to initialize Anthropic client: {str(e)}")
             return False
-
-    def add_args(self, parser):
-        """Add command-line arguments for Anthropic configuration.
-        
-        Args:
-            parser: ArgumentParser instance to add arguments to
-        """
-        parser.add_argument(
-            "--anthropic-model",
-            help=f"Anthropic Claude model to use (default: {DEFAULT_MODEL})",
-            default=DEFAULT_MODEL
-        )
-        parser.add_argument(
-            "--anthropic-max-tokens",
-            type=int,
-            help=f"Maximum tokens to generate (default: {DEFAULT_MAX_TOKENS})",
-            default=DEFAULT_MAX_TOKENS
-        )
-        parser.add_argument(
-            "--anthropic-temperature",
-            type=float,
-            help=f"Sampling temperature (default: {DEFAULT_TEMPERATURE})",
-            default=DEFAULT_TEMPERATURE
-        )
 
     def parse_args(self, args):
         """Parse command-line arguments.
@@ -268,4 +243,3 @@ class Anthropic(SbkGenAI):
 
         except Exception as e:
             return False, f"Failed to generate response for query: {str(e)}"
-

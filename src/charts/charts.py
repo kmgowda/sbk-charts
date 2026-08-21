@@ -68,6 +68,12 @@ AXIS_LABEL_FONT_SIZE = 1800
 LEGEND_FONT_SIZE = 1600
 CHART_LINE_WIDTH = 44450
 CHART_MARKER_SIZE = 8
+CHART_TEXT_COLOR = "374151"
+
+INTERVALS_AXIS_TITLE = "Intervals"
+PERCENTILES_AXIS_TITLE = "Percentiles"
+COUNT_AXIS_TITLE = "Count"
+LATENCY_AXIS_TITLE_PREFIX = "Latency time in "
 
 TABLE_BODY_FONT_SIZE = 15
 TABLE_HEADER_FONT_SIZE = 19
@@ -165,44 +171,13 @@ class SbkCharts:
         self.version = __sbk_version__
         self.file = file
         self.wb = load_workbook(self.file)
-        self.time_unit = get_time_unit_from_worksheet(self.wb[sheets_constants.R_PREFIX + "1"])
-        self.n_latency_charts = 5
-        self.latency_groups = [
-            [constants.MIN_LATENCY, constants.PERCENTILE_5],
-            [constants.PERCENTILE_5, constants.PERCENTILE_10, constants.PERCENTILE_15, constants.PERCENTILE_20, 
-             constants.PERCENTILE_25, constants.PERCENTILE_30, constants.PERCENTILE_35, constants.PERCENTILE_40,
-             constants.PERCENTILE_45, constants.PERCENTILE_50],
-            [constants.PERCENTILE_50, constants.AVG_LATENCY],
-            [constants.PERCENTILE_50, constants.PERCENTILE_55, constants.PERCENTILE_60, constants.PERCENTILE_65,
-             constants.PERCENTILE_70, constants.PERCENTILE_75, constants.PERCENTILE_80, constants.PERCENTILE_85,
-             constants.PERCENTILE_90],
-            [constants.PERCENTILE_92_5, constants.PERCENTILE_95, constants.PERCENTILE_97_5, constants.PERCENTILE_99,
-             constants.PERCENTILE_99_25, constants.PERCENTILE_99_5, constants.PERCENTILE_99_75, constants.PERCENTILE_99_9,
-             constants.PERCENTILE_99_95, constants.PERCENTILE_99_99]]
-        self.slc_percentile_names = [[constants.PERCENTILE_5, constants.PERCENTILE_10, constants.PERCENTILE_15, 
-                                      constants.PERCENTILE_20, constants.PERCENTILE_25, constants.PERCENTILE_30, 
-                                      constants.PERCENTILE_35, constants.PERCENTILE_40, constants.PERCENTILE_50],
-                                     [constants.PERCENTILE_50, constants.PERCENTILE_55, constants.PERCENTILE_60,
-                                      constants.PERCENTILE_65, constants.PERCENTILE_70, constants.PERCENTILE_75,
-                                      constants.PERCENTILE_80, constants.PERCENTILE_85, constants.PERCENTILE_90,
-                                      constants.PERCENTILE_92_5, constants.PERCENTILE_95, constants.PERCENTILE_97_5,
-                                      constants.PERCENTILE_99, constants.PERCENTILE_99_25, constants.PERCENTILE_99_5,
-                                      constants.PERCENTILE_99_75, constants.PERCENTILE_99_9, constants.PERCENTILE_99_95,
-                                      constants.PERCENTILE_99_99]]
-        self.percentile_count_names = [constants.PERCENTILE_COUNT_5, constants.PERCENTILE_COUNT_10, 
-                                      constants.PERCENTILE_COUNT_15, constants.PERCENTILE_COUNT_20,
-                                      constants.PERCENTILE_COUNT_25, constants.PERCENTILE_COUNT_30, 
-                                      constants.PERCENTILE_COUNT_35, constants.PERCENTILE_COUNT_40,
-                                      constants.PERCENTILE_COUNT_50, constants.PERCENTILE_COUNT_55, 
-                                      constants.PERCENTILE_COUNT_60, constants.PERCENTILE_COUNT_65,
-                                      constants.PERCENTILE_COUNT_70, constants.PERCENTILE_COUNT_75, 
-                                      constants.PERCENTILE_COUNT_80, constants.PERCENTILE_COUNT_85,
-                                      constants.PERCENTILE_COUNT_90, constants.PERCENTILE_COUNT_92_5, 
-                                      constants.PERCENTILE_COUNT_95, constants.PERCENTILE_COUNT_97_5,
-                                      constants.PERCENTILE_COUNT_99, constants.PERCENTILE_COUNT_99_25, 
-                                      constants.PERCENTILE_COUNT_99_5, constants.PERCENTILE_COUNT_99_75,
-                                      constants.PERCENTILE_COUNT_99_9, constants.PERCENTILE_COUNT_99_95, 
-                                      constants.PERCENTILE_COUNT_99_99]
+        self.time_unit = get_time_unit_from_worksheet(
+            self.wb[sheets_constants.FIRST_RESULT_SHEET]
+        )
+        self.latency_groups = constants.LATENCY_GROUPS
+        self.n_latency_charts = len(self.latency_groups)
+        self.slc_percentile_names = constants.SLC_PERCENTILE_GROUPS
+        self.percentile_count_names = constants.PERCENTILE_COUNT_COLUMNS
 
     def get_latency_percentile_columns(self, ws):
         """Return only the latency percentile columns (names starting with
@@ -217,7 +192,9 @@ class SbkCharts:
         columns = get_columns_from_worksheet(ws)
         ret = OrderedDict()
         for key in columns.keys():
-            if key.startswith("Percentile_") and not key.startswith("Percentile_Count"):
+            if key.startswith(constants.PERCENTILE_PREFIX) and not key.startswith(
+                constants.PERCENTILE_COUNT_PREFIX
+            ):
                 ret[key] = columns[key]
         return ret
 
@@ -234,7 +211,7 @@ class SbkCharts:
         columns = get_columns_from_worksheet(ws)
         ret = OrderedDict()
         for key in columns.keys():
-            if key.startswith("Percentile_Count"):
+            if key.startswith(constants.PERCENTILE_COUNT_PREFIX):
                 ret[key] = columns[key]
         return ret
 
@@ -294,7 +271,7 @@ class SbkCharts:
         chart.x_axis.title.tx.rich.p[0].pPr.defRPr = CharacterProperties(
             sz=AXIS_TITLE_FONT_SIZE,
             b=True,
-            solidFill="374151",
+            solidFill=CHART_TEXT_COLOR,
         )
         
         chart.y_axis.title = y_title
@@ -303,7 +280,7 @@ class SbkCharts:
         chart.y_axis.title.tx.rich.p[0].pPr.defRPr = CharacterProperties(
             sz=AXIS_TITLE_FONT_SIZE,
             b=True,
-            solidFill="374151",
+            solidFill=CHART_TEXT_COLOR,
         )
 
         chart.height = height
@@ -329,7 +306,7 @@ class SbkCharts:
         character_properties = CharacterProperties(
             lang="en-US",
             sz=font_size,
-            solidFill="374151",
+            solidFill=CHART_TEXT_COLOR,
         )
         return RichText(
             bodyPr=RichTextProperties(),
@@ -410,7 +387,7 @@ class SbkCharts:
             is_table = (
                 is_r_num_sheet(sheet.title)
                 or is_t_num_sheet(sheet.title)
-                or sheet.title == "Durations"
+                or sheet.title == sheets_constants.DURATIONS_SHEET
             )
             if not is_table:
                 continue
@@ -532,8 +509,8 @@ class SbkCharts:
         """
         return self.create_line_chart(
             title,
-            "Intervals",
-            "Latency time in " + self.time_unit,
+            INTERVALS_AXIS_TITLE,
+            LATENCY_AXIS_TITLE_PREFIX + self.time_unit,
         )
 
     def get_latency_series(self, ws, ws_name):
@@ -1334,8 +1311,8 @@ class SbkCharts:
         for i, percentile_names in enumerate(self.slc_percentile_names):
             chart = self.create_line_chart(
                 title,
-                "Percentiles",
-                "Latency time in " + self.time_unit,
+                PERCENTILES_AXIS_TITLE,
+                LATENCY_AXIS_TITLE_PREFIX + self.time_unit,
             )
             latency_series = self.get_latency_percentile_series(ws, prefix, percentile_names)
             for x in latency_series:
@@ -1362,7 +1339,11 @@ class SbkCharts:
         """
         title = "Total Percentiles Histogram"
         latency_cols = self.get_latency_percentile_count_columns(ws)
-        chart = self.create_bar_chart(title, "Percentiles", "Count")
+        chart = self.create_bar_chart(
+            title,
+            PERCENTILES_AXIS_TITLE,
+            COUNT_AXIS_TITLE,
+        )
         latency_series = self.get_latency_percentile_count_series(ws, prefix, self.percentile_count_names)
         for x in latency_series:
             chart.append(latency_series[x])
@@ -1391,7 +1372,7 @@ class SbkCharts:
         """
         chart = self.create_line_chart(
             "Throughput Variations in Mega Bytes / Seconds",
-            "Intervals",
+            INTERVALS_AXIS_TITLE,
             "Throughput in MB/Sec",
         )
         # adding data
@@ -1418,7 +1399,7 @@ class SbkCharts:
         """
         chart = self.create_line_chart(
             "Throughput Variations in Records / Seconds",
-            "Intervals",
+            INTERVALS_AXIS_TITLE,
             "Throughput in Records/Sec",
         )
         # adding data
@@ -1447,7 +1428,7 @@ class SbkCharts:
         - The image is loaded from the local file system; ensure the path is
           correct.
         """
-        ws = self.wb['SBK']
+        ws = self.wb[sheets_constants.SBK_SHEET]
         # Put your sheet in the loader
         image_loader = SheetImageLoader(ws)
 
@@ -1489,10 +1470,10 @@ class SbkCharts:
         - Existing sheets are not deleted; new charts are added to the next
           available sheet.
         """
-        r_name = sheets_constants.R_PREFIX + "1"
+        r_name = sheets_constants.FIRST_RESULT_SHEET
         r_ws = self.wb[r_name]
         r_prefix = r_name + get_storage_name_from_worksheet(r_ws)
-        t_name = sheets_constants.T_PREFIX + "1"
+        t_name = sheets_constants.FIRST_TOTAL_SHEET
         t_ws = self.wb[t_name]
         t_prefix = t_name + get_storage_name_from_worksheet(t_ws)
         self.create_throughput_mb_graph(r_ws, r_prefix)

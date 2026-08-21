@@ -54,7 +54,7 @@ Important features include:
 - optional AI analysis through Anthropic, Gemini, Hugging Face, LM Studio, Ollama, or an in-process PyTorch model;
 - an interactive AI chat mode grounded in the workbook data;
 - self-bootstrapping launchers for Linux, macOS, and Windows;
-- native portable archives that do not require Python on the destination machine.
+- single-file, self-extracting native applications that do not require Python on the destination machine.
 
 ## Quick start
 
@@ -80,7 +80,7 @@ sbk-charts.bat -i samples\charts\sbk-file-read.csv -o out.xlsx
 
 On first use, the source launcher reuses a valid existing environment when possible. Otherwise, on a supported target, it downloads a pinned, checksum-verified `uv`, installs the project-managed Python 3.12.10, and creates a locked environment under `.sbk-runtime/`. This works even when Python, venv, and Conda are absent. The first bootstrap needs HTTPS access to GitHub Releases and the Python package index. If managed setup is unsupported or fails, the launcher removes unpublished temporary files and tries usable system Python interpreters and Conda before it gives up.
 
-Later runs validate and reuse the saved environment without downloading anything when it is still compatible with the application, selected profile, and dependency lock. Before starting the application, the launcher prints the operating system, exact Python executable and version, environment type and path, dependency profile, selection source, whether saved state was reused, and whether the environment was created during this run. Core chart generation installs only core packages. Selecting an AI backend creates or reuses that backend's dependency profile, so PyTorch and cloud SDKs are not required for normal chart generation.
+Later runs validate and reuse the saved environment without downloading anything when it is still compatible with the application, selected profile, and dependency lock. Before parsing application arguments, startup prints the runtime report followed by one banner and one sbk-charts version line. The version is therefore visible even when required arguments are missing, without being repeated during a successful run. Core chart generation installs only core packages. Selecting an AI backend creates or reuses that backend's dependency profile, so PyTorch and cloud SDKs are not required for normal chart generation.
 
 Example second-run report:
 
@@ -92,6 +92,7 @@ sbk-charts: Dependency profile: core
 sbk-charts: Selection source: saved-state
 sbk-charts: Saved environment reused: yes
 sbk-charts: Environment created this run: no
+Sbk Charts Version : <version>
 ```
 
 Common selection sources are `saved-state`, `explicit-venv`, `active-venv`, `active-conda`, `project-venv`, `managed-cache`, `named-conda`, and the `created-*` variants. `saved-state` with `Saved environment reused: yes` is the normal second-run result. A different source means the saved environment was absent, overridden, incompatible, or failed validation.
@@ -112,6 +113,7 @@ Common options:
 | `-secs`, `--seconds` | Total AI analysis time budget in seconds. Default: `120`. |
 | `-nothreads` | Run the four AI analyses one at a time. Useful for local or GPU models. |
 | `-chat` | Start interactive chat after workbook analysis. Requires an AI backend. |
+| `-version`, `--version` | Print the sbk-charts version and exit. No input file is required. |
 | `-h`, `--help` | Show general help. Put `-h` after a backend name for backend-specific help. |
 
 Global options must come before the AI backend name. Backend-specific options come after it.
@@ -147,6 +149,12 @@ Show the available AI backends:
 
 ```bash
 ./sbk-charts -h
+```
+
+Show the installed sbk-charts version:
+
+```bash
+./sbk-charts -version
 ```
 
 Show options for one backend. The required input is only present so the top-level parser can run:
@@ -332,7 +340,22 @@ python -m build
 
 ## Portable distributions
 
-Release automation can build self-contained archives for Linux x86-64, macOS Apple silicon, and Windows x86-64. These archives bundle Python and dependencies, so the destination machine does not need Python, pip, venv, or Conda.
+Release automation builds one self-extracting file for Linux x86-64, macOS Apple silicon, and Windows x86-64. Each file contains sbk-charts, Python, and all supported backend dependencies. The destination does not need Python, pip, venv, Conda, or a source checkout.
+
+Linux or macOS:
+
+```bash
+chmod +x sbk-charts-<version>-<target>.run
+./sbk-charts-<version>-<target>.run -i results.csv -o report.xlsx
+```
+
+Windows PowerShell:
+
+```powershell
+.\sbk-charts-<version>-windows-amd64.exe -i results.csv -o report.xlsx
+```
+
+The first execution verifies and extracts the embedded payload atomically into the current user's cache. Later executions validate and reuse that saved installation. Every execution prints the OS, bundled Python version, portable environment path, selection source, reuse status, and creation status. Set `SBK_CHARTS_PORTABLE_ROOT` to choose a different cache directory.
 
 Read [Portable distributions](docs/PORTABLE.md) for supported targets, checksum verification, execution, and local build instructions.
 

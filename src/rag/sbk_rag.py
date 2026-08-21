@@ -848,7 +848,7 @@ class SbkSimpleRAGPipeline:
                     metadata = item.get('metadata', {})
                     
                     # Format with more detailed information
-                    formatted_text = f"  • {context_text}"
+                    formatted_text = f"  - {context_text}"
                     if 'avg' in metadata:
                         formatted_text += f" (avg: {metadata['avg']:.2f})"
                     if 'metric_type' in metadata:

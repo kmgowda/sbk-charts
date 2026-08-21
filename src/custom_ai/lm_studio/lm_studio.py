@@ -26,10 +26,9 @@ Requirements:
 """
 
 import lmstudio
-from src.genai.genai import SbkGenAI
 
-# Default LM Studio configuration
-BASE_URL = "http://localhost:1234/api/v0"
+from src.ai.defaults import LM_STUDIO_DEFAULTS
+from src.genai.genai import SbkGenAI
 
 
 class LmStudio(SbkGenAI):
@@ -40,46 +39,23 @@ class LmStudio(SbkGenAI):
     the LM Studio server and formats the benchmark data for analysis.
     
     Configuration:
-    - Server URL: Configurable, defaults to http://localhost:1234/api/v0
-    - Model: Can be specified via command line (default: LM Studio's loaded model)
-    - Temperature: Controls randomness (default: 0.4)
-    - Max Tokens: Limits response length (default: 1800)
+    - Server URL: Configurable with --url
+    - Model: Can be specified with --lm-model
+    - Temperature: Configurable with --lm-temperature
+    - Max Tokens: Configurable with --lm-max-tokens
+
+    Run the ``lmstudio -h`` subcommand for the current defaults.
     
     The class automatically handles connection management and error recovery.
     """
 
     def __init__(self):
         super().__init__()
-        self.url = BASE_URL
-        self.model = ""  # Will use LM Studio's default loaded model
-        self.temperature = 0.4
-        self.max_tokens = 1800
+        self.url = LM_STUDIO_DEFAULTS.url
+        self.model = LM_STUDIO_DEFAULTS.model
+        self.temperature = LM_STUDIO_DEFAULTS.temperature
+        self.max_tokens = LM_STUDIO_DEFAULTS.max_tokens
         self.llm_model = None
-
-    def add_args(self, parser):
-        """Add command-line arguments for LM Studio configuration."""
-        parser.add_argument(
-            "--url",
-            help=f"server url (default: {BASE_URL})",
-            default=BASE_URL
-        )
-        parser.add_argument(
-            "--lm-model",
-            help="Model name or path to use (default: LM Studio's loaded model)",
-            default=""
-        )
-        parser.add_argument(
-            "--lm-temperature",
-            type=float,
-            help="Sampling temperature (default: 0.4)",
-            default=0.4
-        )
-        parser.add_argument(
-            "--lm-max-tokens",
-            type=int,
-            help="Maximum number of tokens to generate (default: 1800)",
-            default=1800
-        )
 
     def parse_args(self, args):
         """Parse command-line arguments."""
