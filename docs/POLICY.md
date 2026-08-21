@@ -23,7 +23,7 @@ flowchart TD
     P --> H[project_policy.py]
     H --> S[setup.py]
     H --> C[GitHub Actions matrix]
-    H --> A[Portable archive builder]
+    H --> A[Self-extracting application builder]
     H --> T[Policy and portable tests]
 ```
 
@@ -64,9 +64,9 @@ Maps each optional backend command to its human-maintained requirements input. `
 
 ### `[portable]`
 
-Defines native target names, build Python, manifest and checksum names, bundled documentation/metadata paths, entry script, and modules PyInstaller must collect.
+Defines native target names, build Python, manifest and checksum names, portable runtime state schema and cache directory, extraction-lock timeout, bundled documentation and metadata paths, entry script, and modules PyInstaller must collect.
 
-The related mapping sections connect targets to operating systems, processor names, archive formats, and GitHub-hosted runners.
+The related mapping sections connect targets to operating systems, processor names, embedded payload formats, self-extracting output extensions, and GitHub-hosted runners.
 
 ## Python policy helper
 
@@ -162,6 +162,6 @@ python -m build
 ```
 
 8. Test PowerShell and batch launchers on Windows if runtime selection changed.
-9. Build a native portable archive if portable metadata changed.
+9. Build and execute a native self-extracting application if portable metadata changed.
 
 Do not add a target name without matching platform, architecture, archive-format, and runner mappings. `load_policy()` intentionally rejects incomplete target policy.

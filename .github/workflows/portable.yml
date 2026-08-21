@@ -10,6 +10,9 @@
 name: Portable releases
 
 on:
+  pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
   release:
     types: [published]
@@ -60,8 +63,58 @@ jobs:
         python -m pip install ".[all-ai]" -r requirements-portable.txt
     - name: Test portable build support
       run: python -m unittest discover -s tests -p "test_portable.py"
-    - name: Build portable archive
+    - name: Build self-extracting portable application
       run: python scripts/build_portable.py
+    - name: Verify self-extraction, saved reuse, and workbook on Unix
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        artifact=$(find dist/portable -type f -name '*.run' -print -quit)
+        chmod +x "$artifact"
+        export SBK_CHARTS_PORTABLE_ROOT="$RUNNER_TEMP/sbk-charts-portable-test"
+        "$artifact" -h > first-help.txt &
+        first_pid=$!
+        "$artifact" -h > concurrent-help.txt &
+        concurrent_pid=$!
+        wait "$first_pid"
+        wait "$concurrent_pid"
+        test "$(grep -h -c "Selection source: self-extract-created" first-help.txt concurrent-help.txt | awk '{total += $1} END {print total}')" -eq 1
+        test "$(grep -h -c "Saved environment reused: yes" first-help.txt concurrent-help.txt | awk '{total += $1} END {print total}')" -eq 1
+        "$artifact" -h > second-help.txt
+        grep -q "Selection source: self-extract-cache" second-help.txt
+        grep -q "Saved environment reused: yes" second-help.txt
+        "$artifact" -i "$GITHUB_WORKSPACE/samples/charts/sbk-file-read.csv" \
+          -o "$RUNNER_TEMP/self-extract-report.xlsx" noai
+        test -s "$RUNNER_TEMP/self-extract-report.xlsx"
+    - name: Verify self-extraction, saved reuse, and workbook on Windows
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $Artifact = Get-ChildItem dist/portable/*.exe | Select-Object -First 1
+        $env:SBK_CHARTS_PORTABLE_ROOT = Join-Path $env:RUNNER_TEMP "sbk-charts-portable-test"
+        $First = Start-Job -ScriptBlock {
+          param($Path, $Root)
+          $env:SBK_CHARTS_PORTABLE_ROOT = $Root
+          & $Path -h
+        } -ArgumentList $Artifact.FullName, $env:SBK_CHARTS_PORTABLE_ROOT
+        $Concurrent = Start-Job -ScriptBlock {
+          param($Path, $Root)
+          $env:SBK_CHARTS_PORTABLE_ROOT = $Root
+          & $Path -h
+        } -ArgumentList $Artifact.FullName, $env:SBK_CHARTS_PORTABLE_ROOT
+        Wait-Job $First, $Concurrent | Out-Null
+        Receive-Job $First | Set-Content first-help.txt
+        Receive-Job $Concurrent | Set-Content concurrent-help.txt
+        if ($First.State -ne "Completed" -or $Concurrent.State -ne "Completed") { throw "Concurrent extraction failed" }
+        $ConcurrentOutput = Get-Content first-help.txt, concurrent-help.txt
+        if (($ConcurrentOutput | Select-String "Selection source: self-extract-created").Count -ne 1) { throw "Exactly one process must create the payload" }
+        if (($ConcurrentOutput | Select-String "Saved environment reused: yes").Count -ne 1) { throw "Exactly one concurrent process must reuse the payload" }
+        & $Artifact.FullName -h | Tee-Object -FilePath second-help.txt
+        if (-not (Select-String -Quiet second-help.txt "Selection source: self-extract-cache")) { throw "Saved extraction was not selected" }
+        if (-not (Select-String -Quiet second-help.txt "Saved environment reused: yes")) { throw "Saved extraction reuse was not reported" }
+        $Report = Join-Path $env:RUNNER_TEMP "self-extract-report.xlsx"
+        & $Artifact.FullName -i "$env:GITHUB_WORKSPACE\samples\charts\sbk-file-read.csv" -o $Report noai
+        if (-not (Test-Path -LiteralPath $Report -PathType Leaf)) { throw "Workbook was not created" }
     - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:
         name: portable-${{ matrix.target }}

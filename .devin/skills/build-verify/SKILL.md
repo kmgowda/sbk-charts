@@ -36,7 +36,7 @@ tar -tzf dist/sbk_charts-<version>.tar.gz
 
 Confirm the banner, logo, policy file, source launchers, scripts, documentation, and developer skills appear in the artifact type where `setup.py` and `MANIFEST.in` intend them.
 
-For release confidence, install the wheel into a fresh temporary virtual environment and run it from outside the repository. For portable changes, install `requirements-portable.txt`, run `scripts/build_portable.py` on a native target, verify the checksum and manifest, extract the whole bundle, and run the sample.
+For release confidence, install the wheel into a fresh temporary virtual environment and run it from outside the repository. For portable changes, install `requirements-portable.txt`, run `scripts/build_portable.py` on a native target, verify the checksum, execute the generated single file with a fresh `SBK_CHARTS_PORTABLE_ROOT`, execute it again to prove saved reuse, inspect the saved manifest, and generate the sample workbook.
 
 For source-launcher changes, also verify:
 

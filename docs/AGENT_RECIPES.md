@@ -278,7 +278,7 @@ Inspect the wheel and source archive with `unzip -l` and `tar -tzf`. Confirm at 
 
 For high-confidence release verification, install the wheel into a fresh temporary environment and run it from outside the repository.
 
-## 14. Build a portable archive
+## 14. Build a self-extracting portable application
 
 Install build-only requirements into a suitable native environment:
 
@@ -287,9 +287,9 @@ python -m pip install -r requirements-portable.txt
 python scripts/build_portable.py
 ```
 
-The builder identifies the current target, runs PyInstaller, smoke-tests the frozen executable with `--help`, copies declared documentation/metadata, generates `manifest.json`, creates the native archive, and writes an external `.sha256` file.
+The builder identifies the current target, runs PyInstaller, smoke-tests the frozen executable with `--help`, copies declared documentation and metadata, generates `manifest.json`, compresses the internal payload, prepends the native extractor, and writes one application plus its external `.sha256` file.
 
-Inspect the archive root, executable, `_internal` directory, manifest paths, file hashes, and checksum. A build proves only its current operating system and architecture.
+Run the application with a fresh `SBK_CHARTS_PORTABLE_ROOT`, then run it a second time. Confirm the first run reports `self-extract-created`, the second reports `self-extract-cache`, and both reach the Python CLI. Generate the sample workbook through the artifact. Inspect the saved executable, `_internal` directory, manifest paths, state values, file hashes, checksum, temporary cleanup, and lock cleanup. A build proves only its current operating system and architecture.
 
 ## 15. Update documentation
 
@@ -319,7 +319,7 @@ Changing the version, creating tags, pushing, and publishing require explicit us
 
 1. Set the approved version once in `src/version/sbk_version.py`.
 2. Run tests, lint, source CLI, workbook inspection, wheel, and sdist checks.
-3. Build native portable artifacts through the release workflow or on each native target.
+3. Build and execute native self-extracting artifacts through the release workflow or on each native target.
 4. Confirm documentation uses the intended version where a current-version statement is necessary.
 5. Commit and tag only after reviewing the exact diff and artifact list.
 6. Push and publish only when specifically authorized.

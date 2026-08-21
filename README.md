@@ -54,7 +54,7 @@ Important features include:
 - optional AI analysis through Anthropic, Gemini, Hugging Face, LM Studio, Ollama, or an in-process PyTorch model;
 - an interactive AI chat mode grounded in the workbook data;
 - self-bootstrapping launchers for Linux, macOS, and Windows;
-- native portable archives that do not require Python on the destination machine.
+- single-file, self-extracting native applications that do not require Python on the destination machine.
 
 ## Quick start
 
@@ -332,7 +332,22 @@ python -m build
 
 ## Portable distributions
 
-Release automation can build self-contained archives for Linux x86-64, macOS Apple silicon, and Windows x86-64. These archives bundle Python and dependencies, so the destination machine does not need Python, pip, venv, or Conda.
+Release automation builds one self-extracting file for Linux x86-64, macOS Apple silicon, and Windows x86-64. Each file contains sbk-charts, Python, and all supported backend dependencies. The destination does not need Python, pip, venv, Conda, or a source checkout.
+
+Linux or macOS:
+
+```bash
+chmod +x sbk-charts-<version>-<target>.run
+./sbk-charts-<version>-<target>.run -i results.csv -o report.xlsx
+```
+
+Windows PowerShell:
+
+```powershell
+.\sbk-charts-<version>-windows-amd64.exe -i results.csv -o report.xlsx
+```
+
+The first execution verifies and extracts the embedded payload atomically into the current user's cache. Later executions validate and reuse that saved installation. Every execution prints the OS, bundled Python version, portable environment path, selection source, reuse status, and creation status. Set `SBK_CHARTS_PORTABLE_ROOT` to choose a different cache directory.
 
 Read [Portable distributions](docs/PORTABLE.md) for supported targets, checksum verification, execution, and local build instructions.
 

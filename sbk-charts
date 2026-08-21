@@ -41,6 +41,7 @@ policy_value() {
 APP_NAME="$(policy_value application name)"
 DISTRIBUTION_NAME="$(policy_value application distribution_name)"
 APP_MODULE="$(policy_value application module)"
+VERSION_FILE_NAME="$(policy_value application version_file)"
 MINIMUM_PYTHON="$(policy_value runtime minimum_python)"
 MANAGED_PYTHON="$(policy_value runtime managed_python)"
 DEFAULT_CONDA_ENV="$(policy_value runtime default_conda_environment)"
@@ -54,22 +55,31 @@ UNIX_PYTHON_COMMANDS="$(policy_value runtime unix_python_commands)"
 BOOTSTRAP_MANAGER="$(policy_value bootstrap manager)"
 BOOTSTRAP_MANAGER_VERSION="$(policy_value bootstrap manager_version)"
 BOOTSTRAP_DOWNLOAD_BASE_URL="$(policy_value bootstrap download_base_url)"
+BOOTSTRAP_CONNECT_TIMEOUT_SECONDS="$(policy_value bootstrap connect_timeout_seconds)"
+BOOTSTRAP_DOWNLOAD_TIMEOUT_SECONDS="$(policy_value bootstrap download_timeout_seconds)"
+BOOTSTRAP_DOWNLOAD_RETRIES="$(policy_value bootstrap download_retries)"
 
 if [ -z "$APP_NAME" ] || [ -z "$DISTRIBUTION_NAME" ] || [ -z "$APP_MODULE" ] || \
-    [ -z "$MINIMUM_PYTHON" ] || [ -z "$MANAGED_PYTHON" ] || \
+    [ -z "$VERSION_FILE_NAME" ] || [ -z "$MINIMUM_PYTHON" ] || [ -z "$MANAGED_PYTHON" ] || \
     [ -z "$DEFAULT_CONDA_ENV" ] || \
     [ -z "$RUNTIME_STATE_NAME" ] || [ -z "$RUNTIME_STATE_SCHEMA" ] || \
     [ -z "$VIRTUAL_ENVIRONMENT_NAMES" ] || \
     [ -z "$MANAGED_RUNTIME_NAME" ] || [ -z "$LOCK_DIRECTORY_NAME" ] || \
     [ -z "$BOOTSTRAP_LOCK_TIMEOUT_SECONDS" ] || \
     [ -z "$UNIX_PYTHON_COMMANDS" ] || [ -z "$BOOTSTRAP_MANAGER" ] || \
-    [ -z "$BOOTSTRAP_MANAGER_VERSION" ] || [ -z "$BOOTSTRAP_DOWNLOAD_BASE_URL" ]; then
+    [ -z "$BOOTSTRAP_MANAGER_VERSION" ] || [ -z "$BOOTSTRAP_DOWNLOAD_BASE_URL" ] || \
+    [ -z "$BOOTSTRAP_CONNECT_TIMEOUT_SECONDS" ] || \
+    [ -z "$BOOTSTRAP_DOWNLOAD_TIMEOUT_SECONDS" ] || \
+    [ -z "$BOOTSTRAP_DOWNLOAD_RETRIES" ]; then
     printf '%s\n' "sbk-charts: ERROR: Runtime policy is incomplete: $POLICY_FILE" >&2
     exit 1
 fi
 
 case "$BOOTSTRAP_LOCK_TIMEOUT_SECONDS" in
     *[!0-9]*|0) printf '%s\n' "sbk-charts: ERROR: Invalid bootstrap lock timeout" >&2; exit 1 ;;
+esac
+case "$BOOTSTRAP_CONNECT_TIMEOUT_SECONDS:$BOOTSTRAP_DOWNLOAD_TIMEOUT_SECONDS:$BOOTSTRAP_DOWNLOAD_RETRIES" in
+    *[!0-9:]*|0:*|*:0:*|*:0) printf '%s\n' "sbk-charts: ERROR: Invalid bootstrap download policy" >&2; exit 1 ;;
 esac
 
 CONDA_ENV_NAME="${SBK_CHARTS_CONDA_ENV:-$DEFAULT_CONDA_ENV}"
@@ -81,8 +91,20 @@ MANAGED_RUNTIME_ROOT="${SBK_CHARTS_RUNTIME_ROOT:-$PROJECT_ROOT/$MANAGED_RUNTIME_
 SELECTED_BACKEND=""
 SELECTED_PROFILE="core"
 SELECTED_REQUIREMENTS=""
+skip_application_value=no
 for application_argument in "$@"
 do
+    if [ "$skip_application_value" = yes ]; then
+        skip_application_value=no
+        continue
+    fi
+    case "$application_argument" in
+        -i|--ifiles|-o|--ofile|-secs|--seconds)
+            skip_application_value=yes
+            continue
+            ;;
+        --ifiles=*|--ofile=*|--seconds=*|-*) continue ;;
+    esac
     backend_requirements="$(policy_value ai.requirements "$application_argument")"
     if [ -n "$backend_requirements" ]; then
         SELECTED_BACKEND="$application_argument"
@@ -140,7 +162,7 @@ EXPECTED_FINGERPRINT=""
 if [ -n "$MANAGED_TARGET" ] && [ -r "$LOCK_FILE" ]; then
     EXPECTED_FINGERPRINT="$({
         printf '%s\n' "$MANAGED_PYTHON" "$MANAGED_TARGET" "$SELECTED_PROFILE"
-        cat "$LOCK_FILE"
+        cat "$PROJECT_ROOT/$VERSION_FILE_NAME" "$LOCK_FILE"
     } | sha256_stream 2>/dev/null || true)"
 fi
 
@@ -325,9 +347,15 @@ download_file() {
     local url="$1"
     local destination="$2"
     if command -v curl >/dev/null 2>&1; then
-        curl --fail --location --retry 3 --silent --show-error --output "$destination" "$url"
+        curl --fail --location --retry "$BOOTSTRAP_DOWNLOAD_RETRIES" \
+            --connect-timeout "$BOOTSTRAP_CONNECT_TIMEOUT_SECONDS" \
+            --max-time "$BOOTSTRAP_DOWNLOAD_TIMEOUT_SECONDS" \
+            --silent --show-error --output "$destination" "$url"
     elif command -v wget >/dev/null 2>&1; then
-        wget --tries=3 --output-document="$destination" "$url"
+        wget --tries="$BOOTSTRAP_DOWNLOAD_RETRIES" \
+            --connect-timeout="$BOOTSTRAP_CONNECT_TIMEOUT_SECONDS" \
+            --timeout="$BOOTSTRAP_DOWNLOAD_TIMEOUT_SECONDS" \
+            --output-document="$destination" "$url"
     else
         return 1
     fi
@@ -393,7 +421,7 @@ prepare_bootstrap_manager() {
 
 create_managed_environment() {
     local environment_dir="$1"
-    local temporary_environment python_path stale_environment
+    local temporary_environment python_path
     shift
     [ -n "$EXPECTED_FINGERPRINT" ] || return 1
     [ -r "$LOCK_FILE" ] || return 1
@@ -465,7 +493,7 @@ create_managed_environment() {
     fi
     if ! env UV_CACHE_DIR="$MANAGED_RUNTIME_ROOT/cache" UV_LINK_MODE=copy \
         "$BOOTSTRAP_MANAGER_PATH" pip install --python "$python_path" \
-        --no-build-isolation --no-deps --editable "$PROJECT_ROOT"; then
+        --no-build-isolation --no-deps "$PROJECT_ROOT"; then
         log "Could not install $APP_NAME; trying legacy Python/Conda"
         rm -rf "$temporary_environment"
         release_bootstrap_lock
@@ -481,10 +509,7 @@ create_managed_environment() {
     fi
 
     if [ -e "$environment_dir" ]; then
-        stale_environment="$environment_dir.stale-$$"
-        mv "$environment_dir" "$stale_environment" \
-            || fail "Could not preserve incomplete managed environment $environment_dir"
-        log "Preserved incomplete managed environment as $stale_environment"
+        rm -rf "$environment_dir" || fail "Could not remove incomplete managed environment $environment_dir"
     fi
     mkdir -p "$(dirname "$environment_dir")"
     mv "$temporary_environment" "$environment_dir" || fail "Could not publish managed environment"

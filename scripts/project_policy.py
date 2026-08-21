@@ -91,25 +91,32 @@ class BootstrapPolicy:
     manager: str
     manager_version: str
     download_base_url: str
+    connect_timeout_seconds: int
+    download_timeout_seconds: int
+    download_retries: int
     archives: dict[str, str]
     checksums: dict[str, str]
 
 
 @dataclass(frozen=True)
 class PortableArtifactPolicy:
-    """Naming, contents, hashing, and target rules for portable archives."""
+    """Naming, contents, hashing, and target rules for portable applications."""
 
     targets: tuple[str, ...]
     manifest_name: str
     checksum_suffix: str
     hash_algorithm: str
     build_python: str
+    runtime_state_schema: int
+    runtime_directory: str
+    bootstrap_lock_timeout_seconds: int
     bundle_paths: tuple[str, ...]
     entry_script: str
     collect_submodules: tuple[str, ...]
     platforms: dict[str, str]
     architectures: dict[str, str]
     archive_formats: dict[str, str]
+    self_extracting_extensions: dict[str, str]
     runners: dict[str, str]
 
 
@@ -161,6 +168,9 @@ def load_policy(path: Path = POLICY_FILE) -> ProjectPolicy:
         manager=bootstrap_section["manager"],
         manager_version=bootstrap_section["manager_version"],
         download_base_url=bootstrap_section["download_base_url"],
+        connect_timeout_seconds=bootstrap_section.getint("connect_timeout_seconds"),
+        download_timeout_seconds=bootstrap_section.getint("download_timeout_seconds"),
+        download_retries=bootstrap_section.getint("download_retries"),
         archives=bootstrap_archives,
         checksums=bootstrap_checksums,
     )
@@ -171,12 +181,18 @@ def load_policy(path: Path = POLICY_FILE) -> ProjectPolicy:
         checksum_suffix=portable_section["checksum_suffix"],
         hash_algorithm=portable_section["hash_algorithm"],
         build_python=portable_section["build_python"],
+        runtime_state_schema=portable_section.getint("runtime_state_schema"),
+        runtime_directory=portable_section["runtime_directory"],
+        bootstrap_lock_timeout_seconds=portable_section.getint(
+            "bootstrap_lock_timeout_seconds"
+        ),
         bundle_paths=_items(portable_section["bundle_paths"]),
         entry_script=portable_section["entry_script"],
         collect_submodules=_items(portable_section["collect_submodules"]),
         platforms=dict(parser["portable.platforms"]),
         architectures=dict(parser["portable.architectures"]),
         archive_formats=dict(parser["portable.archive_formats"]),
+        self_extracting_extensions=dict(parser["portable.self_extracting_extensions"]),
         runners=dict(parser["portable.runners"]),
     )
 
@@ -189,6 +205,18 @@ def load_policy(path: Path = POLICY_FILE) -> ProjectPolicy:
         )
     if set(portable.targets) != set(portable.runners):
         raise ValueError("Every portable target must have exactly one native runner")
+    if set(portable.targets) != set(portable.self_extracting_extensions):
+        raise ValueError(
+            "Every portable target must have exactly one self-extracting extension"
+        )
+    expected_extensions = {
+        target: "exe" if target.startswith("windows-") else "run"
+        for target in portable.targets
+    }
+    if portable.self_extracting_extensions != expected_extensions:
+        raise ValueError(
+            "Portable self-extracting extensions must be run on Unix and exe on Windows"
+        )
     if portable.hash_algorithm != "sha256":
         raise ValueError(f"Unsupported portable hash algorithm: {portable.hash_algorithm}")
     if not runtime.virtual_environment_names:
@@ -197,10 +225,20 @@ def load_policy(path: Path = POLICY_FILE) -> ProjectPolicy:
         raise ValueError("Bootstrap lock timeout must be at least one second")
     if runtime.runtime_state_schema < 1:
         raise ValueError("Runtime state schema must be at least one")
+    if portable.runtime_state_schema < 1:
+        raise ValueError("Portable runtime state schema must be at least one")
+    if portable.bootstrap_lock_timeout_seconds < 1:
+        raise ValueError("Portable bootstrap lock timeout must be at least one second")
+    if not portable.runtime_directory.strip() or Path(portable.runtime_directory).is_absolute():
+        raise ValueError("Portable runtime directory must be a non-empty relative path")
     if set(bootstrap.archives) != set(bootstrap.checksums):
         raise ValueError("Every bootstrap archive must have exactly one SHA-256 checksum")
     if bootstrap.manager != "uv":
         raise ValueError(f"Unsupported bootstrap manager: {bootstrap.manager}")
+    if bootstrap.connect_timeout_seconds < 1 or bootstrap.download_timeout_seconds < 1:
+        raise ValueError("Bootstrap download timeouts must be at least one second")
+    if bootstrap.download_retries < 1:
+        raise ValueError("Bootstrap download retries must be at least one")
     if not re.fullmatch(r"\d+\.\d+\.\d+", bootstrap.manager_version):
         raise ValueError("Bootstrap manager version must be an exact X.Y.Z version")
     if not re.fullmatch(r"\d+\.\d+\.\d+", runtime.managed_python):

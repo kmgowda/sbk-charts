@@ -77,7 +77,7 @@ Start from behavior, not from filenames.
 | One AI provider | `src/custom_ai/<backend>/` | Registry and plugin specification |
 | Chat grounding | `src/rag/sbk_rag.py` | Architecture section 12 |
 | Source bootstrap | Root launchers | Policy helper and recipe 11 |
-| Portable releases | `scripts/build_portable.py` | `docs/PORTABLE.md` |
+| Self-extracting portable releases | `scripts/build_portable.py` | `docs/PORTABLE.md` |
 
 Useful discovery commands:
 

@@ -58,7 +58,7 @@ On supported targets, source launchers can install an exact managed Python and l
 | `src/rag/` | Retrieval and grounding | Changing chat context selection |
 | `src/custom_ai/<name>/` | One AI adapter | Adding or fixing one backend |
 | `src/version/` | Canonical version | Cutting an approved release |
-| `scripts/` | Policy and portable builds | Changing release/runtime tooling |
+| `scripts/` | Policy, portable builder, frozen entry, and native Windows extractor | Changing release/runtime tooling |
 | `sbk-charts.ini` | Shared runtime/artifact metadata | Changing a value consumed by multiple delivery systems |
 | `.github/workflows/` | CI and release automation | Changing verification or native builds |
 | `tests/` | Policy/portable unit tests | Changing launchers, policy, packaging, or archives |
@@ -140,7 +140,7 @@ Additional requirements by change type:
 | Shared prompt | Exercise representative cloud and local backends when credentials/services are available. |
 | Launcher | Run `-h`; test reuse and creation paths relevant to the OS; run `bash -n sbk-charts` for Bash changes. |
 | Windows launcher | Run PowerShell and batch smoke tests on Windows; static inspection on Linux is not sufficient release proof. |
-| Policy or portable build | Run `tests/test_portable.py`, policy CLI outputs, wheel, sdist, and a native archive build when feasible. |
+| Policy or portable build | Run `tests/test_portable.py`, policy CLI outputs, wheel, sdist, and a native self-extracting build when feasible. Execute the artifact twice and create a workbook through it. |
 | Packaging | Build wheel and sdist and inspect required assets. |
 | Mermaid diagram | Render with Mermaid CLI v11+ when available. |
 | Documentation only | Check links, code syntax, Mermaid syntax, spelling, current names, and current flags. |
@@ -270,7 +270,7 @@ Never commit:
 - `out.xlsx` or other generated reports;
 - `venv-sbk-charts/`, `.venv/`, or Conda environments;
 - `.sbk-runtime/` managed Python, tools, environments, and caches;
-- `dist/`, `build/`, wheels, source archives, or portable archives;
+- `dist/`, `build/`, wheels, source archives, or portable applications;
 - downloaded model files or caches;
 - `.sbk-charts-runtime`;
 - API keys, tokens, credentials, or secret-bearing logs.
@@ -299,7 +299,7 @@ Do not claim Windows, macOS, GPU, provider API, or portable-runtime testing if i
 | Change prompt content | `src/genai/genai.py` | Canonical-prompt rule |
 | Improve chat grounding | `src/rag/sbk_rag.py` | Architecture section 12 |
 | Fix self-bootstrap | root launchers, policy helper | Policy and bootstrap recipes |
-| Change portable archives | `scripts/build_portable.py`, policy, workflow | Portable guide and tests |
+| Change portable applications | `scripts/build_portable.py`, policy, workflow | Portable guide and tests |
 | Cut a release | version, packaging, workflows | Release recipe; explicit approval required |
 | Update docs | relevant Markdown plus code source | Verify every command and link against current code |
 | Understand or review the repository | `README.md`, `docs/DEVELOPMENT.md`, owning modules | Architecture overview and understand-project skill |
