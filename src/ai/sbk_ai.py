@@ -225,27 +225,27 @@ class SbkAI:
         Uses Simple RAG by default for maximum compatibility.
         """
         try:
-            print("🎯 Using Simple RAG (ChromaDB-free) for maximum compatibility...")
+            print("Using Simple RAG (ChromaDB-free) for maximum compatibility...")
             try:
                 self.rag_pipeline = SbkSimpleRAGPipeline()
                 if self.rag_pipeline.initialize():
                     # Ingest storage statistics data
                     if self.rag_pipeline.ingest_storage_stats(self.get_storage_stats()):
                         stats = self.rag_pipeline.get_collection_stats()
-                        print(f"✅ Simple RAG pipeline initialized successfully with {stats.get('document_count', 0)} data points")
-                        print("💡 Simple RAG provides full functionality without external dependencies")
+                        print(f"Simple RAG pipeline initialized successfully with {stats.get('document_count', 0)} data points")
+                        print("Simple RAG provides full functionality without external dependencies")
                         return
                     else:
-                        print("❌ Failed to ingest storage statistics into Simple RAG pipeline")
+                        print("Failed to ingest storage statistics into Simple RAG pipeline")
                 else:
-                    print("❌ Failed to initialize Simple RAG pipeline")
+                    print("Failed to initialize Simple RAG pipeline")
                     
             except Exception as e:
-                print(f"❌ Simple RAG pipeline failed: {str(e)}")
+                print(f"Simple RAG pipeline failed: {str(e)}")
                 self.rag_pipeline = None
 
         except Exception as e:
-            print(f"❌ Error initializing RAG pipeline: {str(e)}")
+            print(f"Error initializing RAG pipeline: {str(e)}")
             self.rag_pipeline = None
 
     def open(self, args):
@@ -411,18 +411,18 @@ class SbkAI:
                     print(f"Running {method_name}...")
                     result_method, result = run_analysis(method_name)
                     results[result_method] = result
-                    print(f"✓ Completed {result_method}")
+                    print(f"Completed {result_method}")
 
                     # Check timeout after each method
                     if (time.time() - start_time) > self.timeout_seconds:
-                        print(f"⚠️ Timeout after {self.timeout_seconds} seconds")
+                        print(f"Timeout after {self.timeout_seconds} seconds")
                         # Mark remaining methods as timed out
                         for remaining in analysis_methods[analysis_methods.index(method_name) + 1:]:
                             results[remaining] = (False, "Analysis timed out")
                         break
 
                 except Exception as e:
-                    print(f"⚠️ Error in {method_name}: {str(e)}")
+                    print(f"Error in {method_name}: {str(e)}")
                     results[method_name] = (False, str(e))
         else:
             # Run analysis methods in parallel using ThreadPoolExecutor for better performance
@@ -447,22 +447,22 @@ class SbkAI:
                         try:
                             result_method, result = future.result(timeout=1.0)
                             results[result_method] = result
-                            print(f"✓ Completed {result_method}")
+                            print(f"Completed {result_method}")
                         except concurrent.futures.TimeoutError:
-                            print(f"⚠️ Timeout waiting for {method_name}, skipping...")
+                            print(f"Timeout waiting for {method_name}, skipping...")
                             results[method_name] = (False, "Analysis timed out")
                         except Exception as e:
-                            print(f"⚠️ Error in {method_name}: {str(e)}")
+                            print(f"Error in {method_name}: {str(e)}")
                             results[method_name] = (False, str(e))
 
                     # Print progress
                     remaining = len(future_to_method)
                     if remaining > 0:
-                        print(f"⏳ Waiting for {remaining} more analysis tasks...")
+                        print(f"Waiting for {remaining} more analysis tasks...")
 
                 remaining = len(future_to_method)
                 if remaining > 0:
-                    print(f"⚠️ {remaining} analysis tasks Timeout !")
+                    print(f"{remaining} analysis tasks timed out")
                     # Cancel any remaining futures
                     for future in future_to_method:
                         future.cancel()
@@ -716,7 +716,7 @@ class SbkAI:
         if self.rag_pipeline and hasattr(self.rag_pipeline, 'get_storage_systems'):
             storage_systems = self.rag_pipeline.get_storage_systems()
             if storage_systems:
-                print(f"\n💡 Available storage systems for comparison: {', '.join(storage_systems)}")
+                print(f"\nAvailable storage systems for comparison: {', '.join(storage_systems)}")
                 print("You can ask questions like:")
                 print("- 'Which storage system performs better?'")
                 print("- 'Compare throughput between storage systems'")
@@ -742,7 +742,7 @@ class SbkAI:
                             # Ctrl-D pressed
                             if len(query_lines) == 0:
                                 # Exit chat mode
-                                print("\n👋  Exiting chat mode...")
+                                print("\nExiting chat mode...")
                                 return
                             else:
                                 # End current query
@@ -764,10 +764,10 @@ class SbkAI:
                     
                     # Monitor the thread and print status every 5 seconds
                     while response_thread.is_alive():
-                        print("\r🤔  AI is thinking...", end="", flush=True)
+                        print("\rAI is thinking...", end="", flush=True)
                         response_thread.join(timeout=5.0)
                         if response_thread.is_alive():
-                            print("\r🤔  AI is thinking... (still processing)", end="", flush=True)
+                            print("\rAI is thinking... (still processing)", end="", flush=True)
                     
                     print("\r", end="")  # Clear the thinking message
                     

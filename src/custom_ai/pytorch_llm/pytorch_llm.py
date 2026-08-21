@@ -162,18 +162,18 @@ class PyTorchLLM(SbkGenAI):
                     
                     if config_file and os.path.exists(config_file):
                         model_dir = os.path.dirname(config_file)
-                        logger.info(f"✅ Model files cached at: {model_dir}")
+                        logger.info(f"Model files cached at: {model_dir}")
                     else:
                         # Fallback: try to find any .bin or .safetensors file in the cache
                         cache_files = glob.glob(os.path.join(TRANSFORMERS_CACHE, '**/*.bin'), recursive=True) + \
                                      glob.glob(os.path.join(TRANSFORMERS_CACHE, '**/*.safetensors'), recursive=True)
                         if cache_files:
                             model_dir = os.path.dirname(cache_files[0])
-                            logger.info(f"✅ Found model weights at: {model_dir}")
+                            logger.info(f"Found model weights at: {model_dir}")
                         else:
-                            logger.warning(f"⚠️ Could not determine exact cache location. Using default: {TRANSFORMERS_CACHE}")
+                            logger.warning(f"Could not determine exact cache location. Using default: {TRANSFORMERS_CACHE}")
                 except Exception as e:
-                    logger.warning(f"⚠️ Could not determine exact cache location: {str(e)}")
+                    logger.warning(f"Could not determine exact cache location: {str(e)}")
                     logger.info(f"Using default cache directory: {TRANSFORMERS_CACHE}")
 
             self.model = self.model.to(self.device)
@@ -274,22 +274,22 @@ class PyTorchLLM(SbkGenAI):
         if self.train_mode:
             self.model.train()
             logger.info("\n" + "=" * 50)
-            logger.info("🚀 Starting training on generated output")
+            logger.info("Starting training on generated output")
 
             for output_text in self.output_list:
-                logger.info(f"📄 Generated length: {len(output_text)} chars")
+                logger.info(f"Generated length: {len(output_text)} chars")
                 loss = self._train_on_output(output_text)
                 if loss is None:
                     break
             logger.info("=" * 50)
             # Save the model after training
             if loss is not None:
-                logger.info("💾 Saving trained model...")
+                logger.info("Saving trained model...")
                 save_success = self._save_model()
                 if save_success:
-                    logger.info("✅ Model saved successfully")
+                    logger.info("Model saved successfully")
                 else:
-                    logger.error("❌ Failed to save model")
+                    logger.error("Failed to save model")
 
 
     def _save_model(self, output_dir: str = None) -> bool:
@@ -317,17 +317,17 @@ class PyTorchLLM(SbkGenAI):
                 return False
             
             os.makedirs(output_dir, exist_ok=True)
-            logger.info(f"💾 Saving model to {output_dir}...")
+            logger.info(f"Saving model to {output_dir}...")
             
             # Save model and tokenizer
             self.model.save_pretrained(output_dir)
             self.tokenizer.save_pretrained(output_dir)
             
-            logger.info(f"✅ Model successfully saved to {output_dir}")
+            logger.info(f"Model successfully saved to {output_dir}")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error saving model: {str(e)}")
+            logger.error(f"Error saving model: {str(e)}")
             return False
             
     def _train_on_output(self, generated_text: str) -> Optional[float]:
@@ -348,7 +348,7 @@ class PyTorchLLM(SbkGenAI):
             logger.error("Empty generated text for training")
             return None
         try:
-            logger.info(f"🔄 Starting training on generated output (length: {len(generated_text)} chars)...")
+            logger.info(f"Starting training on generated output (length: {len(generated_text)} chars)...")
 
             # Get model's dtype for consistent typing
             model_dtype = next(self.model.parameters()).dtype
@@ -399,14 +399,14 @@ class PyTorchLLM(SbkGenAI):
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 self.optimizer.step()
                 # Print training progress
-                logger.info(f"✅ Training complete - Loss: {loss.item():.4f}")
+                logger.info(f"Training complete - Loss: {loss.item():.4f}")
                 return loss.item()
 
-            logger.warning("⚠️ No loss computed during training")
+            logger.warning("No loss computed during training")
             return None
             
         except Exception as e:
-            logger.error(f"❌ Error during training: {str(e)}")
+            logger.error(f"Error during training: {str(e)}")
             traceback.print_exc()
             return None
     

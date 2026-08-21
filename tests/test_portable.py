@@ -101,6 +101,17 @@ class PortableReleaseTest(unittest.TestCase):
                 self.assertIn("Copyright (c) KMG. All Rights Reserved.", source)
                 self.assertIn("http://www.apache.org/licenses/LICENSE-2.0", source)
 
+    def test_console_output_sources_are_windows_encoding_safe(self):
+        """Keep frozen-app progress output usable on legacy Windows consoles."""
+        console_sources = (
+            build_portable.ROOT / "src" / "ai" / "sbk_ai.py",
+            build_portable.ROOT / "src" / "custom_ai" / "pytorch_llm" / "pytorch_llm.py",
+            build_portable.ROOT / "src" / "rag" / "sbk_rag.py",
+        )
+        for source_file in console_sources:
+            with self.subTest(source_file=source_file):
+                source_file.read_text(encoding="utf-8").encode("ascii")
+
     def test_documentation_links_fences_and_backend_flags_are_current(self):
         root = build_portable.ROOT
         for document in self.documentation_files(root):
