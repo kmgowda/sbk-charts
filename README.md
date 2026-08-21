@@ -12,7 +12,7 @@ You may obtain a copy of the License at
 
 sbk-charts turns one or more [SBK](https://github.com/kmgowda/SBK) benchmark CSV files into a readable Excel workbook. The workbook keeps the original measurements, separates interval data from totals, and adds formatted charts for throughput, latency, percentiles, data volume, and timeout events. It can also ask a selected AI backend to write plain-English performance summaries and answer questions about the loaded results.
 
-The current application version is **4.26.8.2** and it requires Python 3.10 or newer when run from source.
+The current application version is **4.26.9.1** and it requires Python 3.10 or newer when run from source.
 
 Choose the shortest guide for your goal:
 
