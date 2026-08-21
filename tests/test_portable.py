@@ -703,7 +703,7 @@ class PortableReleaseTest(unittest.TestCase):
             (
                 "portable",
                 "runtime_directory",
-                "/absolute/runtime",
+                str(Path(Path.cwd().anchor) / "absolute-runtime"),
                 "Portable runtime directory must be a non-empty relative path",
             ),
             (
