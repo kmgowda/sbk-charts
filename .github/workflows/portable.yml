@@ -140,7 +140,7 @@ jobs:
         $Report = Join-Path $env:RUNNER_TEMP "self-extract-report.xlsx"
         & $Artifact.FullName -i "$env:GITHUB_WORKSPACE\samples\charts\sbk-file-read.csv" -o $Report noai
         if (-not (Test-Path -LiteralPath $Report -PathType Leaf)) { throw "Workbook was not created" }
-    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+    - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
       with:
         name: portable-${{ matrix.target }}
         path: dist/portable/*

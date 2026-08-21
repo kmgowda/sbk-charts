@@ -302,6 +302,10 @@ class GitHubReleaseTest(unittest.TestCase):
             workflow.count("actions/checkout@"),
             workflow.count("ref: ${{ github.event.release.tag_name || inputs.release_tag || github.ref }}"),
         )
+        self.assertIn(
+            "actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f",
+            build_workflow,
+        )
         self.assertIn("actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131", publish_workflow)
         self.assertIn("pattern: portable-*", publish_workflow)
         self.assertIn("merge-multiple: true", publish_workflow)
