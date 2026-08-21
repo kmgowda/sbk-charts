@@ -1,6 +1,11 @@
 <!--
 Copyright (c) KMG. All Rights Reserved.
-Licensed under the Apache License, Version 2.0.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
 -->
 
 # Software-agent and contributor guide
@@ -31,6 +36,7 @@ On supported targets, source launchers can install an exact managed Python and l
 | Need | Read |
 |---|---|
 | User commands and examples | [README.md](README.md) |
+| First development change | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) |
 | Full module and runtime design | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Step-by-step change procedures | [docs/AGENT_RECIPES.md](docs/AGENT_RECIPES.md) |
 | New AI plugin contract | [docs/PLUGIN_SPECIFICATION.md](docs/PLUGIN_SPECIFICATION.md) |
@@ -296,6 +302,7 @@ Do not claim Windows, macOS, GPU, provider API, or portable-runtime testing if i
 | Change portable archives | `scripts/build_portable.py`, policy, workflow | Portable guide and tests |
 | Cut a release | version, packaging, workflows | Release recipe; explicit approval required |
 | Update docs | relevant Markdown plus code source | Verify every command and link against current code |
+| Understand or review the repository | `README.md`, `docs/DEVELOPMENT.md`, owning modules | Architecture overview and understand-project skill |
 
 ## 15. Handoff format
 

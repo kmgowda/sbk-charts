@@ -55,6 +55,19 @@ class PortableReleaseTest(unittest.TestCase):
         self.commands: list[list[str]] = []
         self.policy = load_policy()
 
+    @staticmethod
+    def documentation_files(root: Path) -> list[Path]:
+        """Return maintained Markdown files without relying on Git metadata."""
+        return sorted(
+            {
+                *root.glob("*.md"),
+                *(root / ".devin" / "skills").rglob("*.md"),
+                *(root / "docs").rglob("*.md"),
+                *(root / "samples").rglob("*.md"),
+                *(root / "src" / "custom_ai").rglob("*.md"),
+            }
+        )
+
     def test_source_files_include_the_license_header(self):
         root = build_portable.ROOT
         python_files = sorted(
@@ -76,12 +89,53 @@ class PortableReleaseTest(unittest.TestCase):
             root / ".github" / "workflows" / "python-app.yml",
             root / ".github" / "workflows" / "portable.yml",
         )
+        documentation_files = self.documentation_files(root)
 
-        for source_file in (*python_files, *other_source_files):
+        for source_file in (*python_files, *other_source_files, *documentation_files):
             with self.subTest(source_file=source_file.relative_to(root)):
                 source = source_file.read_text(encoding="utf-8")
                 self.assertIn("Copyright (c) KMG. All Rights Reserved.", source)
                 self.assertIn("http://www.apache.org/licenses/LICENSE-2.0", source)
+
+    def test_documentation_links_fences_and_backend_flags_are_current(self):
+        root = build_portable.ROOT
+        for document in self.documentation_files(root):
+            source = document.read_text(encoding="utf-8")
+            with self.subTest(document=document.relative_to(root), check="fences"):
+                self.assertEqual(0, source.count("```") % 2)
+            for target in re.findall(r"(?<!!)\[[^]]+\]\(([^)]+)\)", source):
+                target_path = target.split("#", 1)[0]
+                if not target_path or re.match(r"^[a-z]+://", target_path):
+                    continue
+                with self.subTest(document=document.relative_to(root), target=target):
+                    self.assertTrue((document.parent / target_path).resolve().exists())
+
+        guide_directories = {
+            "anthropic": "anthropic",
+            "gemini": "gemini",
+            "huggingface": "hugging_face",
+            "lmstudio": "lm_studio",
+            "noai": "no_ai",
+            "ollama": "ollama",
+            "pytorchllm": "pytorch_llm",
+        }
+
+        class ArgumentRecorder:
+            def __init__(self):
+                self.options: list[str] = []
+
+            def add_argument(self, *names: str, **_kwargs: object) -> None:
+                self.options.extend(name for name in names if name.startswith("--"))
+
+        for backend, descriptor in BACKENDS.items():
+            recorder = ArgumentRecorder()
+            descriptor.add_arguments(recorder)
+            guide = (
+                root / "src" / "custom_ai" / guide_directories[backend] / "README.md"
+            ).read_text(encoding="utf-8")
+            for option in recorder.options:
+                with self.subTest(backend=backend, option=option):
+                    self.assertIn(f"`{option}`", guide)
 
     def fake_run(self, command: list[str], **_kwargs: object) -> subprocess.CompletedProcess:
         self.commands.append(command)
@@ -164,6 +218,7 @@ class PortableReleaseTest(unittest.TestCase):
             self.assertIn(self.policy.application.name, manifest["files"])
             self.assertIn(POLICY_FILE.name, manifest["files"])
             self.assertIn("docs/PORTABLE.md", manifest["files"])
+            self.assertIn("docs/DEVELOPMENT.md", manifest["files"])
             for guide in BACKEND_GUIDES:
                 self.assertIn(guide, manifest["files"])
                 self.assertIn(f"{bundle_name}/{guide}", archive_members)

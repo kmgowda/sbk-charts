@@ -1,3 +1,13 @@
+<!--
+Copyright (c) KMG. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+-->
+
 # PyTorchLLM backend
 
 The `pytorchllm` command loads a Hugging Face causal language model directly in the sbk-charts Python process through Transformers and PyTorch. It offers local inference but has the highest memory and startup requirements.

@@ -1,6 +1,11 @@
 <!--
 Copyright (c) KMG. All Rights Reserved.
-Licensed under the Apache License, Version 2.0.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
 -->
 
 # sbk-charts
@@ -8,6 +13,16 @@ Licensed under the Apache License, Version 2.0.
 sbk-charts turns one or more [SBK](https://github.com/kmgowda/SBK) benchmark CSV files into a readable Excel workbook. The workbook keeps the original measurements, separates interval data from totals, and adds formatted charts for throughput, latency, percentiles, data volume, and timeout events. It can also ask a selected AI backend to write plain-English performance summaries and answer questions about the loaded results.
 
 The current application version is **4.26.8.2** and it requires Python 3.10 or newer when run from source.
+
+Choose the shortest guide for your goal:
+
+| Goal | Start here |
+|---|---|
+| Generate a workbook now | [Quick start](#quick-start) |
+| Understand the command and examples | [Command-line syntax](#command-line-syntax) and [Everyday examples](#everyday-examples) |
+| Make a first code change | [Development guide](docs/DEVELOPMENT.md) |
+| Understand the whole implementation | [Architecture and internals](docs/ARCHITECTURE.md) |
+| Give a task to a software agent | [AGENTS.md](AGENTS.md) |
 
 ## What it produces
 
@@ -363,6 +378,7 @@ PyTorch wheels vary by operating system and processor. The `pytorchllm` profile 
 |---|---|
 | New user | This README |
 | Developer learning the internals | [Architecture and internals](docs/ARCHITECTURE.md) |
+| New contributor making a first change | [Development guide](docs/DEVELOPMENT.md) |
 | Human or software-agent contributor | [AGENTS.md](AGENTS.md) |
 | Common implementation tasks | [Agent and contributor recipes](docs/AGENT_RECIPES.md) |
 | Designing a new AI backend | [Plugin specification template](docs/PLUGIN_SPECIFICATION.md) |

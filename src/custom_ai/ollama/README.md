@@ -1,3 +1,13 @@
+<!--
+Copyright (c) KMG. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+-->
+
 # Ollama backend
 
 The `ollama` command sends shared SBK analysis prompts to an Ollama server over HTTP or HTTPS. The server can run on the same computer or on a reachable network host. Remote endpoints must use `https://` with certificate validation enabled. Use plain `http://` only for localhost or a trusted private network because it does not encrypt prompts or benchmark data.

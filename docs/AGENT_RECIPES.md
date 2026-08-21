@@ -1,6 +1,11 @@
 <!--
 Copyright (c) KMG. All Rights Reserved.
-Licensed under the Apache License, Version 2.0.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
 -->
 
 # Contributor and software-agent recipes
@@ -298,6 +303,7 @@ Inspect the archive root, executable, `_internal` directory, manifest paths, fil
 8. Render diagrams when `mmdc` is available.
 9. Search for stale names, versions, paths, flags, and custom reference tags.
 10. Run the documented commands that are safe and local.
+11. Run `tests/test_portable.py`; it checks local Markdown links, balanced code fences, backend flag coverage, license notices, and portable inclusion.
 
 Useful audit searches:
 

@@ -1,13 +1,18 @@
 <!--
 Copyright (c) KMG. All Rights Reserved.
-Licensed under the Apache License, Version 2.0.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
 -->
 
 # Architecture and internals
 
 This guide explains how sbk-charts works from the command line down to individual workbook cells. Start with the first three sections if you are new to the project. The later sections describe extension points, invariants, release tooling, and failure behavior for experienced engineers.
 
-For installation and usage examples, read the [main README](../README.md). For change procedures, read [AGENTS.md](../AGENTS.md) and [AGENT_RECIPES.md](AGENT_RECIPES.md).
+For installation and usage examples, read the [main README](../README.md). If this is your first change, follow the [development guide](DEVELOPMENT.md). For detailed change procedures, read [AGENTS.md](../AGENTS.md) and [AGENT_RECIPES.md](AGENT_RECIPES.md).
 
 ## 1. Purpose and boundaries
 
@@ -103,7 +108,7 @@ The stage order is an architectural invariant. Chart code expects R/T sheets to 
 | `scripts/` | Policy reader, portable entry point, portable builder | `project_policy.py`, `build_portable.py` |
 | `tests/` | Runtime-policy and portable-build unit tests | `test_portable.py` |
 | `.github/workflows/` | Linux lint/tests, Windows launcher smoke tests, native portable builds | GitHub Actions jobs |
-| `.devin/skills/` | Task instructions for Devin and other capable agents | Build, chart, plugin, troubleshooting skills |
+| `.devin/skills/` | Task instructions usable by Devin and other capable agents | Onboarding, build, chart, plugin, troubleshooting skills |
 
 ## 5. Command-line construction
 
