@@ -233,7 +233,9 @@ class PortableReleaseTest(unittest.TestCase):
         parser_error = "the following arguments are required: -i/--ifiles"
         self.assertEqual(2, result.returncode, result.stdout)
         self.assertIn(version_line, result.stdout)
+        self.assertEqual(1, result.stdout.count(version_line))
         self.assertIn(parser_error, result.stdout)
+        self.assertLess(result.stdout.index("_____"), result.stdout.index(version_line))
         self.assertLess(result.stdout.index(version_line), result.stdout.index(parser_error))
 
     @staticmethod

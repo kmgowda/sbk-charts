@@ -118,7 +118,7 @@ sbk-charts: Environment created this run: yes
 Sbk Charts Version : <version>
 ```
 
-The second execution reports `self-extract-cache`, reuse `yes`, and creation `no`. The application version is printed before argument parsing, so it is also present when execution stops because a required argument is missing.
+The second execution reports `self-extract-cache`, reuse `yes`, and creation `no`. One banner and one application-version line are printed before argument parsing, so the version is also present when execution stops because a required argument is missing and is not repeated on successful runs.
 
 ## Internal file format
 
