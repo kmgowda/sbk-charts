@@ -110,8 +110,8 @@ jobs:
         if (($ConcurrentOutput | Select-String "Selection source: self-extract-created").Count -ne 1) { throw "Exactly one process must create the payload" }
         if (($ConcurrentOutput | Select-String "Saved environment reused: yes").Count -ne 1) { throw "Exactly one concurrent process must reuse the payload" }
         & $Artifact.FullName -h | Tee-Object -FilePath second-help.txt
-        if (-not (Select-String -Quiet second-help.txt "Selection source: self-extract-cache")) { throw "Saved extraction was not selected" }
-        if (-not (Select-String -Quiet second-help.txt "Saved environment reused: yes")) { throw "Saved extraction reuse was not reported" }
+        if (-not (Select-String -Quiet -Path second-help.txt -Pattern "Selection source: self-extract-cache")) { throw "Saved extraction was not selected" }
+        if (-not (Select-String -Quiet -Path second-help.txt -Pattern "Saved environment reused: yes")) { throw "Saved extraction reuse was not reported" }
         $Report = Join-Path $env:RUNNER_TEMP "self-extract-report.xlsx"
         & $Artifact.FullName -i "$env:GITHUB_WORKSPACE\samples\charts\sbk-file-read.csv" -o $Report noai
         if (-not (Test-Path -LiteralPath $Report -PathType Leaf)) { throw "Workbook was not created" }
