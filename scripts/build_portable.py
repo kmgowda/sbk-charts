@@ -34,6 +34,7 @@ from scripts.project_policy import ProjectPolicy, application_version, load_poli
 
 POLICY = load_policy()
 COPY_CHUNK_SIZE = 1024 * 1024
+LOCK_OWNER_GRACE_ATTEMPTS = 5
 
 
 def current_platform(policy: ProjectPolicy = POLICY) -> str:
@@ -166,7 +167,13 @@ sha256_file() {{
     elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{{print $1}}'
     else fail "sha256sum or shasum is required for payload verification"; fi
 }}
-release_lock() {{ [ ! -d "$lock_dir" ] || rm -rf "$lock_dir"; }}
+lock_acquired=no
+release_lock() {{
+    [ "$lock_acquired" = yes ] || return 0
+    owner=$(sed -n '1p' "$lock_dir/pid" 2>/dev/null || true)
+    if [ "$owner" = "$$" ]; then rm -rf "$lock_dir"; fi
+    lock_acquired=no
+}}
 temporary=
 cleanup() {{
     if [ -n "${{temporary:-}}" ] && [ -d "$temporary" ]; then rm -rf "$temporary"; fi
@@ -180,17 +187,42 @@ if state_is_ready; then
 else
     mkdir -p "$runtime_root"
     attempts=0
+    unowned_attempts=0
+    trap cleanup EXIT HUP INT TERM
     while ! mkdir "$lock_dir" 2>/dev/null; do
+        lock_has_owner=no
         if [ -r "$lock_dir/pid" ]; then
             owner=$(sed -n '1p' "$lock_dir/pid")
-            case "$owner" in *[!0-9]*|'') ;; *) kill -0 "$owner" 2>/dev/null || rm -rf "$lock_dir" ;; esac
+            case "$owner" in
+                *[!0-9]*|'') ;;
+                *)
+                    lock_has_owner=yes
+                    if ! kill -0 "$owner" 2>/dev/null; then
+                        rm -rf "$lock_dir"
+                        continue
+                    fi
+                    ;;
+            esac
+        fi
+        if [ "$lock_has_owner" = yes ]; then
+            unowned_attempts=0
+        else
+            unowned_attempts=$((unowned_attempts + 1))
+            if [ "$unowned_attempts" -ge {LOCK_OWNER_GRACE_ATTEMPTS} ]; then
+                rm -rf "$lock_dir"
+                unowned_attempts=0
+                continue
+            fi
         fi
         attempts=$((attempts + 1))
         [ "$attempts" -lt "$lock_timeout" ] || fail "Timed out waiting for $lock_dir"
         sleep 1
     done
-    printf '%s\n' "$$" > "$lock_dir/pid"
-    trap cleanup EXIT HUP INT TERM
+    if ! printf '%s\n' "$$" > "$lock_dir/pid"; then
+        rm -rf "$lock_dir"
+        fail "Cannot record lock owner in $lock_dir"
+    fi
+    lock_acquired=yes
     if state_is_ready; then
         reused=yes
     else

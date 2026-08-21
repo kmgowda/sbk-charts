@@ -17,7 +17,7 @@ The file extracts itself only when its saved payload is absent or invalid. Later
 | Delivery | Destination requirement | First execution | Later execution |
 |---|---|---|---|
 | Source launcher | Bash or PowerShell and network for new managed setup | Install Python and selected locked profile | Validate and reuse the saved environment |
-| Self-extracting portable file | Native OS shell and standard extraction tools | Verify and extract embedded bundled runtime | Validate and reuse saved bundled runtime |
+| Self-extracting portable file | Target-specific native requirements described below | Verify and extract embedded bundled runtime | Validate and reuse saved bundled runtime |
 | Wheel | Compatible Python and installer | Install package and dependencies | Use installed Python environment |
 
 ## Supported files
@@ -56,7 +56,7 @@ Get-FileHash .\sbk-charts-<version>-windows-amd64.exe -Algorithm SHA256
 Get-Content .\sbk-charts-<version>-windows-amd64.exe.sha256
 ```
 
-The external checksum covers the complete release file. The launcher also verifies the embedded payload before extracting it. The payload contains `manifest.json`, which records the SHA-256 of every bundled file.
+The external checksum covers the complete release file. The launcher also verifies the embedded payload before extracting it. The payload contains `manifest.json`, which records the SHA-256 of every bundled file except `manifest.json` itself.
 
 ## Run
 

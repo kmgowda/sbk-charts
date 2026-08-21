@@ -120,11 +120,26 @@ internal static class SbkChartsSelfExtractor
     {
         if (!File.Exists(Executable) || !File.Exists(Marker) || !File.Exists(StateFile))
             return false;
-        if (!String.Equals(File.ReadAllText(Marker).Trim(), PayloadSha256,
+        string markerText;
+        string[] stateLines;
+        try
+        {
+            markerText = File.ReadAllText(Marker);
+            stateLines = File.ReadAllLines(StateFile);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+        if (!String.Equals(markerText.Trim(), PayloadSha256,
             StringComparison.OrdinalIgnoreCase))
             return false;
         Dictionary<string, string> state = new Dictionary<string, string>();
-        foreach (string line in File.ReadAllLines(StateFile))
+        foreach (string line in stateLines)
         {
             int separator = line.IndexOf('=');
             if (separator > 0)

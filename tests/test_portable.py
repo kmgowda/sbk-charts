@@ -80,6 +80,23 @@ class PortableReleaseTest(unittest.TestCase):
             }
         )
 
+    @staticmethod
+    def replace_policy_value(
+        source: str,
+        section: str,
+        key: str,
+        value: str,
+    ) -> str:
+        """Replace exactly one INI value within its named section."""
+        pattern = (
+            rf"(?ms)(^\[{re.escape(section)}\]\s*$.*?"
+            rf"^\s*{re.escape(key)}\s*=\s*)[^\r\n]*"
+        )
+        updated, replacements = re.subn(pattern, rf"\g<1>{value}", source, count=1)
+        if replacements != 1:
+            raise AssertionError(f"Policy value not found: [{section}] {key}")
+        return updated
+
     def test_source_files_include_the_license_header(self):
         root = build_portable.ROOT
         python_files = sorted(
@@ -435,6 +452,8 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn('private const string Version = "1.2.3.4";', source)
         self.assertIn('private const string PayloadSha256 = "' + "a" * 64 + '";', source)
         self.assertIn("Mutex", source)
+        self.assertIn("catch (IOException)", source)
+        self.assertIn("catch (UnauthorizedAccessException)", source)
         self.assertIn("Embedded payload failed SHA-256 verification", source)
         self.assertIn("self-extract-created", source)
 
@@ -493,6 +512,45 @@ class PortableReleaseTest(unittest.TestCase):
             self.assertEqual(1, output.count("Environment created this run: yes"))
             self.assertEqual(1, output.count("Saved environment reused: yes"))
             self.assertFalse((root / "runtime" / f"bootstrap-{target}.lock").exists())
+
+    @unittest.skipIf(os.name == "nt", "Unix self-extractor test")
+    def test_unix_self_extractor_recovers_a_lock_without_owner_metadata(self):
+        """Recover after interruption leaves a lock directory without a PID."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = build_portable.current_platform(self.policy)
+            with (
+                patch.object(build_portable, "application_version", return_value="1.2.3.4"),
+                patch.object(build_portable, "current_platform", return_value=target),
+                patch.object(build_portable.subprocess, "run", side_effect=self.fake_run),
+            ):
+                artifact = build_portable.build_bundle(root / "output")
+
+            runtime = root / "runtime"
+            stale_lock = runtime / f"bootstrap-{target}.lock"
+            stale_lock.mkdir(parents=True)
+            fake_bin = root / "fake-bin"
+            fake_bin.mkdir()
+            fake_sleep = fake_bin / "sleep"
+            fake_sleep.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            fake_sleep.chmod(0o755)
+            environment = {
+                **os.environ,
+                "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+                "SBK_CHARTS_PORTABLE_ROOT": str(runtime),
+            }
+            result = subprocess.run(
+                [str(artifact), "--help"],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=environment,
+                timeout=30,
+            )
+
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertIn("Selection source: self-extract-created", result.stdout)
+            self.assertFalse(stale_lock.exists())
 
     @unittest.skipIf(os.name == "nt", "Unix self-extractor test")
     def test_unix_self_extractor_rejects_a_corrupt_payload_and_cleans_up(self):
@@ -626,6 +684,64 @@ class PortableReleaseTest(unittest.TestCase):
             policy_file.write_text(source, encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "Runtime state schema"):
                 load_policy(policy_file)
+
+    def test_policy_rejects_invalid_portable_and_download_values(self):
+        """Exercise every portable-runtime and download-policy validation."""
+        cases = (
+            (
+                "portable",
+                "runtime_state_schema",
+                "0",
+                "Portable runtime state schema must be at least one",
+            ),
+            (
+                "portable",
+                "bootstrap_lock_timeout_seconds",
+                "0",
+                "Portable bootstrap lock timeout must be at least one second",
+            ),
+            (
+                "portable",
+                "runtime_directory",
+                "/absolute/runtime",
+                "Portable runtime directory must be a non-empty relative path",
+            ),
+            (
+                "bootstrap",
+                "connect_timeout_seconds",
+                "0",
+                "Bootstrap download timeouts must be at least one second",
+            ),
+            (
+                "bootstrap",
+                "download_timeout_seconds",
+                "0",
+                "Bootstrap download timeouts must be at least one second",
+            ),
+            (
+                "bootstrap",
+                "download_retries",
+                "0",
+                "Bootstrap download retries must be at least one",
+            ),
+            (
+                "runtime",
+                "default_profile",
+                "",
+                "Default dependency profile must not be empty",
+            ),
+        )
+        original = POLICY_FILE.read_text(encoding="utf-8")
+        for section, key, value, message in cases:
+            with self.subTest(section=section, key=key):
+                with tempfile.TemporaryDirectory() as temporary:
+                    policy_file = Path(temporary) / "sbk-charts.ini"
+                    policy_file.write_text(
+                        self.replace_policy_value(original, section, key, value),
+                        encoding="utf-8",
+                    )
+                    with self.assertRaisesRegex(ValueError, re.escape(message)):
+                        load_policy(policy_file)
 
     def test_version_resolution_ignores_non_module_assignments_and_text(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -912,6 +1028,8 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn('"runtime.bootstrap_lock_timeout_seconds"', powershell_launcher)
         self.assertIn('"bootstrap.download_timeout_seconds"', powershell_launcher)
         self.assertIn("-TimeoutSec $BootstrapDownloadTimeoutSeconds", powershell_launcher)
+        self.assertIn("function Get-PositivePolicyInteger", powershell_launcher)
+        self.assertNotIn("$BootstrapConnectTimeoutSeconds", powershell_launcher)
         self.assertIn("$SkipApplicationValue = $false", powershell_launcher)
         self.assertIn("--require-hashes --requirement", powershell_launcher)
         self.assertIn("venv --relocatable --managed-python", powershell_launcher)
@@ -1000,6 +1118,9 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn("Selection source: self-extract-created", workflow)
         self.assertIn("Saved environment reused: yes", workflow)
         self.assertIn("self-extract-report.xlsx", workflow)
+        self.assertIn('"concurrency-ready"', workflow)
+        self.assertIn("Timed out waiting for concurrent extraction start barrier", workflow)
+        self.assertIn("Wait-Job -Job $Jobs -Timeout 600", workflow)
         self.assertEqual(workflow.count("actions/checkout@"), workflow.count("persist-credentials: false"))
         self.assertIn("cache-dependency-path: |", workflow)
         self.assertIn("requirements-ai/*.txt", workflow)

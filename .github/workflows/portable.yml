@@ -92,20 +92,38 @@ jobs:
       run: |
         $Artifact = Get-ChildItem dist/portable/*.exe | Select-Object -First 1
         $env:SBK_CHARTS_PORTABLE_ROOT = Join-Path $env:RUNNER_TEMP "sbk-charts-portable-test"
-        $First = Start-Job -ScriptBlock {
-          param($Path, $Root)
+        $ReadyDirectory = Join-Path $env:SBK_CHARTS_PORTABLE_ROOT "concurrency-ready"
+        New-Item -ItemType Directory -Force -Path $ReadyDirectory | Out-Null
+        $ConcurrentRun = {
+          param($Path, $Root, $ReadyDirectory, $ReadyName)
           $env:SBK_CHARTS_PORTABLE_ROOT = $Root
+          Set-Content -LiteralPath (Join-Path $ReadyDirectory "$ReadyName.ready") `
+            -Value $PID -Encoding ASCII
+          $BarrierDeadline = (Get-Date).AddSeconds(30)
+          while (@(Get-ChildItem -LiteralPath $ReadyDirectory -Filter "*.ready" -File).Count -lt 2) {
+            if ((Get-Date) -ge $BarrierDeadline) {
+              throw "Timed out waiting for concurrent extraction start barrier"
+            }
+            Start-Sleep -Milliseconds 50
+          }
           & $Path -h
-        } -ArgumentList $Artifact.FullName, $env:SBK_CHARTS_PORTABLE_ROOT
-        $Concurrent = Start-Job -ScriptBlock {
-          param($Path, $Root)
-          $env:SBK_CHARTS_PORTABLE_ROOT = $Root
-          & $Path -h
-        } -ArgumentList $Artifact.FullName, $env:SBK_CHARTS_PORTABLE_ROOT
-        Wait-Job $First, $Concurrent | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "Self-extracting application failed" }
+        }
+        $First = Start-Job -ScriptBlock $ConcurrentRun -ArgumentList `
+          $Artifact.FullName, $env:SBK_CHARTS_PORTABLE_ROOT, $ReadyDirectory, "first"
+        $Concurrent = Start-Job -ScriptBlock $ConcurrentRun -ArgumentList `
+          $Artifact.FullName, $env:SBK_CHARTS_PORTABLE_ROOT, $ReadyDirectory, "concurrent"
+        $Jobs = @($First, $Concurrent)
+        $Completed = @(Wait-Job -Job $Jobs -Timeout 600)
+        if ($Completed.Count -ne $Jobs.Count) {
+          $Jobs | Stop-Job
+          throw "Concurrent extraction did not finish within 600 seconds"
+        }
+        if ($First.State -ne "Completed" -or $Concurrent.State -ne "Completed") {
+          throw "Concurrent extraction failed"
+        }
         Receive-Job $First | Set-Content first-help.txt
         Receive-Job $Concurrent | Set-Content concurrent-help.txt
-        if ($First.State -ne "Completed" -or $Concurrent.State -ne "Completed") { throw "Concurrent extraction failed" }
         $ConcurrentOutput = Get-Content first-help.txt, concurrent-help.txt
         if (($ConcurrentOutput | Select-String "Selection source: self-extract-created").Count -ne 1) { throw "Exactly one process must create the payload" }
         if (($ConcurrentOutput | Select-String "Saved environment reused: yes").Count -ne 1) { throw "Exactly one concurrent process must reuse the payload" }

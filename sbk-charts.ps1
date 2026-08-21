@@ -51,6 +51,20 @@ function Get-RequiredPolicyValue {
     return $Value
 }
 
+function Get-PositivePolicyInteger {
+    param(
+        [hashtable] $Policy,
+        [string] $Key,
+        [string] $Description
+    )
+    $ParsedValue = 0
+    $Value = Get-RequiredPolicyValue $Policy $Key
+    if (-not [int]::TryParse($Value, [ref] $ParsedValue) -or $ParsedValue -lt 1) {
+        throw "$Description must be at least one"
+    }
+    return $ParsedValue
+}
+
 $Policy = Read-ProjectPolicy $PolicyFile
 $AppName = Get-RequiredPolicyValue $Policy "application.name"
 $DistributionName = Get-RequiredPolicyValue $Policy "application.distribution_name"
@@ -60,25 +74,15 @@ $MinimumPython = Get-RequiredPolicyValue $Policy "runtime.minimum_python"
 $ManagedPython = Get-RequiredPolicyValue $Policy "runtime.managed_python"
 $ManagedRuntimeName = Get-RequiredPolicyValue $Policy "runtime.managed_runtime_directory"
 $LockDirectoryName = Get-RequiredPolicyValue $Policy "runtime.lock_directory"
-$BootstrapLockTimeoutValue = Get-RequiredPolicyValue $Policy "runtime.bootstrap_lock_timeout_seconds"
-$BootstrapLockTimeoutSeconds = 0
-$BootstrapLockTimeoutIsValid = [int]::TryParse(
-    $BootstrapLockTimeoutValue,
-    [ref] $BootstrapLockTimeoutSeconds
-)
-if (-not $BootstrapLockTimeoutIsValid -or $BootstrapLockTimeoutSeconds -lt 1) {
-    throw "Bootstrap lock timeout must be at least one second"
-}
+$BootstrapLockTimeoutSeconds = Get-PositivePolicyInteger $Policy `
+    "runtime.bootstrap_lock_timeout_seconds" "Bootstrap lock timeout in seconds"
 $BootstrapManager = Get-RequiredPolicyValue $Policy "bootstrap.manager"
 $BootstrapManagerVersion = Get-RequiredPolicyValue $Policy "bootstrap.manager_version"
 $BootstrapDownloadBaseUrl = Get-RequiredPolicyValue $Policy "bootstrap.download_base_url"
-$BootstrapConnectTimeoutSeconds = [int](Get-RequiredPolicyValue $Policy "bootstrap.connect_timeout_seconds")
-$BootstrapDownloadTimeoutSeconds = [int](Get-RequiredPolicyValue $Policy "bootstrap.download_timeout_seconds")
-$BootstrapDownloadRetries = [int](Get-RequiredPolicyValue $Policy "bootstrap.download_retries")
-if ($BootstrapConnectTimeoutSeconds -lt 1 -or $BootstrapDownloadTimeoutSeconds -lt 1 -or
-    $BootstrapDownloadRetries -lt 1) {
-    throw "Bootstrap download timeouts and retries must be at least one"
-}
+$BootstrapDownloadTimeoutSeconds = Get-PositivePolicyInteger $Policy `
+    "bootstrap.download_timeout_seconds" "Bootstrap download timeout in seconds"
+$BootstrapDownloadRetries = Get-PositivePolicyInteger $Policy `
+    "bootstrap.download_retries" "Bootstrap download retries"
 $DefaultCondaEnvironment = Get-RequiredPolicyValue $Policy "runtime.default_conda_environment"
 $DefaultProfile = Get-RequiredPolicyValue $Policy "runtime.default_profile"
 $RuntimeStateName = Get-RequiredPolicyValue $Policy "runtime.runtime_state_file"

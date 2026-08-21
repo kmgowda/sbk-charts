@@ -57,7 +57,7 @@ Defines:
 
 ### `[bootstrap]`
 
-Pins the standalone runtime manager version, official download base URL, native archives, and SHA-256 checksums. Adding a target requires both an archive and checksum.
+Pins the standalone runtime manager version, official download base URL, native archives, SHA-256 checksums, download retries, and timeouts. Bash applies both the connection and total download timeouts. Windows PowerShell uses `Invoke-WebRequest`, which exposes only the total download timeout, so it does not apply the separate connection-timeout value.
 
 ### `[ai.requirements]`
 
