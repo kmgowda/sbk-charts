@@ -80,7 +80,7 @@ sbk-charts.bat -i samples\charts\sbk-file-read.csv -o out.xlsx
 
 On first use, the source launcher reuses a valid existing environment when possible. Otherwise, on a supported target, it downloads a pinned, checksum-verified `uv`, installs the project-managed Python 3.12.10, and creates a locked environment under `.sbk-runtime/`. This works even when Python, venv, and Conda are absent. The first bootstrap needs HTTPS access to GitHub Releases and the Python package index. If managed setup is unsupported or fails, the launcher removes unpublished temporary files and tries usable system Python interpreters and Conda before it gives up.
 
-Later runs validate and reuse the saved environment without downloading anything when it is still compatible with the application, selected profile, and dependency lock. Before starting the application, the launcher prints the operating system, exact Python executable and version, environment type and path, dependency profile, selection source, whether saved state was reused, and whether the environment was created during this run. Core chart generation installs only core packages. Selecting an AI backend creates or reuses that backend's dependency profile, so PyTorch and cloud SDKs are not required for normal chart generation.
+Later runs validate and reuse the saved environment without downloading anything when it is still compatible with the application, selected profile, and dependency lock. Before parsing application arguments, startup prints the operating system, exact Python executable and version, environment type and path, dependency profile, selection source, whether saved state was reused, whether the environment was created during this run, and the sbk-charts version. The version is therefore visible even when required arguments are missing. Core chart generation installs only core packages. Selecting an AI backend creates or reuses that backend's dependency profile, so PyTorch and cloud SDKs are not required for normal chart generation.
 
 Example second-run report:
 
@@ -92,6 +92,7 @@ sbk-charts: Dependency profile: core
 sbk-charts: Selection source: saved-state
 sbk-charts: Saved environment reused: yes
 sbk-charts: Environment created this run: no
+Sbk Charts Version : <version>
 ```
 
 Common selection sources are `saved-state`, `explicit-venv`, `active-venv`, `active-conda`, `project-venv`, `managed-cache`, `named-conda`, and the `created-*` variants. `saved-state` with `Saved environment reused: yes` is the normal second-run result. A different source means the saved environment was absent, overridden, incompatible, or failed validation.

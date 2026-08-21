@@ -115,9 +115,10 @@ sbk-charts: Dependency profile: all-ai
 sbk-charts: Selection source: self-extract-created
 sbk-charts: Saved environment reused: no
 sbk-charts: Environment created this run: yes
+Sbk Charts Version : <version>
 ```
 
-The second execution reports `self-extract-cache`, reuse `yes`, and creation `no`.
+The second execution reports `self-extract-cache`, reuse `yes`, and creation `no`. The application version is printed before argument parsing, so it is also present when execution stops because a required argument is missing.
 
 ## Internal file format
 

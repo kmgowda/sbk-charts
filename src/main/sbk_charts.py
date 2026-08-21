@@ -52,12 +52,12 @@ def sbk_charts():
     Returns
     - None
     """
+    print("Sbk Charts Version : " + __sbk_version__, flush=True)
     parser = get_sbk_parser()
     ch = SbkAI()
     ch.add_args(parser)
     args = parser.parse_args()
     print(open(SBK_BANNER_FILE, 'r').read())
-    print("Sbk Charts Version : " + __sbk_version__)
     print('Input Files : ', args.ifiles)
     print('Output File : ', args.ofile)
 

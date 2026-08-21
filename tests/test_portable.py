@@ -219,6 +219,23 @@ class PortableReleaseTest(unittest.TestCase):
             captured,
         )
 
+    def test_missing_input_reports_version_before_parser_error(self):
+        """Show the application version even when required arguments are absent."""
+        result = subprocess.run(
+            [sys.executable, "-m", self.policy.application.module],
+            cwd=build_portable.ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            check=False,
+        )
+        version_line = f"Sbk Charts Version : {application_version(self.policy)}"
+        parser_error = "the following arguments are required: -i/--ifiles"
+        self.assertEqual(2, result.returncode, result.stdout)
+        self.assertIn(version_line, result.stdout)
+        self.assertIn(parser_error, result.stdout)
+        self.assertLess(result.stdout.index(version_line), result.stdout.index(parser_error))
+
     @staticmethod
     def unix_payload(artifact: Path) -> bytes:
         """Read the binary payload appended after the generated shell launcher."""
