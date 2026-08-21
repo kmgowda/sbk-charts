@@ -14,6 +14,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag that should receive rebuilt portable files
+        required: false
+        type: string
   release:
     types: [published]
 
@@ -139,7 +144,8 @@ jobs:
         path: dist/portable/*
         if-no-files-found: error
     - name: Attach portable files to the GitHub release
-      if: github.event_name == 'release'
+      if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
       env:
         GH_TOKEN: ${{ github.token }}
-      run: gh release upload "${{ github.event.release.tag_name }}" dist/portable/* --clobber
+        RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+      run: gh release upload "$RELEASE_TAG" dist/portable/* --clobber

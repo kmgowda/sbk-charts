@@ -324,6 +324,27 @@ Changing the version, creating tags, pushing, and publishing require explicit us
 5. Commit and tag only after reviewing the exact diff and artifact list.
 6. Push and publish only when specifically authorized.
 
+After the approved version change is merged to the latest `main`, use the
+release coordinator. Prepare first so package names, hashes, and generated notes
+can be reviewed without changing GitHub:
+
+```bash
+venv-sbk-charts/bin/python scripts/create_github_release.py
+```
+
+Publish only with explicit approval:
+
+```bash
+venv-sbk-charts/bin/python scripts/create_github_release.py --publish
+```
+
+The coordinator pushes the annotated version tag, uploads the wheel, source
+distribution, and package checksums, publishes the release, and waits for the
+native workflow to attach every policy-declared application and checksum. It
+also rejects tracked checkout debris, environments, caches, reports, and build
+artifacts before tagging. Read [RELEASING.md](RELEASING.md) for prerequisites,
+the complete artifact list, recovery, and repository-content checks.
+
 Use placeholders in reusable instructions:
 
 ```bash

@@ -42,6 +42,7 @@ On supported targets, source launchers can install an exact managed Python and l
 | New AI plugin contract | [docs/PLUGIN_SPECIFICATION.md](docs/PLUGIN_SPECIFICATION.md) |
 | Shared configuration ownership | [docs/POLICY.md](docs/POLICY.md) |
 | Standalone archives | [docs/PORTABLE.md](docs/PORTABLE.md) |
+| Complete GitHub release procedure | [docs/RELEASING.md](docs/RELEASING.md) |
 | Backend setup and flags | [src/custom_ai/README.md](src/custom_ai/README.md) |
 
 ## 3. Code map
