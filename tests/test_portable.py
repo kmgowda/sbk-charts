@@ -92,7 +92,12 @@ class PortableReleaseTest(unittest.TestCase):
             rf"(?ms)(^\[{re.escape(section)}\]\s*$.*?"
             rf"^\s*{re.escape(key)}\s*=\s*)[^\r\n]*"
         )
-        updated, replacements = re.subn(pattern, rf"\g<1>{value}", source, count=1)
+        updated, replacements = re.subn(
+            pattern,
+            lambda match: f"{match.group(1)}{value}",
+            source,
+            count=1,
+        )
         if replacements != 1:
             raise AssertionError(f"Policy value not found: [{section}] {key}")
         return updated
