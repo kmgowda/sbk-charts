@@ -78,6 +78,7 @@ Start from behavior, not from filenames.
 | Chat grounding | `src/rag/sbk_rag.py` | Architecture section 12 |
 | Source bootstrap | Root launchers | Policy helper and recipe 11 |
 | Self-extracting portable releases | `scripts/build_portable.py` | `docs/PORTABLE.md` |
+| Complete GitHub release | `scripts/create_github_release.py` | `docs/RELEASING.md` |
 
 Useful discovery commands:
 

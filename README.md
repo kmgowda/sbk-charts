@@ -407,6 +407,7 @@ PyTorch wheels vary by operating system and processor. The `pytorchllm` profile 
 | Designing a new AI backend | [Plugin specification template](docs/PLUGIN_SPECIFICATION.md) |
 | Runtime and release configuration ownership | [Runtime and artifact policy](docs/POLICY.md) |
 | Standalone release archives | [Portable distributions](docs/PORTABLE.md) |
+| Publishing a complete GitHub release | [GitHub release guide](docs/RELEASING.md) |
 | AI backend setup and flags | [AI backends](src/custom_ai/README.md) |
 
 ## Contributing
