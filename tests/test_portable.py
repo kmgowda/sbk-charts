@@ -228,7 +228,8 @@ class PortableReleaseTest(unittest.TestCase):
             archive = build_portable.build_bundle(Path(temporary))
             bundle_name = f"{self.policy.application.name}-1.2.3.4-linux-amd64"
             self.assertEqual(f"{bundle_name}.run", archive.name)
-            self.assertTrue(archive.stat().st_mode & 0o100)
+            if os.name != "nt":
+                self.assertTrue(archive.stat().st_mode & 0o100)
             checksum_path = archive.with_suffix(archive.suffix + self.policy.portable.checksum_suffix)
             expected = hashlib.sha256(archive.read_bytes()).hexdigest()
             self.assertEqual(f"{expected}  {archive.name}\n", checksum_path.read_text(encoding="utf-8"))
@@ -281,12 +282,14 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertIn("Embedded payload failed SHA-256 verification", source)
         self.assertIn("self-extract-created", source)
 
+    @unittest.skipIf(os.name == "nt", "Unix self-extractor test")
     def test_unix_self_extractor_creates_then_reuses_saved_application(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            target = build_portable.current_platform(self.policy)
             with (
                 patch.object(build_portable, "application_version", return_value="1.2.3.4"),
-                patch.object(build_portable, "current_platform", return_value="linux-amd64"),
+                patch.object(build_portable, "current_platform", return_value=target),
                 patch.object(build_portable.subprocess, "run", side_effect=self.fake_run),
             ):
                 artifact = build_portable.build_bundle(root / "output")
@@ -306,15 +309,17 @@ class PortableReleaseTest(unittest.TestCase):
             self.assertIn("Selection source: self-extract-cache", second.stdout)
             self.assertIn("Saved environment reused: yes", second.stdout)
             self.assertIn("Environment created this run: no", second.stdout)
-            self.assertTrue((root / "runtime" / "state-linux-amd64").is_file())
-            self.assertFalse((root / "runtime" / "bootstrap-linux-amd64.lock").exists())
+            self.assertTrue((root / "runtime" / f"state-{target}").is_file())
+            self.assertFalse((root / "runtime" / f"bootstrap-{target}.lock").exists())
 
+    @unittest.skipIf(os.name == "nt", "Unix self-extractor test")
     def test_unix_self_extractor_serializes_concurrent_first_execution(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            target = build_portable.current_platform(self.policy)
             with (
                 patch.object(build_portable, "application_version", return_value="1.2.3.4"),
-                patch.object(build_portable, "current_platform", return_value="linux-amd64"),
+                patch.object(build_portable, "current_platform", return_value=target),
                 patch.object(build_portable.subprocess, "run", side_effect=self.fake_run),
             ):
                 artifact = build_portable.build_bundle(root / "output")
@@ -331,14 +336,16 @@ class PortableReleaseTest(unittest.TestCase):
             output = "\n".join(stdout for stdout, _stderr in results)
             self.assertEqual(1, output.count("Environment created this run: yes"))
             self.assertEqual(1, output.count("Saved environment reused: yes"))
-            self.assertFalse((root / "runtime" / "bootstrap-linux-amd64.lock").exists())
+            self.assertFalse((root / "runtime" / f"bootstrap-{target}.lock").exists())
 
+    @unittest.skipIf(os.name == "nt", "Unix self-extractor test")
     def test_unix_self_extractor_rejects_a_corrupt_payload_and_cleans_up(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            target = build_portable.current_platform(self.policy)
             with (
                 patch.object(build_portable, "application_version", return_value="1.2.3.4"),
-                patch.object(build_portable, "current_platform", return_value="linux-amd64"),
+                patch.object(build_portable, "current_platform", return_value=target),
                 patch.object(build_portable.subprocess, "run", side_effect=self.fake_run),
             ):
                 artifact = build_portable.build_bundle(root / "output")
@@ -353,7 +360,7 @@ class PortableReleaseTest(unittest.TestCase):
             )
             self.assertNotEqual(0, result.returncode)
             self.assertIn("failed SHA-256 verification", result.stderr)
-            self.assertFalse((runtime / "bootstrap-linux-amd64.lock").exists())
+            self.assertFalse((runtime / f"bootstrap-{target}.lock").exists())
             self.assertEqual([], list(runtime.glob(".install.*")))
 
     def test_windows_zip_member_names_use_posix_separators(self):
