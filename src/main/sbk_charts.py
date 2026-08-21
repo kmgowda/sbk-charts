@@ -59,10 +59,16 @@ def sbk_charts():
     Returns
     - None
     """
-    _print_startup_identity()
     parser = get_sbk_parser()
     ch = SbkAI()
     ch.add_args(parser)
+    version_option = next(
+        (argument for argument in sys.argv[1:] if argument in {"-version", "--version"}),
+        None,
+    )
+    if version_option:
+        parser.parse_args([version_option])
+    _print_startup_identity()
     args = parser.parse_args()
     print('Input Files : ', args.ifiles)
     print('Output File : ', args.ofile)

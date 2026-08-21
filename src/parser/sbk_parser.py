@@ -15,6 +15,7 @@ It defines the argument parser configuration and provides a clean interface
 for accessing command-line arguments.
 
 Features:
+- Application version reporting without input files
 - Input file specification (CSV format)
 - Output file configuration (XLSX format)
 - AI backend selection and configuration
@@ -29,20 +30,29 @@ Example Usage:
 
 import argparse
 
+from src.version.sbk_version import __sbk_version__
 
-def get_sbk_parser():
+
+def get_sbk_parser() -> argparse.ArgumentParser:
     """Create and configure the argument parser for SBK Charts.
     
     Returns:
         argparse.ArgumentParser: Configured argument parser with SBK-specific arguments.
         
     The parser includes the following arguments:
+        -version, --version: Print the application version and exit
         -i, --ifiles: Comma-separated list of input CSV files (required)
         -o, --ofile: Output XLSX file path (default: 'out.xlsx')
     """
     parser = argparse.ArgumentParser(
         description='SBK Charts - Storage Benchmark Visualization and AI analytics Tool',
         epilog='Please report issues at https://github.com/kmgowda/sbk-charts'
+    )
+    parser.add_argument(
+        '-version', '--version',
+        action='version',
+        version=f'Sbk Charts Version : {__sbk_version__}',
+        help='Show the sbk-charts version and exit'
     )
     parser.add_argument(
         '-i', '--ifiles',

@@ -238,6 +238,22 @@ class PortableReleaseTest(unittest.TestCase):
         self.assertLess(result.stdout.index("_____"), result.stdout.index(version_line))
         self.assertLess(result.stdout.index(version_line), result.stdout.index(parser_error))
 
+    def test_version_options_print_one_version_and_exit_successfully(self):
+        """Support both the requested short spelling and conventional alias."""
+        version_line = f"Sbk Charts Version : {application_version(self.policy)}"
+        for option in ("-version", "--version"):
+            with self.subTest(option=option):
+                result = subprocess.run(
+                    [sys.executable, "-m", self.policy.application.module, option],
+                    cwd=build_portable.ROOT,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual(version_line, result.stdout.strip())
+                self.assertEqual("", result.stderr)
+
     @staticmethod
     def unix_payload(artifact: Path) -> bytes:
         """Read the binary payload appended after the generated shell launcher."""

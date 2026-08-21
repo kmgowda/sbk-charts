@@ -113,6 +113,7 @@ Common options:
 | `-secs`, `--seconds` | Total AI analysis time budget in seconds. Default: `120`. |
 | `-nothreads` | Run the four AI analyses one at a time. Useful for local or GPU models. |
 | `-chat` | Start interactive chat after workbook analysis. Requires an AI backend. |
+| `-version`, `--version` | Print the sbk-charts version and exit. No input file is required. |
 | `-h`, `--help` | Show general help. Put `-h` after a backend name for backend-specific help. |
 
 Global options must come before the AI backend name. Backend-specific options come after it.
@@ -148,6 +149,12 @@ Show the available AI backends:
 
 ```bash
 ./sbk-charts -h
+```
+
+Show the installed sbk-charts version:
+
+```bash
+./sbk-charts -version
 ```
 
 Show options for one backend. The required input is only present so the top-level parser can run:
