@@ -29,12 +29,9 @@ Requirements:
 import os
 import google.genai as genai
 from typing import Tuple
-from src.genai.genai import SbkGenAI
 
-# Default Gemini configuration
-DEFAULT_MODEL = "gemini-2.5-flash"
-DEFAULT_MAX_TOKENS = 2048
-DEFAULT_TEMPERATURE = 0.4
+from src.ai.defaults import GEMINI_DEFAULTS
+from src.genai.genai import SbkGenAI
 
 
 def _test_api_access(api_key):
@@ -63,9 +60,11 @@ class Gemini(SbkGenAI):
     
     Configuration:
     - API Key: Set via GEMINI_API_KEY environment variable
-    - Model: Specify with --gemini-model (default: gemini-1.5-flash)
-    - Temperature: Control response randomness with --gemini-temperature (0.0-1.0)
+    - Model: Specify with --gemini-model
+    - Temperature: Control response randomness with --gemini-temperature
     - Max Tokens: Set maximum response length with --gemini-max-tokens
+
+    Run the ``gemini -h`` subcommand for the current defaults.
     
     The implementation includes automatic error handling and provides detailed
     technical analysis suitable for storage performance engineering.
@@ -81,9 +80,9 @@ class Gemini(SbkGenAI):
         """Initialize the Gemini backend with default configuration."""
         super().__init__()
         self.api_key = os.getenv("GEMINI_API_KEY")
-        self.model = DEFAULT_MODEL
-        self.max_tokens = DEFAULT_MAX_TOKENS
-        self.temperature = DEFAULT_TEMPERATURE
+        self.model = GEMINI_DEFAULTS.model
+        self.max_tokens = GEMINI_DEFAULTS.max_tokens
+        self.temperature = GEMINI_DEFAULTS.temperature
         self._client = None
         
         # Initialize the Google AI SDK client if API key is available
@@ -92,30 +91,6 @@ class Gemini(SbkGenAI):
                 self._client = genai.Client(api_key=self.api_key)
             except Exception as e:
                 print(f"Warning: Failed to initialize Gemini client: {str(e)}")
-
-    def add_args(self, parser):
-        """Add command-line arguments for Gemini configuration.
-        
-        Args:
-            parser: ArgumentParser instance to add arguments to
-        """
-        parser.add_argument(
-            "--gemini-model",
-            help=f"Gemini model to use (default: {DEFAULT_MODEL})",
-            default=DEFAULT_MODEL
-        )
-        parser.add_argument(
-            "--gemini-max-tokens",
-            type=int,
-            help=f"Maximum tokens to generate (default: {DEFAULT_MAX_TOKENS})",
-            default=DEFAULT_MAX_TOKENS
-        )
-        parser.add_argument(
-            "--gemini-temperature",
-            type=float,
-            help=f"Sampling temperature (default: {DEFAULT_TEMPERATURE})",
-            default=DEFAULT_TEMPERATURE
-        )
 
     def parse_args(self, args):
         """Parse command-line arguments.

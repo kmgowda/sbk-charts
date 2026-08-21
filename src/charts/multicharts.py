@@ -33,7 +33,13 @@ from openpyxl.utils import get_column_letter
 from ordered_set import OrderedSet
 
 from src.sheets import constants
-from .charts import SbkCharts
+from .charts import (
+    COUNT_AXIS_TITLE,
+    INTERVALS_AXIS_TITLE,
+    LATENCY_AXIS_TITLE_PREFIX,
+    PERCENTILES_AXIS_TITLE,
+    SbkCharts,
+)
 from typing import final
 
 from .utils import is_r_num_sheet, is_t_num_sheet, get_time_unit_from_worksheet, get_storage_name_from_worksheet, get_action_name_from_worksheet, get_columns_from_worksheet
@@ -119,7 +125,7 @@ class SbkMultiCharts(SbkCharts):
         DARKYELLOW = 'FF808000'
 
         acts = self.get_actions_storage_map()
-        sheet = self.wb.create_sheet("Summary")
+        sheet = self.wb.create_sheet(constants.SUMMARY_SHEET)
         row = 7
         col = 7
         sheet.column_dimensions[get_column_letter(col)].width = 45
@@ -168,7 +174,9 @@ class SbkMultiCharts(SbkCharts):
         cell.value = "Time Unit"
         cell.font = Font(size="18", bold=False, color=BLUE)
         cell = sheet.cell(row, col + 1)
-        cell.value = get_time_unit_from_worksheet(self.wb[constants.R_PREFIX + "1"])
+        cell.value = get_time_unit_from_worksheet(
+            self.wb[constants.FIRST_RESULT_SHEET]
+        )
         cell.font = Font(size="18", bold=False, color=BLACK)
         row += 2
         for i, key in enumerate(acts):
@@ -195,7 +203,7 @@ class SbkMultiCharts(SbkCharts):
         - openpyxl.worksheet.worksheet.Worksheet: the created sheet, or None if
           no R-sheets have Date/Time columns.
         """
-        sheet = self.wb.create_sheet("Durations")
+        sheet = self.wb.create_sheet(constants.DURATIONS_SHEET)
         # Reasonable column widths so the data is readable on first open
         for i in range(6):
             sheet.column_dimensions[get_column_letter(i + 1)].width = 22
@@ -324,8 +332,8 @@ class SbkMultiCharts(SbkCharts):
         for i, names_list in enumerate(self.slc_percentile_names):
             chart = self.create_line_chart(
                 title,
-                "Percentiles",
-                "Latency time in " + self.time_unit,
+                PERCENTILES_AXIS_TITLE,
+                LATENCY_AXIS_TITLE_PREFIX + self.time_unit,
             )
             x_labels = False
             for name in self.wb.sheetnames:
@@ -353,7 +361,11 @@ class SbkMultiCharts(SbkCharts):
         - Worksheet: the worksheet with the aggregated histogram chart.
         """
         title = "Total Percentiles Histogram"
-        chart = self.create_bar_chart(title, "Percentiles", "Count")
+        chart = self.create_bar_chart(
+            title,
+            PERCENTILES_AXIS_TITLE,
+            COUNT_AXIS_TITLE,
+        )
         x_labels = False
         for name in self.wb.sheetnames:
             if is_t_num_sheet(name):
@@ -381,7 +393,7 @@ class SbkMultiCharts(SbkCharts):
         """
         chart = self.create_line_chart(
             "Throughput Variations in Mega Bytes / Seconds",
-            "Intervals",
+            INTERVALS_AXIS_TITLE,
             "Throughput in MB/Sec",
         )
         for name in self.wb.sheetnames:
@@ -404,7 +416,7 @@ class SbkMultiCharts(SbkCharts):
         """
         chart = self.create_line_chart(
             "Throughput Variations in Records / Seconds",
-            "Intervals",
+            INTERVALS_AXIS_TITLE,
             "Throughput in Records/Sec",
         )
         for name in self.wb.sheetnames:
@@ -427,7 +439,7 @@ class SbkMultiCharts(SbkCharts):
         """
         chart = self.create_line_chart(
             "Write and Read Records Variations",
-            "Intervals",
+            INTERVALS_AXIS_TITLE,
             "Write and Read Records",
         )
         for name in self.wb.sheetnames:
@@ -453,7 +465,7 @@ class SbkMultiCharts(SbkCharts):
         """
         chart = self.create_line_chart(
             "Write and Read MBs Variations",
-            "Intervals",
+            INTERVALS_AXIS_TITLE,
             "Write and Read MBs",
         )
         for name in self.wb.sheetnames:
@@ -510,7 +522,7 @@ class SbkMultiCharts(SbkCharts):
         """
         chart = self.create_line_chart(
             "Write and Read Timeout Events Variations",
-            "Intervals",
+            INTERVALS_AXIS_TITLE,
             "Write and Read Timeout Events",
         )
         for name in self.wb.sheetnames:
@@ -532,7 +544,7 @@ class SbkMultiCharts(SbkCharts):
         """
         chart = self.create_line_chart(
             "Write and Read Timeout Events / Sec Variations",
-            "Intervals",
+            INTERVALS_AXIS_TITLE,
             "Write and Read Timeout Events / Sec",
         )
         for name in self.wb.sheetnames:

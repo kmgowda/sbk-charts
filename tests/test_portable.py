@@ -7,6 +7,7 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 ##
 
+import argparse
 import hashlib
 import io
 import json
@@ -35,6 +36,14 @@ from scripts.project_policy import (
     load_requirements,
     remember_environment,
     runtime_details,
+)
+from src.ai.defaults import (
+    ANTHROPIC_DEFAULTS,
+    GEMINI_DEFAULTS,
+    HUGGING_FACE_DEFAULTS,
+    LM_STUDIO_DEFAULTS,
+    OLLAMA_DEFAULTS,
+    PYTORCH_DEFAULTS,
 )
 from src.ai.registry import BACKENDS
 
@@ -151,6 +160,69 @@ class PortableReleaseTest(unittest.TestCase):
             for option in recorder.options:
                 with self.subTest(backend=backend, option=option):
                     self.assertIn(f"`{option}`", guide)
+
+    def test_backend_cli_defaults_come_from_the_shared_defaults_module(self):
+        """Keep CLI defaults single-sourced and argument registration unique."""
+        expected = {
+            "anthropic": {
+                "anthropic_model": ANTHROPIC_DEFAULTS.model,
+                "anthropic_max_tokens": ANTHROPIC_DEFAULTS.max_tokens,
+                "anthropic_temperature": ANTHROPIC_DEFAULTS.temperature,
+            },
+            "gemini": {
+                "gemini_model": GEMINI_DEFAULTS.model,
+                "gemini_max_tokens": GEMINI_DEFAULTS.max_tokens,
+                "gemini_temperature": GEMINI_DEFAULTS.temperature,
+            },
+            "huggingface": {"model_id": HUGGING_FACE_DEFAULTS.model},
+            "lmstudio": {
+                "url": LM_STUDIO_DEFAULTS.url,
+                "lm_model": LM_STUDIO_DEFAULTS.model,
+                "lm_temperature": LM_STUDIO_DEFAULTS.temperature,
+                "lm_max_tokens": LM_STUDIO_DEFAULTS.max_tokens,
+            },
+            "noai": {},
+            "ollama": {
+                "ollama_url": OLLAMA_DEFAULTS.url,
+                "ollama_model": OLLAMA_DEFAULTS.model,
+                "ollama_temperature": OLLAMA_DEFAULTS.temperature,
+                "ollama_timeout": OLLAMA_DEFAULTS.request_timeout_seconds,
+            },
+            "pytorchllm": {
+                "pt_model": PYTORCH_DEFAULTS.model,
+                "pt_train": PYTORCH_DEFAULTS.train,
+                "pt_device": PYTORCH_DEFAULTS.device,
+                "pt_max_length": PYTORCH_DEFAULTS.max_length,
+                "pt_temperature": PYTORCH_DEFAULTS.temperature,
+                "pt_top_p": PYTORCH_DEFAULTS.top_p,
+            },
+        }
+
+        for backend, descriptor in BACKENDS.items():
+            parser = argparse.ArgumentParser(add_help=False)
+            descriptor.add_arguments(parser)
+            with self.subTest(backend=backend):
+                self.assertEqual(expected[backend], vars(parser.parse_args([])))
+
+        adapter_default_names = {
+            "anthropic": "ANTHROPIC_DEFAULTS",
+            "gemini": "GEMINI_DEFAULTS",
+            "huggingface": "HUGGING_FACE_DEFAULTS",
+            "lmstudio": "LM_STUDIO_DEFAULTS",
+            "noai": None,
+            "ollama": "OLLAMA_DEFAULTS",
+            "pytorchllm": "PYTORCH_DEFAULTS",
+        }
+        for backend, descriptor in BACKENDS.items():
+            implementation = build_portable.ROOT / Path(
+                *descriptor.module.split(".")
+            ).with_suffix(".py")
+            source = implementation.read_text(encoding="utf-8")
+            with self.subTest(implementation=implementation):
+                self.assertNotIn("def add_args(", source)
+                default_name = adapter_default_names[backend]
+                if default_name:
+                    self.assertIn(default_name, source)
 
     def fake_run(self, command: list[str], **_kwargs: object) -> subprocess.CompletedProcess:
         self.commands.append(command)
@@ -457,6 +529,7 @@ class PortableReleaseTest(unittest.TestCase):
 
     def test_central_policy_defines_runtime_and_artifact_metadata(self):
         self.assertEqual("3.10", self.policy.runtime.minimum_python)
+        self.assertEqual("core", self.policy.runtime.default_profile)
         self.assertEqual(".sbk-charts-runtime", self.policy.runtime.runtime_state_file)
         self.assertEqual(1, self.policy.runtime.runtime_state_schema)
         self.assertEqual("venv-sbk-charts", self.policy.runtime.virtual_environment_names[0])
@@ -724,7 +797,7 @@ class PortableReleaseTest(unittest.TestCase):
         ):
             self.assertNotIn(optional_package, core_input)
 
-        for profile in ("core", *self.policy.ai_requirements):
+        for profile in (self.policy.runtime.default_profile, *self.policy.ai_requirements):
             lock = root / self.policy.runtime.lock_directory / f"{profile}.txt"
             self.assertTrue(lock.is_file(), profile)
             contents = lock.read_text(encoding="utf-8")
@@ -786,6 +859,10 @@ class PortableReleaseTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("policy_value runtime minimum_python", bash_launcher)
+        self.assertIn("policy_value runtime default_profile", bash_launcher)
+        self.assertIn('policy_value portable.platforms "$operating_system"', bash_launcher)
+        self.assertIn('policy_value portable.architectures "$machine"', bash_launcher)
+        self.assertNotIn('printf \'%s\\n\' "linux-amd64"', bash_launcher)
         self.assertIn("scripts/project_policy.py\" --environment-ready", bash_launcher)
         self.assertIn('--runtime-details "$environment_kind" "$environment_prefix"', bash_launcher)
         self.assertIn('"$selection_source"', bash_launcher)
@@ -820,6 +897,10 @@ class PortableReleaseTest(unittest.TestCase):
             bash_launcher.index('try_virtual_environment "${VIRTUAL_ENV:-}"'),
         )
         self.assertIn('"runtime.minimum_python"', powershell_launcher)
+        self.assertIn('"runtime.default_profile"', powershell_launcher)
+        self.assertIn('$Policy["portable.platforms.win32"]', powershell_launcher)
+        self.assertIn('$Policy["portable.architectures.$ManagedArchitectureKey"]', powershell_launcher)
+        self.assertNotIn('"windows-amd64"', powershell_launcher)
         self.assertIn("$PolicyReader --environment-ready", powershell_launcher)
         self.assertIn("--runtime-details $EnvironmentKind $EnvironmentPrefix", powershell_launcher)
         self.assertIn("$EnvironmentProfile $SelectionSource $SavedValue $CreatedValue", powershell_launcher)

@@ -28,6 +28,7 @@ internal static class SbkChartsSelfExtractor
     private const string PayloadSha256 = "@@PAYLOAD_SHA256@@";
     private const int LockTimeoutSeconds = @@LOCK_TIMEOUT_SECONDS@@;
     private const int FooterLength = 8;
+    private const int CopyBufferSize = 1024 * 1024;
 
     private static string RuntimeRoot;
     private static string InstallDirectory;
@@ -187,7 +188,7 @@ internal static class SbkChartsSelfExtractor
             using (FileStream output = File.Create(destination))
             using (SHA256 hasher = SHA256.Create())
             {
-                byte[] buffer = new byte[1024 * 1024];
+                byte[] buffer = new byte[CopyBufferSize];
                 long remaining = payloadLength;
                 while (remaining > 0)
                 {

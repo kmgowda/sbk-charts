@@ -28,11 +28,9 @@ Requirements:
 """
 
 import requests
-from src.genai.genai import SbkGenAI
 
-# Default Ollama configuration
-DEFAULT_BASE_URL = "http://localhost:11434"
-DEFAULT_MODEL = "llama3.1"  # Default model
+from src.ai.defaults import OLLAMA_DEFAULTS
+from src.genai.genai import SbkGenAI
 
 
 class Ollama(SbkGenAI):
@@ -43,10 +41,12 @@ class Ollama(SbkGenAI):
     the Ollama REST API and formats benchmark data for effective analysis.
     
     Configuration Options:
-    - Server URL: Configurable via --ollama-url (default: http://localhost:11434)
-    - Model: Specify with --ollama-model (default: llama3.1)
-    - Temperature: Control response randomness with --ollama-temperature (0.0-1.0)
-    - Timeout: Set request timeout with --ollama-timeout (seconds)
+    - Server URL: Configurable via --ollama-url
+    - Model: Specify with --ollama-model
+    - Temperature: Control response randomness with --ollama-temperature
+    - Timeout: Set request timeout with --ollama-timeout
+
+    Run the ``ollama -h`` subcommand for the current defaults.
     
     The implementation includes automatic reconnection and error handling to
     ensure robust operation even if the Ollama server is temporarily unavailable.
@@ -54,10 +54,10 @@ class Ollama(SbkGenAI):
 
     def __init__(self):
         super().__init__()
-        self.base_url = DEFAULT_BASE_URL
-        self.model = DEFAULT_MODEL
-        self.temperature = 0.4
-        self.timeout = 120  # seconds
+        self.base_url = OLLAMA_DEFAULTS.url
+        self.model = OLLAMA_DEFAULTS.model
+        self.temperature = OLLAMA_DEFAULTS.temperature
+        self.timeout = OLLAMA_DEFAULTS.request_timeout_seconds
         self.session = None
 
     def _create_session(self):
@@ -76,39 +76,13 @@ class Ollama(SbkGenAI):
             bool: True if server is accessible, False otherwise
         """
         try:
-            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            response = requests.get(
+                f"{self.base_url}/api/tags",
+                timeout=OLLAMA_DEFAULTS.health_timeout_seconds,
+            )
             return response.status_code == 200
         except requests.RequestException:
             return False
-
-    def add_args(self, parser):
-        """Add command-line arguments for Ollama configuration."""
-        parser.add_argument(
-            "-url",
-            "--ollama-url",
-            help=f"Ollama server URL (default: {DEFAULT_BASE_URL})",
-            default=DEFAULT_BASE_URL
-        )
-        parser.add_argument(
-            "-model",
-            "--ollama-model",
-            help=f"Model name to use (default: {DEFAULT_MODEL})",
-            default=DEFAULT_MODEL
-        )
-        parser.add_argument(
-            "-tmp",
-            "--ollama-temperature",
-            type=float,
-            help="Sampling temperature (default: 0.4)",
-            default=0.4
-        )
-        parser.add_argument(
-            "-timeout",
-            "--ollama-timeout",
-            type=int,
-            help="Request timeout in seconds (default: 120)",
-            default=120
-        )
 
     def parse_args(self, args):
         """Parse command-line arguments."""

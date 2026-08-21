@@ -45,6 +45,7 @@ VERSION_FILE_NAME="$(policy_value application version_file)"
 MINIMUM_PYTHON="$(policy_value runtime minimum_python)"
 MANAGED_PYTHON="$(policy_value runtime managed_python)"
 DEFAULT_CONDA_ENV="$(policy_value runtime default_conda_environment)"
+DEFAULT_PROFILE="$(policy_value runtime default_profile)"
 RUNTIME_STATE_NAME="$(policy_value runtime runtime_state_file)"
 RUNTIME_STATE_SCHEMA="$(policy_value runtime runtime_state_schema)"
 VIRTUAL_ENVIRONMENT_NAMES="$(policy_value runtime virtual_environment_names)"
@@ -89,7 +90,7 @@ RUNTIME_STATE_FILE="${SBK_CHARTS_STATE_FILE:-$PROJECT_ROOT/$RUNTIME_STATE_NAME}"
 MANAGED_RUNTIME_ROOT="${SBK_CHARTS_RUNTIME_ROOT:-$PROJECT_ROOT/$MANAGED_RUNTIME_NAME}"
 
 SELECTED_BACKEND=""
-SELECTED_PROFILE="core"
+SELECTED_PROFILE="$DEFAULT_PROFILE"
 SELECTED_REQUIREMENTS=""
 skip_application_value=no
 for application_argument in "$@"
@@ -145,16 +146,13 @@ sha256_stream() {
 }
 
 managed_target() {
-    local operating_system machine
-    operating_system="$(uname -s 2>/dev/null || true)"
-    machine="$(uname -m 2>/dev/null || true)"
-    case "$operating_system:$machine" in
-        Linux:x86_64|Linux:amd64) printf '%s\n' "linux-amd64" ;;
-        Linux:arm64|Linux:aarch64) printf '%s\n' "linux-arm64" ;;
-        Darwin:arm64|Darwin:aarch64) printf '%s\n' "macos-arm64" ;;
-        Darwin:x86_64|Darwin:amd64) printf '%s\n' "macos-amd64" ;;
-        *) return 1 ;;
-    esac
+    local operating_system machine policy_system policy_architecture
+    operating_system="$(uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
+    machine="$(uname -m 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
+    policy_system="$(policy_value portable.platforms "$operating_system")"
+    policy_architecture="$(policy_value portable.architectures "$machine")"
+    [ -n "$policy_system" ] && [ -n "$policy_architecture" ] || return 1
+    printf '%s-%s\n' "$policy_system" "$policy_architecture"
 }
 
 MANAGED_TARGET="$(managed_target 2>/dev/null || true)"

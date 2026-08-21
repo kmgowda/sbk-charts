@@ -12,3 +12,10 @@ R_PREFIX = "R"
 T_PREFIX = "T"
 TYPE = "Type"
 TYPE_TOTAL = "Total"
+
+# Workbook sheet identities are part of the report's compatibility contract.
+SBK_SHEET = "SBK"
+SUMMARY_SHEET = "Summary"
+DURATIONS_SHEET = "Durations"
+FIRST_RESULT_SHEET = f"{R_PREFIX}1"
+FIRST_TOTAL_SHEET = f"{T_PREFIX}1"

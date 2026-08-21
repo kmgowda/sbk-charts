@@ -49,6 +49,7 @@ Defines:
 - exact managed Python and managed runtime directory;
 - maximum wait for another process to finish managed bootstrap;
 - default Conda environment name;
+- default dependency profile;
 - remembered-environment state filename and schema version;
 - project virtual-environment names;
 - Unix interpreter search order;
@@ -66,7 +67,7 @@ Maps each optional backend command to its human-maintained requirements input. `
 
 Defines native target names, build Python, manifest and checksum names, portable runtime state schema and cache directory, extraction-lock timeout, bundled documentation and metadata paths, entry script, and modules PyInstaller must collect.
 
-The related mapping sections connect targets to operating systems, processor names, embedded payload formats, self-extracting output extensions, and GitHub-hosted runners.
+The related mapping sections connect targets to operating systems, processor names, embedded payload formats, self-extracting output extensions, and GitHub-hosted runners. Source launchers also use the platform and processor maps when selecting a managed bootstrap archive, so target naming has one owner.
 
 ## Python policy helper
 
@@ -108,9 +109,10 @@ Some values are deliberately not global policy:
 | Value | Owner | Reason |
 |---|---|---|
 | Exact SBK CSV headers | `src/charts/constants.py` | Input-schema contract |
-| R/T prefixes and Total marker | `src/sheets/constants.py` | Workbook addressing contract |
+| Sheet names, R/T prefixes, and Total marker | `src/sheets/constants.py` | Workbook addressing contract |
 | Chart dimensions, fonts, fills, and colors | `src/charts/` | Presentation policy |
-| AI model, endpoint, token, and request defaults | Each plugin | Backend-specific behavior exposed by CLI flags |
+| AI model, endpoint, and request defaults | `src/ai/defaults.py` | Shared by the lightweight CLI registry and selected adapter |
+| AI credentials and provider request behavior | Each plugin | Backend-specific runtime behavior |
 | AI total timeout | `src/ai/sbk_ai.py` | Analysis scheduling behavior |
 | Retrieval scoring and tags | `src/rag/sbk_rag.py` | Algorithm behavior |
 | Action commit SHAs | Workflow YAML | Security review must see the exact pinned action |

@@ -80,6 +80,7 @@ if ($BootstrapConnectTimeoutSeconds -lt 1 -or $BootstrapDownloadTimeoutSeconds -
     throw "Bootstrap download timeouts and retries must be at least one"
 }
 $DefaultCondaEnvironment = Get-RequiredPolicyValue $Policy "runtime.default_conda_environment"
+$DefaultProfile = Get-RequiredPolicyValue $Policy "runtime.default_profile"
 $RuntimeStateName = Get-RequiredPolicyValue $Policy "runtime.runtime_state_file"
 $RuntimeStateSchema = Get-RequiredPolicyValue $Policy "runtime.runtime_state_schema"
 $VirtualEnvironmentNames = @(
@@ -107,7 +108,7 @@ $ManagedRuntimeRoot = if ($env:SBK_CHARTS_RUNTIME_ROOT) {
     Join-Path $ProjectRoot $ManagedRuntimeName
 }
 $SelectedBackend = ""
-$SelectedProfile = "core"
+$SelectedProfile = $DefaultProfile
 $SelectedRequirements = ""
 $SkipApplicationValue = $false
 foreach ($ApplicationArgument in $ApplicationArguments) {
@@ -129,11 +130,11 @@ foreach ($ApplicationArgument in $ApplicationArguments) {
     }
 }
 $LockFile = Join-Path (Join-Path $ProjectRoot $LockDirectoryName) "$SelectedProfile.txt"
-$ManagedArchitecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-$ManagedTarget = if ($ManagedArchitecture -eq [System.Runtime.InteropServices.Architecture]::X64) {
-    "windows-amd64"
-} elseif ($ManagedArchitecture -eq [System.Runtime.InteropServices.Architecture]::Arm64) {
-    "windows-arm64"
+$ManagedArchitectureKey = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+$ManagedSystem = [string] $Policy["portable.platforms.win32"]
+$ManagedArchitecture = [string] $Policy["portable.architectures.$ManagedArchitectureKey"]
+$ManagedTarget = if ($ManagedSystem -and $ManagedArchitecture) {
+    "$ManagedSystem-$ManagedArchitecture"
 } else { "" }
 $ExpectedFingerprint = ""
 if ($ManagedTarget -and (Test-Path -LiteralPath $LockFile -PathType Leaf)) {
@@ -270,7 +271,7 @@ function Use-EnvironmentPrefix {
         [string[]] $Arguments,
         [string] $PythonRelativePath = "python.exe",
         [string] $EnvironmentFingerprint = "",
-        [string] $EnvironmentProfile = "core",
+        [string] $EnvironmentProfile = $DefaultProfile,
         [string] $SelectionSource = "unknown",
         [switch] $SavedEnvironmentReused,
         [switch] $EnvironmentCreated,

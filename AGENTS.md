@@ -54,7 +54,7 @@ On supported targets, source launchers can install an exact managed Python and l
 | `src/charts/` | Summary, charts, themes, CSV header constants | Adding or changing workbook visuals |
 | `src/stat/` | Frozen `StorageStat` | Changing the AI-facing statistics shape |
 | `src/genai/` | Shared AI interface and prompts | Changing every backend's analysis contract or prompt |
-| `src/ai/` | Lazy backend registry, scheduling, Excel AI text, chat | Changing AI execution or layout |
+| `src/ai/` | Backend defaults, lazy registry, scheduling, Excel AI text, chat | Changing AI defaults, execution, or layout |
 | `src/rag/` | Retrieval and grounding | Changing chat context selection |
 | `src/custom_ai/<name>/` | One AI adapter | Adding or fixing one backend |
 | `src/version/` | Canonical version | Cutting an approved release |
@@ -203,6 +203,8 @@ The simple retrieval layer intentionally ignores all-zero metrics. This avoids i
 ## 9. Plugin rules
 
 A backend lives at `src/custom_ai/<directory>/<directory>.py` and subclasses `SbkGenAI`. Register it with a lightweight descriptor in `src/ai/registry.py`; do not edit `src/parser/sbk_parser.py` for plugin-only flags. The descriptor defines the command, implementation module and class, and plugin-specific flags without importing the implementation or its optional SDK.
+
+Defaults used by both a registry flag and its adapter belong in `src/ai/defaults.py`. Do not add a second `add_args()` implementation to the provider class; the registry is the only runtime argument-registration path.
 
 Every production backend should:
 

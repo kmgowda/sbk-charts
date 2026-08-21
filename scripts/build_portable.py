@@ -33,6 +33,7 @@ if str(ROOT) not in sys.path:
 from scripts.project_policy import ProjectPolicy, application_version, load_policy
 
 POLICY = load_policy()
+COPY_CHUNK_SIZE = 1024 * 1024
 
 
 def current_platform(policy: ProjectPolicy = POLICY) -> str:
@@ -54,7 +55,7 @@ def sha256(path: Path) -> str:
     """Calculate a file SHA-256 digest without loading the whole file into memory."""
     digest = hashlib.sha256()
     with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+        for chunk in iter(lambda: source.read(COPY_CHUNK_SIZE), b""):
             digest.update(chunk)
     return digest.hexdigest()
 
@@ -319,12 +320,12 @@ def create_self_extracting_application(
     if target.startswith("windows-"):
         compile_windows_launcher(artifact, policy, version, target, payload_digest)
         with artifact.open("ab") as output, payload.open("rb") as source:
-            shutil.copyfileobj(source, output, length=1024 * 1024)
+            shutil.copyfileobj(source, output, length=COPY_CHUNK_SIZE)
             output.write(struct.pack("<Q", payload.stat().st_size))
     else:
         with artifact.open("wb") as output, payload.open("rb") as source:
             output.write(unix_launcher(policy, version, target, payload_digest))
-            shutil.copyfileobj(source, output, length=1024 * 1024)
+            shutil.copyfileobj(source, output, length=COPY_CHUNK_SIZE)
         artifact.chmod(0o755)
     return artifact
 

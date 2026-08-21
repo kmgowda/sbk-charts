@@ -182,7 +182,7 @@ flowchart LR
 
 `SbkMultiCharts` extends that behavior across every R/T pair. It creates the Summary and Durations sheets, comparisons across runs, totals, and the final workbook order.
 
-Exact SBK column names live in `src/charts/constants.py`. Sheet prefixes and the `Type == Total` value live in `src/sheets/constants.py`. Chart code should never repeat an SBK header string inline.
+Exact SBK column names and ordered percentile chart groups live in `src/charts/constants.py`. Stable sheet names, sheet prefixes, and the `Type == Total` value live in `src/sheets/constants.py`. Chart code should never repeat an SBK header or workbook sheet name inline.
 
 ### 7.2 Workbook order
 
@@ -254,7 +254,7 @@ Metadata columns such as ID, Header, Type, Storage, Action, and Latency Time Uni
 
 ### 10.1 Lazy registry
 
-`src/ai/registry.py` declares the stable command name, implementation module, class, and CLI argument builder for each backend. It does not import optional provider modules. `load_backend_class()` imports only the command selected by the user:
+`src/ai/registry.py` declares the stable command name, implementation module, class, and CLI argument builder for each backend. Dependency-free defaults shared by the registry and adapters live in `src/ai/defaults.py`. The registry does not import optional provider modules. `load_backend_class()` imports only the command selected by the user:
 
 ```text
 gemini      -> Gemini
@@ -398,7 +398,7 @@ Managed source targets cover glibc Linux x86-64/ARM64, macOS Intel/Apple silicon
 
 `scripts/project_policy.py` loads these values into frozen dataclasses, validates cross-field consistency, reads requirements safely, reads the version with Python's AST, emits the CI matrix, and provides runtime-state helpers.
 
-Domain settings remain in their domain modules. CSV header strings belong in chart constants, visual sizes and colors belong in chart code, AI defaults belong in their plugin, and retrieval scores belong in the RAG algorithm. See [POLICY.md](POLICY.md) for the ownership rules.
+Domain settings remain in their owning modules. CSV headers and percentile groups belong in chart constants, workbook sheet identities belong in sheet constants, visual sizes and colors belong in chart or AI layout code, shared backend defaults belong in `src/ai/defaults.py`, and retrieval scores belong in the RAG algorithm. See [POLICY.md](POLICY.md) for the ownership rules.
 
 ## 15. Packaging and portable releases
 

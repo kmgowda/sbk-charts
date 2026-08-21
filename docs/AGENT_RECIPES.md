@@ -76,7 +76,7 @@ For launcher integration, use a fresh temporary runtime root and verify that sel
 | Change | Files |
 |---|---|
 | New backend flag | Registry descriptor, plugin `parse_args()`, and README |
-| Default model or endpoint | Plugin constants and README |
+| Default model, endpoint, or generation setting | `src/ai/defaults.py`, registry, and README |
 | SDK update | Plugin imports/calls, optional requirements, hashed lock, README |
 | Provider-specific response parsing | Plugin request helper |
 | Shared analysis wording | `src/genai/genai.py`, not the plugin |

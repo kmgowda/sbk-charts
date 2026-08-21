@@ -32,6 +32,12 @@ import argparse
 
 from src.version.sbk_version import __sbk_version__
 
+APPLICATION_DESCRIPTION = (
+    "SBK Charts - Storage Benchmark Visualization and AI analytics Tool"
+)
+ISSUE_TRACKER_URL = "https://github.com/kmgowda/sbk-charts/issues"
+DEFAULT_OUTPUT_FILE = "out.xlsx"
+
 
 def get_sbk_parser() -> argparse.ArgumentParser:
     """Create and configure the argument parser for SBK Charts.
@@ -45,8 +51,8 @@ def get_sbk_parser() -> argparse.ArgumentParser:
         -o, --ofile: Output XLSX file path (default: 'out.xlsx')
     """
     parser = argparse.ArgumentParser(
-        description='SBK Charts - Storage Benchmark Visualization and AI analytics Tool',
-        epilog='Please report issues at https://github.com/kmgowda/sbk-charts'
+        description=APPLICATION_DESCRIPTION,
+        epilog=f"Please report issues at {ISSUE_TRACKER_URL}",
     )
     parser.add_argument(
         '-version', '--version',
@@ -62,6 +68,6 @@ def get_sbk_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '-o', '--ofile',
         help='Output XLSX file path (default: %(default)s)',
-        default="out.xlsx"
+        default=DEFAULT_OUTPUT_FILE,
     )
     return parser

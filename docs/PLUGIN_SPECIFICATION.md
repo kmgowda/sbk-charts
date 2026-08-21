@@ -34,7 +34,7 @@ docs/ARCHITECTURE.md
 tests/test_portable.py
 ```
 
-Plugin arguments are registered by a lightweight descriptor in `src/ai/registry.py` and consumed by the plugin's `parse_args()` method. The descriptor must not import the optional SDK.
+Plugin arguments are registered by a lightweight descriptor in `src/ai/registry.py` and consumed by the plugin's `parse_args()` method. Defaults shared by the descriptor and adapter belong in `src/ai/defaults.py`. The descriptor must not import the optional SDK, and the provider class must not register the same arguments again.
 
 ## Fillable template
 

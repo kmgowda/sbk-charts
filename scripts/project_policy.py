@@ -74,6 +74,7 @@ class RuntimePolicy:
     minimum_python: str
     managed_python: str
     default_conda_environment: str
+    default_profile: str
     runtime_state_file: str
     runtime_state_schema: int
     virtual_environment_names: tuple[str, ...]
@@ -144,6 +145,7 @@ def load_policy(path: Path = POLICY_FILE) -> ProjectPolicy:
         minimum_python=runtime_section["minimum_python"],
         managed_python=runtime_section["managed_python"],
         default_conda_environment=runtime_section["default_conda_environment"],
+        default_profile=runtime_section["default_profile"],
         runtime_state_file=runtime_section["runtime_state_file"],
         runtime_state_schema=runtime_section.getint("runtime_state_schema"),
         virtual_environment_names=_items(runtime_section["virtual_environment_names"]),
@@ -221,6 +223,8 @@ def load_policy(path: Path = POLICY_FILE) -> ProjectPolicy:
         raise ValueError(f"Unsupported portable hash algorithm: {portable.hash_algorithm}")
     if not runtime.virtual_environment_names:
         raise ValueError("At least one virtual environment name is required")
+    if not runtime.default_profile.strip():
+        raise ValueError("Default dependency profile must not be empty")
     if runtime.bootstrap_lock_timeout_seconds < 1:
         raise ValueError("Bootstrap lock timeout must be at least one second")
     if runtime.runtime_state_schema < 1:
@@ -351,7 +355,7 @@ def runtime_details(
     policy: ProjectPolicy,
     environment_kind: str,
     environment_prefix: str,
-    environment_profile: str = "core",
+    environment_profile: str | None = None,
     selection_source: str = "unknown",
     saved_environment_reused: bool = False,
     environment_created: bool = False,
@@ -361,6 +365,8 @@ def runtime_details(
         raise ValueError(f"Unsupported environment kind: {environment_kind}")
     if selection_source not in SELECTION_SOURCES:
         raise ValueError(f"Unsupported environment selection source: {selection_source}")
+    if environment_profile is None:
+        environment_profile = policy.runtime.default_profile
     label = policy.application.name
     environment_label = {
         "managed": "managed venv",
@@ -383,7 +389,7 @@ def remember_environment(
     environment_prefix: str,
     state_file: Path,
     fingerprint: str = "",
-    profile: str = "core",
+    profile: str | None = None,
     state_schema: int | None = None,
 ) -> None:
     """Atomically persist the last validated launcher environment."""
@@ -392,7 +398,12 @@ def remember_environment(
     if not environment_prefix:
         raise ValueError("Environment prefix must not be empty")
     if state_schema is None:
-        state_schema = load_policy().runtime.runtime_state_schema
+        policy = load_policy()
+        state_schema = policy.runtime.runtime_state_schema
+    else:
+        policy = None
+    if profile is None:
+        profile = (policy or load_policy()).runtime.default_profile
 
     temporary = state_file.with_name(f".{state_file.name}.{os.getpid()}.tmp")
     try:
@@ -507,13 +518,13 @@ def main() -> int:
             parser.error("--remember-environment expects 3, 4, or 5 values")
         environment_kind, environment_prefix, state_file = selected.remember_environment[:3]
         optional_values = selected.remember_environment[3:]
+        policy = load_policy()
         if len(optional_values) == 2:
             fingerprint, profile = optional_values
         elif len(optional_values) == 1:
             fingerprint, profile = "", optional_values[0]
         else:
-            fingerprint, profile = "", "core"
-        policy = load_policy()
+            fingerprint, profile = "", policy.runtime.default_profile
         remember_environment(
             environment_kind,
             environment_prefix,

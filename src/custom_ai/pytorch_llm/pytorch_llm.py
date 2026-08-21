@@ -25,27 +25,30 @@ Requirements:
 - A compatible pre-trained language model (e.g., from Hugging Face)
 """
 
-import torch
-from typing import Tuple, Optional, Dict, Any
-from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
-from transformers.utils.hub import cached_file, TRANSFORMERS_CACHE
-from src.genai.genai import SbkGenAI
-import traceback
-import re
-import os
 import glob
 import logging
+import os
+import re
+import traceback
+from typing import Any, Dict, Optional, Tuple
 
-# Default model configuration
-DEFAULT_MODEL = "openai/gpt-oss-20b"
-DEFAULT_DEVICE = (
-    "cuda" if torch.cuda.is_available() 
-    else "mps" if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available() 
-    else "cpu"
-)
-DEFAULT_MAX_LENGTH = 2048
-DEFAULT_TEMPERATURE = 0.4
-DEFAULT_TOP_P = 0.9
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+from transformers.utils.hub import TRANSFORMERS_CACHE, cached_file
+
+from src.ai.defaults import PYTORCH_DEFAULTS
+from src.genai.genai import SbkGenAI
+
+
+def _automatic_device() -> str:
+    """Return the best device available to the local PyTorch runtime."""
+    return (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+        else "cpu"
+    )
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -59,11 +62,13 @@ class PyTorchLLM(SbkGenAI):
     from the Hugging Face model hub that's compatible with PyTorch.
     
     Configuration:
-    - Model: Any Hugging Face model ID or local path (default: openai/gpt-oss-20b)
-    - Device: 'cuda', 'mps', or 'cpu' (auto-detects CUDA by default)
-    - Max Length: Maximum sequence length for generation (default: 2048)
-    - Temperature: Controls randomness (default: 0.4)
-    - Top-p: Nucleus sampling parameter (default: 0.9)
+    - Model: Any Hugging Face model ID or local path
+    - Device: 'cuda', 'mps', or 'cpu', with automatic selection available
+    - Max Length: Maximum sequence length for generation
+    - Temperature: Controls randomness
+    - Top-p: Nucleus sampling parameter
+
+    Run the ``pytorchllm -h`` subcommand for the current defaults.
     
     Attributes:
         model_name (str): Name or path of the loaded model
@@ -79,11 +84,11 @@ class PyTorchLLM(SbkGenAI):
 
     def __init__(self) -> None:
         super().__init__()
-        self.model_name = DEFAULT_MODEL
-        self.device = DEFAULT_DEVICE
-        self.max_length = DEFAULT_MAX_LENGTH
-        self.temperature = DEFAULT_TEMPERATURE
-        self.top_p = DEFAULT_TOP_P
+        self.model_name = PYTORCH_DEFAULTS.model
+        self.device = _automatic_device()
+        self.max_length = PYTORCH_DEFAULTS.max_length
+        self.temperature = PYTORCH_DEFAULTS.temperature
+        self.top_p = PYTORCH_DEFAULTS.top_p
         self.model = None
         self.tokenizer = None
         self._is_initialized = False
@@ -210,47 +215,10 @@ class PyTorchLLM(SbkGenAI):
         else:
             return 'cpu'
 
-    def add_args(self, parser) -> None:
-        """Add command-line arguments for PyTorch LLM configuration."""
-        parser.add_argument(
-            "--pt-model",
-            help=f"Hugging Face model ID or path (default: {DEFAULT_MODEL})",
-            default=DEFAULT_MODEL
-        )
-        parser.add_argument(
-            "--pt-train",
-            action="store_true",
-            help="Enable training mode (default: False)",
-            default=False
-        )
-        parser.add_argument(
-            "--pt-device",
-            help=f"Device to run the model on (default: {DEFAULT_DEVICE})",
-            default=DEFAULT_DEVICE
-        )
-        parser.add_argument(
-            "--pt-max-length",
-            type=int,
-            help=f"Maximum sequence length (default: {DEFAULT_MAX_LENGTH})",
-            default=DEFAULT_MAX_LENGTH
-        )
-        parser.add_argument(
-            "--pt-temperature",
-            type=float,
-            help=f"Sampling temperature (default: {DEFAULT_TEMPERATURE})",
-            default=DEFAULT_TEMPERATURE
-        )
-        parser.add_argument(
-            "--pt-top-p",
-            type=float,
-            help=f"Top-p sampling parameter (default: {DEFAULT_TOP_P})",
-            default=DEFAULT_TOP_P
-        )
-
     def parse_args(self, args) -> None:
         """Parse command-line arguments."""
         self.model_name = args.pt_model
-        if args.pt_device != "auto":
+        if args.pt_device != PYTORCH_DEFAULTS.device:
             self.device = args.pt_device
         self.max_length = args.pt_max_length
         self.temperature = args.pt_temperature
@@ -453,8 +421,8 @@ class PyTorchLLM(SbkGenAI):
             if 'attention_mask' in inputs:
                 inputs['attention_mask'] = inputs['attention_mask'].to(dtype=torch.long)
             
-            # Calculate max_new_tokens, ensuring it's at least DEFAULT_MAX_LENGTH
-            max_new_tokens = max(DEFAULT_MAX_LENGTH, inputs['input_ids'].shape[1])
+            # Keep generated output at least as large as the configured context.
+            max_new_tokens = max(self.max_length, inputs['input_ids'].shape[1])
             
             # Generate text with appropriate settings
             with torch.no_grad():
