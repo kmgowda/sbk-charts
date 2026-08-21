@@ -340,7 +340,10 @@ venv-sbk-charts/bin/python scripts/create_github_release.py --publish
 
 The coordinator pushes the annotated version tag, uploads the wheel, source
 distribution, and package checksums, publishes the release, and waits for the
-native workflow to attach every policy-declared application and checksum. It
+native workflow. Native matrix jobs build, test, and store artifacts without
+editing the release. One dependent Ubuntu job validates the complete native
+filename and checksum set, then attaches every policy-declared application and
+checksum to the explicit repository. The coordinator
 also rejects tracked checkout debris, environments, caches, reports, and build
 artifacts before tagging. Read [RELEASING.md](RELEASING.md) for prerequisites,
 the complete artifact list, recovery, and repository-content checks.
