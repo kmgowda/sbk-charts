@@ -322,9 +322,9 @@ def create_self_extracting_application(
             shutil.copyfileobj(source, output, length=1024 * 1024)
             output.write(struct.pack("<Q", payload.stat().st_size))
     else:
-        artifact.write_bytes(
-            unix_launcher(policy, version, target, payload_digest) + payload.read_bytes()
-        )
+        with artifact.open("wb") as output, payload.open("rb") as source:
+            output.write(unix_launcher(policy, version, target, payload_digest))
+            shutil.copyfileobj(source, output, length=1024 * 1024)
         artifact.chmod(0o755)
     return artifact
 

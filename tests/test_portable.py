@@ -298,6 +298,44 @@ class PortableReleaseTest(unittest.TestCase):
                 self.assertIn(guide, archive_members)
             self.assertIn("--help", self.commands[-1])
 
+    def test_unix_self_extractor_streams_payload_from_disk(self):
+        """Do not duplicate a potentially large compressed payload in memory."""
+        payload_contents = b"streamed-payload"
+
+        def create_test_payload(
+            _bundle: Path,
+            _target: str,
+            destination: Path,
+            _policy: object,
+        ) -> None:
+            destination.write_bytes(payload_contents)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / "bundle"
+            output = root / "output"
+            bundle.mkdir()
+            output.mkdir()
+            with (
+                patch.object(build_portable, "create_payload", side_effect=create_test_payload),
+                patch.object(
+                    Path,
+                    "read_bytes",
+                    side_effect=AssertionError("payload must be streamed"),
+                ),
+            ):
+                artifact = build_portable.create_self_extracting_application(
+                    bundle,
+                    output,
+                    "1.2.3.4",
+                    "linux-amd64",
+                    self.policy,
+                )
+
+            with artifact.open("rb") as source:
+                source.seek(-len(payload_contents), os.SEEK_END)
+                self.assertEqual(payload_contents, source.read())
+
     def test_windows_target_creates_one_native_application(self):
         with (
             tempfile.TemporaryDirectory() as temporary,
